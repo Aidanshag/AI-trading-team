@@ -118,7 +118,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 ### Product deep-dives — priority P1
 - [x] P1 ZT — 2Y T-Note. File: `vault/futures/product_deep_dives/ZT.md`. (2026-04-25 21:45 UTC — Fund Engineer)
 - [x] P1 ZF — 5Y T-Note. File: `vault/futures/product_deep_dives/ZF.md`. (2026-04-25 03:15 UTC — Fund Engineer)
-- [ ] P1 ZB — 30Y T-Bond. File: `vault/futures/product_deep_dives/ZB.md`.
+- [x] P1 ZB — 30Y T-Bond. File: `vault/futures/product_deep_dives/ZB.md`. (2026-04-25 23:35 UTC — Fund Engineer)
 - [ ] P2 UB — Ultra Bond. File: `vault/futures/product_deep_dives/UB.md`.
 
 ### Playbooks — priority P2
