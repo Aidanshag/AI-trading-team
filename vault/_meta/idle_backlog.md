@@ -41,7 +41,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 
 ### Product deep-dives — priority P1
 - [x] P1 SI — Silver. File: `vault/futures/product_deep_dives/SI.md`. (2026-04-25 15:30 UTC — Fund Engineer)
-- [ ] P1 HG — Copper. File: `vault/futures/product_deep_dives/HG.md`.
+- [x] P1 HG — Copper. File: `vault/futures/product_deep_dives/HG.md`. (2026-04-25 22:45 UTC — Fund Engineer)
 - [ ] P1 PA — Palladium. File: `vault/futures/product_deep_dives/PA.md`.
 - [ ] P2 PL — Platinum. File: `vault/futures/product_deep_dives/PL.md`.
 - [ ] P2 ALI — Aluminum. File: `vault/futures/product_deep_dives/ALI.md`.
