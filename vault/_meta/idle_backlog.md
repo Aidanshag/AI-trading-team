@@ -63,7 +63,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 ### Product deep-dives — priority P1
 - [x] P1 ZC — Corn. File: `vault/futures/product_deep_dives/ZC.md`. (2026-04-25 19:45 UTC — Fund Engineer)
 - [x] P1 ZS — Soybeans. File: `vault/futures/product_deep_dives/ZS.md`. (2026-04-25 23:35 UTC — Fund Engineer)
-- [ ] P1 ZW — Wheat (CBOT SRW). File: `vault/futures/product_deep_dives/ZW.md`.
+- [x] P1 ZW — Wheat (CBOT SRW) (2026-04-25 04:45 UTC — Fund Engineer). File: `vault/futures/product_deep_dives/ZW.md`.
 - [ ] P2 ZL — Soybean Oil. File: `vault/futures/product_deep_dives/ZL.md`.
 - [ ] P2 ZM — Soybean Meal. File: `vault/futures/product_deep_dives/ZM.md`.
 - [ ] P3 ZO — Oats. File: `vault/futures/product_deep_dives/ZO.md`.
