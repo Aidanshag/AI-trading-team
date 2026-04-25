@@ -98,7 +98,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 ## Livestock Analyst
 
 ### Product deep-dives — priority P1
-- [ ] P1 LE — Live Cattle. File: `vault/futures/product_deep_dives/LE.md`.
+- [x] P1 LE — Live Cattle. File: `vault/futures/product_deep_dives/LE.md`. (2026-04-25 23:55 UTC — Fund Engineer)
 - [ ] P1 GF — Feeder Cattle. File: `vault/futures/product_deep_dives/GF.md`.
 - [ ] P1 HE — Lean Hogs. File: `vault/futures/product_deep_dives/HE.md`.
 
