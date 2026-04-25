@@ -80,7 +80,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 ## Softs Analyst
 
 ### Product deep-dives — priority P1
-- [ ] P1 KC — Coffee. File: `vault/futures/product_deep_dives/KC.md`.
+- [x] P1 KC — Coffee. File: `vault/futures/product_deep_dives/KC.md`. (2026-04-25 23:50 UTC — Fund Engineer)
 - [ ] P1 CT — Cotton. File: `vault/futures/product_deep_dives/CT.md`.
 - [ ] P1 SB — Sugar. File: `vault/futures/product_deep_dives/SB.md`.
 - [ ] P1 CC — Cocoa. File: `vault/futures/product_deep_dives/CC.md`.
