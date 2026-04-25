@@ -182,7 +182,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 
 ## Risk Manager
 
-- [ ] P1 Risk-regime playbook: what to do when the book is in each of five states (flat-to-+5%, +5 to +20%, drawdown 0 to −5%, drawdown −5 to −10%, > −10%). File: `vault/playbooks/book_state_playbook.md`.
+- [x] P1 Risk-regime playbook: what to do when the book is in each of five states (flat-to-+5%, +5 to +20%, drawdown 0 to −5%, drawdown −5 to −10%, > −10%). File: `vault/playbooks/book_state_playbook.md` (2026-04-25 01:45 UTC — Fund Engineer).
 - [ ] P2 Blow-up case studies — LTCM, Amaranth, Archegos, MF Global — what the risk officer missed. File: `vault/playbooks/blowup_case_studies.md`.
 - [ ] P2 Stress-test scenarios for our current book under 5σ moves by sector. File: `vault/_meta/stress_scenarios.md`.
 
