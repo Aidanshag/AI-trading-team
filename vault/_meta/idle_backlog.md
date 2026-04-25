@@ -173,7 +173,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 
 ## Portfolio Manager
 
-- [ ] P1 Correlation matrix note — expected correlations across our tradeable symbols by regime. File: `vault/_meta/correlation_matrix.md`.
+- [x] P1 Correlation matrix note — expected correlations across our tradeable symbols by regime. File: `vault/_meta/correlation_matrix.md`. (2026-04-25 20:35 UTC — Fund Engineer)
 - [ ] P1 Size NG via options only (addendum to PM prompt). From 2026-04-23 backtest review.
 - [ ] P2 Topstep Combine consistency-rule simulator doc (math + walk-through). File: `vault/_meta/topstep_consistency.md`.
 - [ ] P2 Position sizing worked examples across 5 scenarios. File: `vault/playbooks/sizing_examples.md`.
