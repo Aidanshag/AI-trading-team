@@ -20,7 +20,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 ### Product deep-dives — priority P1
 - [x] P1 NG — Natural Gas (Henry Hub). File: `vault/futures/product_deep_dives/NG.md`. (2026-04-25 06:20 UTC — Fund Engineer)
 - [ ] P1 MCL — Micro Crude (mirror of CL with size caveats). File: `vault/futures/product_deep_dives/MCL.md`.
-- [ ] P1 RB — RBOB Gasoline. File: `vault/futures/product_deep_dives/RB.md`.
+- [x] P1 RB — RBOB Gasoline. File: `vault/futures/product_deep_dives/RB.md`. (2026-04-25 07:00 UTC — Fund Engineer)
 - [x] P1 **HO — NY ULSD (Diesel)**. File: `vault/futures/product_deep_dives/HO.md`. (2026-04-25 01:30 UTC — Fund Engineer)  ← the diesel contract
 - [ ] P1 BZ — Brent Crude. File: `vault/futures/product_deep_dives/BZ.md`.
 - [ ] P2 QG — E-mini Natural Gas. File: `vault/futures/product_deep_dives/QG.md`.
