@@ -155,7 +155,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 
 ### Product deep-dives — priority P1
 - [x] P1 NQ — Nasdaq-100. File: `vault/futures/product_deep_dives/NQ.md`. (2026-04-25 02:15 UTC — Fund Engineer)
-- [ ] P1 RTY — Russell 2000. File: `vault/futures/product_deep_dives/RTY.md`.
+- [x] P1 RTY — Russell 2000. File: `vault/futures/product_deep_dives/RTY.md`. (2026-04-25 01:20 UTC — Fund Engineer)
 - [ ] P2 YM — Dow. File: `vault/futures/product_deep_dives/YM.md`.
 - [ ] P2 MES/MNQ/M2K/MYM — Micro index family (one consolidated note). File: `vault/futures/product_deep_dives/index_micros.md`.
 
