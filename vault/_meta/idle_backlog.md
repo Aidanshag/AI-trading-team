@@ -134,7 +134,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 ## FX Futures Analyst
 
 ### Product deep-dives — priority P1
-- [ ] P1 6B — British Pound. File: `vault/futures/product_deep_dives/6B.md`.
+- [x] P1 6B — British Pound. File: `vault/futures/product_deep_dives/6B.md`. (2026-04-25 23:58 UTC — Fund Engineer)
 - [ ] P1 6J — Japanese Yen. File: `vault/futures/product_deep_dives/6J.md`.
 - [ ] P1 6A — Australian Dollar. File: `vault/futures/product_deep_dives/6A.md`.
 - [ ] P2 6C — Canadian Dollar. File: `vault/futures/product_deep_dives/6C.md`.
