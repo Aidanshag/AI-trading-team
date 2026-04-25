@@ -83,7 +83,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 - [x] P1 KC — Coffee. File: `vault/futures/product_deep_dives/KC.md`. (2026-04-25 23:50 UTC — Fund Engineer)
 - [x] P1 CT — Cotton. File: `vault/futures/product_deep_dives/CT.md`. (2026-04-25 14:35 UTC — Fund Engineer)
 - [x] P1 SB — Sugar. File: `vault/futures/product_deep_dives/SB.md`. (2026-04-25 12:50 UTC — Fund Engineer)
-- [ ] P1 CC — Cocoa. File: `vault/futures/product_deep_dives/CC.md`.
+- [x] P1 CC — Cocoa. File: `vault/futures/product_deep_dives/CC.md`. (2026-04-25 02:35 UTC — Fund Engineer)
 - [ ] P2 OJ — Orange Juice. File: `vault/futures/product_deep_dives/OJ.md`.
 - [ ] P2 LBR — Lumber. File: `vault/futures/product_deep_dives/LBR.md`.
 
