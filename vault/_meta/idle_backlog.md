@@ -22,6 +22,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 - [ ] P1 MCL — Micro Crude (mirror of CL with size caveats). File: `vault/futures/product_deep_dives/MCL.md`.
 - [x] P1 RB — RBOB Gasoline. File: `vault/futures/product_deep_dives/RB.md`. (2026-04-25 07:00 UTC — Fund Engineer)
 - [x] P1 **HO — NY ULSD (Diesel)**. File: `vault/futures/product_deep_dives/HO.md`. (2026-04-25 01:30 UTC — Fund Engineer)  ← the diesel contract
+- [x] P1 MCL — Micro Crude (mirror of CL with size caveats). File: `vault/futures/product_deep_dives/MCL.md`. (2026-04-25 08:15 UTC — Fund Engineer)
 - [ ] P1 BZ — Brent Crude. File: `vault/futures/product_deep_dives/BZ.md`.
 - [ ] P2 QG — E-mini Natural Gas. File: `vault/futures/product_deep_dives/QG.md`.
 - [ ] P3 EH — Ethanol. File: `vault/futures/product_deep_dives/EH.md`.
