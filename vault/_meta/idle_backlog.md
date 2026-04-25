@@ -160,7 +160,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 - [ ] P2 MES/MNQ/M2K/MYM — Micro index family (one consolidated note). File: `vault/futures/product_deep_dives/index_micros.md`.
 
 ### Playbooks — priority P1
-- [ ] P1 Regime transition playbook (how to recognize & trade regime pivots). File: `vault/playbooks/regime_transitions.md`.
+- [x] P1 Regime transition playbook (how to recognize & trade regime pivots). File: `vault/playbooks/regime_transitions.md`. (2026-04-25 16:25 UTC — Fund Engineer)
 - [ ] P2 Dealer gamma / positioning playbook (opex, put walls, call walls). File: `vault/playbooks/dealer_gamma.md`.
 - [ ] P2 Cross-asset transmission map (DXY → commodities → equities → rates). File: `vault/playbooks/cross_asset_transmission.md`.
 - [ ] P3 VIX term structure playbook. File: `vault/playbooks/vix_term_structure.md`.
