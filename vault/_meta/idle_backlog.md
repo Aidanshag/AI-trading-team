@@ -116,7 +116,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 - [ ] P1 Add catalyst-required filter to rates entry rules. Rates Donchian lost −3.9R on 7 trades without a catalyst gate.
 
 ### Product deep-dives — priority P1
-- [ ] P1 ZT — 2Y T-Note. File: `vault/futures/product_deep_dives/ZT.md`.
+- [x] P1 ZT — 2Y T-Note. File: `vault/futures/product_deep_dives/ZT.md`. (2026-04-25 21:45 UTC — Fund Engineer)
 - [ ] P1 ZF — 5Y T-Note. File: `vault/futures/product_deep_dives/ZF.md`.
 - [ ] P1 ZB — 30Y T-Bond. File: `vault/futures/product_deep_dives/ZB.md`.
 - [ ] P2 UB — Ultra Bond. File: `vault/futures/product_deep_dives/UB.md`.
