@@ -1,0 +1,73 @@
+# CME futures and futures options the fund is permitted to trade on Topstep.
+# Minimal metadata — enough for the risk hook and position sizing logic.
+# Sectors: index_macro, energies, metals, grains, softs, livestock, rates, fx_futures.
+
+symbols:
+  # ── Equity index futures (macro expression) ──
+  ES:  { name: "E-mini S&P 500",         sector: index_macro, tick_size: 0.25,  tick_value: 12.50, session_tz: America/Chicago }
+  MES: { name: "Micro E-mini S&P 500",   sector: index_macro, tick_size: 0.25,  tick_value: 1.25,  session_tz: America/Chicago }
+  NQ:  { name: "E-mini Nasdaq 100",      sector: index_macro, tick_size: 0.25,  tick_value: 5.00,  session_tz: America/Chicago }
+  MNQ: { name: "Micro Nasdaq 100",       sector: index_macro, tick_size: 0.25,  tick_value: 0.50,  session_tz: America/Chicago }
+  RTY: { name: "E-mini Russell 2000",    sector: index_macro, tick_size: 0.10,  tick_value: 5.00,  session_tz: America/Chicago }
+  M2K: { name: "Micro Russell 2000",     sector: index_macro, tick_size: 0.10,  tick_value: 0.50,  session_tz: America/Chicago }
+  YM:  { name: "E-mini Dow",             sector: index_macro, tick_size: 1.00,  tick_value: 5.00,  session_tz: America/Chicago }
+  MYM: { name: "Micro Dow",              sector: index_macro, tick_size: 1.00,  tick_value: 0.50,  session_tz: America/Chicago }
+
+  # ── Energies (expanded: every tradeable petro derivative) ──
+  CL:  { name: "Crude Oil WTI",          sector: energies, tick_size: 0.01,   tick_value: 10.00, session_tz: America/New_York }
+  MCL: { name: "Micro Crude Oil",        sector: energies, tick_size: 0.01,   tick_value: 1.00,  session_tz: America/New_York }
+  BZ:  { name: "Brent Crude (Last Day)", sector: energies, tick_size: 0.01,   tick_value: 10.00, session_tz: America/New_York }
+  NG:  { name: "Natural Gas Henry Hub",  sector: energies, tick_size: 0.001,  tick_value: 10.00, session_tz: America/New_York }
+  QG:  { name: "E-mini Natural Gas",     sector: energies, tick_size: 0.005,  tick_value: 12.50, session_tz: America/New_York }
+  RB:  { name: "RBOB Gasoline",          sector: energies, tick_size: 0.0001, tick_value: 4.20,  session_tz: America/New_York }
+  HO:  { name: "NY ULSD (Diesel)",       sector: energies, tick_size: 0.0001, tick_value: 4.20,  session_tz: America/New_York }
+  EH:  { name: "Ethanol",                sector: energies, tick_size: 0.001,  tick_value: 2.90,  session_tz: America/Chicago }
+
+  # ── Metals (expanded: all tradeable metals) ──
+  GC:  { name: "Gold",                   sector: metals, tick_size: 0.10,   tick_value: 10.00, session_tz: America/New_York }
+  MGC: { name: "Micro Gold",             sector: metals, tick_size: 0.10,   tick_value: 1.00,  session_tz: America/New_York }
+  SI:  { name: "Silver",                 sector: metals, tick_size: 0.005,  tick_value: 25.00, session_tz: America/New_York }
+  SIL: { name: "Micro Silver",           sector: metals, tick_size: 0.005,  tick_value: 5.00,  session_tz: America/New_York }
+  HG:  { name: "Copper",                 sector: metals, tick_size: 0.0005, tick_value: 12.50, session_tz: America/New_York }
+  PL:  { name: "Platinum",               sector: metals, tick_size: 0.10,   tick_value: 5.00,  session_tz: America/New_York }
+  PA:  { name: "Palladium",              sector: metals, tick_size: 0.10,   tick_value: 10.00, session_tz: America/New_York }
+  ALI: { name: "Aluminum",               sector: metals, tick_size: 0.25,   tick_value: 6.25,  session_tz: America/New_York }
+
+  # ── Grains & Oilseeds ──
+  ZC:  { name: "Corn",                   sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZS:  { name: "Soybeans",               sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZW:  { name: "Wheat (CBOT SRW)",       sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZL:  { name: "Soybean Oil",            sector: grains, tick_size: 0.0001, tick_value: 6.00,  session_tz: America/Chicago }
+  ZM:  { name: "Soybean Meal",           sector: grains, tick_size: 0.10,   tick_value: 10.00, session_tz: America/Chicago }
+  ZO:  { name: "Oats",                   sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZR:  { name: "Rough Rice",             sector: grains, tick_size: 0.005,  tick_value: 10.00, session_tz: America/Chicago }
+
+  # ── Softs (tropicals + lumber) ──
+  KC:  { name: "Coffee (Arabica)",       sector: softs, tick_size: 0.05,   tick_value: 18.75, session_tz: America/New_York }
+  CT:  { name: "Cotton",                 sector: softs, tick_size: 0.01,   tick_value: 5.00,  session_tz: America/New_York }
+  SB:  { name: "Sugar #11",              sector: softs, tick_size: 0.01,   tick_value: 11.20, session_tz: America/New_York }
+  CC:  { name: "Cocoa",                  sector: softs, tick_size: 1.00,   tick_value: 10.00, session_tz: America/New_York }
+  OJ:  { name: "Orange Juice",           sector: softs, tick_size: 0.05,   tick_value: 7.50,  session_tz: America/New_York }
+  LBR: { name: "Lumber",                 sector: softs, tick_size: 0.50,   tick_value: 13.75, session_tz: America/Chicago }
+
+  # ── Livestock ──
+  LE:  { name: "Live Cattle",            sector: livestock, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
+  GF:  { name: "Feeder Cattle",          sector: livestock, tick_size: 0.025, tick_value: 12.50, session_tz: America/Chicago }
+  HE:  { name: "Lean Hogs",              sector: livestock, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
+
+  # ── Rates ──
+  ZT:  { name: "2-Year T-Note",          sector: rates, tick_size: 0.0078125, tick_value: 15.625, session_tz: America/Chicago }
+  ZF:  { name: "5-Year T-Note",          sector: rates, tick_size: 0.0078125, tick_value: 7.8125, session_tz: America/Chicago }
+  ZN:  { name: "10-Year T-Note",         sector: rates, tick_size: 0.015625,  tick_value: 15.625, session_tz: America/Chicago }
+  ZB:  { name: "30-Year T-Bond",         sector: rates, tick_size: 0.03125,   tick_value: 31.25,  session_tz: America/Chicago }
+  UB:  { name: "Ultra T-Bond",           sector: rates, tick_size: 0.03125,   tick_value: 31.25,  session_tz: America/Chicago }
+
+  # ── FX futures ──
+  "6E": { name: "Euro FX",               sector: fx_futures, tick_size: 0.00005,   tick_value: 6.25,  session_tz: America/Chicago }
+  "6B": { name: "British Pound",         sector: fx_futures, tick_size: 0.0001,    tick_value: 6.25,  session_tz: America/Chicago }
+  "6J": { name: "Japanese Yen",          sector: fx_futures, tick_size: 0.0000005, tick_value: 6.25,  session_tz: America/Chicago }
+  "6A": { name: "Australian Dollar",     sector: fx_futures, tick_size: 0.00005,   tick_value: 5.00,  session_tz: America/Chicago }
+  "6C": { name: "Canadian Dollar",       sector: fx_futures, tick_size: 0.00005,   tick_value: 5.00,  session_tz: America/Chicago }
+  "6S": { name: "Swiss Franc",           sector: fx_futures, tick_size: 0.0001,    tick_value: 12.50, session_tz: America/Chicago }
+  M6E: { name: "Micro Euro FX",          sector: fx_futures, tick_size: 0.0001,    tick_value: 1.25,  session_tz: America/Chicago }
+  M6B: { name: "Micro British Pound",    sector: fx_futures, tick_size: 0.0001,    tick_value: 0.625, session_tz: America/Chicago }

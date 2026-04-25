@@ -1,0 +1,18 @@
+# Top-level fund toggles that don't fit elsewhere.
+# Kept small; most config lives in the specialized files.
+
+# ── Idle-work mode ──────────────────────────────────────────
+# When true, agents with nothing live to do pull from the idle backlog at
+# vault/_meta/idle_backlog.md. Expands the brain autonomously while the
+# user is away. When false, agents never touch the backlog — they idle.
+#
+# Activation requires BOTH this flag AND the backlog's frontmatter
+# `status` field being `active`. Two-step gate is intentional.
+idle_work_enabled: true
+
+# Cost guardrails that apply only during idle-work mode (tighter than live)
+idle_work_guardrails:
+  max_tokens_per_wake: 3000
+  max_wakes_per_day: 20
+  force_cheap_tier: true          # no balanced/deep/frontier during idle
+  halt_if_live_events: true       # pause idle work if a market event fires

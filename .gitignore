@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+
+state/*.db
+state/*.db-journal
+state/*.db-wal
+state/*.db-shm
+
+logs/*.jsonl
+logs/*.log
+
+.DS_Store
+Thumbs.db
+
+# Obsidian workspace cache (keep vault content, ignore per-user UI state)
+.obsidian/workspace*
+.obsidian/cache

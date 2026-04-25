@@ -1,0 +1,63 @@
+# Per-agent performance thresholds for the CIO's weekly scorecards.
+# CIO computes rolling-100-trade window metrics; these thresholds decide
+# which tier each agent sits in. Bench recommendations go to the user,
+# who makes the final call.
+
+thresholds:
+  # Minimum rolling win rate per tier (fraction of trades that closed positive)
+  top_tier_win_rate:      0.55
+  standard_tier_win_rate: 0.45
+  watch_tier_win_rate:    0.35   # below this → Watch
+  # Bench is triggered when win rate below Watch threshold for 3+ consecutive weeks
+  bench_weeks_below:      3
+
+  # Minimum rolling average R-multiple (avg_win / avg_loss)
+  top_tier_avg_r:         1.5
+  standard_tier_avg_r:    1.0
+  watch_tier_avg_r:       0.7
+
+  # Minimum rolling process score (rule adherence across the trade)
+  min_process_score:      0.80   # 80% of rule checks passing
+
+# Sizing multipliers applied to an agent's proposals based on tier
+# (the PM multiplies their base conviction multiplier by this factor)
+sizing_multipliers:
+  top:      1.20    # small confidence boost
+  standard: 1.00
+  watch:    0.50    # half-size while on probation
+  bench:    0.00    # no trades originated while benched
+
+# Wake frequency multipliers
+wake_frequency:
+  top:      1.00    # normal
+  standard: 1.00
+  watch:    0.75    # a touch less frequent
+  bench:    0.00    # routine wakes paused; idle-work only
+
+# Sample sizes — don't bench an agent on small samples
+minimum_trades_for_tiering: 20        # need 20 closed trades before tiering
+rolling_window: 100                   # rolling-100-trade window for metrics
+
+# Rebalancing cadence
+reclassification_weekly: true
+
+# Agents subject to performance tracking (those who originate trade ideas)
+# Non-originators (execution, compliance) are not tiered.
+tracked_agents:
+  - Energies Analyst
+  - Metals Analyst
+  - Grains Analyst
+  - Softs Analyst
+  - Livestock Analyst
+  - Rates Analyst
+  - FX Futures Analyst
+  - Index/Macro Analyst
+  - Growth/Tech Analyst
+  - Defensive Analyst
+  - Cyclicals Analyst
+  - Financials Analyst
+  - Single-Name Options Specialist
+  - Research
+  - Portfolio Manager
+  - Equity PM
+  - Red Team      # tracked differently: calibration of "strong/gaps/weak" verdicts vs outcomes
