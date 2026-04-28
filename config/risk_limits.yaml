@@ -8,9 +8,16 @@
 hard_rules:
   no_naked_shorts: true       # blocks outright short futures and uncovered short options
   require_stop_on_every_trade: true
-  # Trading halted while autonomous weekend run is active. Flip to false
-  # Monday morning before supervised live session.
-  trading_halted: true
+  # Manual halt switch — emergency kill. Set true to block all orders permanently.
+  trading_halted: false
+  # Auto-expiring halt. While now-UTC < this timestamp, the risk hook treats
+  # trading as halted regardless of `trading_halted` value. Lets us auto-flip
+  # trading on at a known time without manual intervention.
+  # ISO 8601 UTC. Set to a past timestamp (or remove) to allow trading immediately.
+  # 24/5 trading enabled per user 2026-04-28. No active halt timestamp.
+  # Auto-halt at session close is also disabled in fund.yaml for 24/5 mode.
+  # Re-arm to a future timestamp here if you want to pause overnight.
+  trading_halt_until: "2024-01-01T00:00:00Z"
 
 # ============================================================
 # ACCOUNT-LEVEL LIMITS
@@ -33,6 +40,13 @@ account:
   # ── Firm-wide percentage rule (applies in addition) ─────────
   daily_loss_limit_pct: 0.02      # 2% of equity. On $50K = $1000. Aligns w/Topstep.
 
+  # ── AUTONOMOUS-MODE GUARDRAILS (user directive: "no trade cap" while
+  # supervised; this is a separate hard cap for unattended sessions to
+  # prevent runaway trade counts on a bad day). Only enforced when
+  # `autonomous_mode: true` in config/fund.yaml. While supervised the
+  # Risk Manager is the soft gate; while unattended this is the hard one.
+  max_trades_per_day: 8           # absolute ceiling under autonomous mode
+
   # ── INTERNAL SOFT-DLL (critical — agents target THIS, not Topstep's) ─
   # User directive: "they should essentially never hit this daily loss limit".
   # Risk Manager treats these internal thresholds as hard floors.
@@ -46,6 +60,79 @@ account:
   # Soft warn-level thresholds (trigger alerts, not blocks)
   warn_daily_loss_pct: 0.30       # alert when 30% of DLL used (was 50%)
   warn_trailing_dd_pct: 0.40
+
+# ============================================================
+# RISK FRAMEWORK — TIERED RULES (added overnight 2026-04-27)
+# ============================================================
+# The hard floor (DLL, defensive ladder, naked-short block) doesn't move.
+# The middle gets nuance — flexibility between safety floor and discipline.
+risk_framework:
+
+  # ── Conviction-tiered R:R minimums (replaces flat 2:1) ────
+  # High-conviction trades trust the read more, can tolerate smaller reward
+  # per unit risk. Low-conviction trades need bigger reward to compensate
+  # for their uncertainty. Validation-grade is its own class (see below).
+  rr_minimums:
+    high:        1.5          # high conviction
+    med:         2.0          # standard institutional bar
+    low:         2.5          # need bigger reward for less certainty
+    validation:  1.5          # validation-grade chain-test trades
+
+  # ── Single-micro-contract floor exception ──────────────────
+  # Today's failure: low-conviction Kelly-lite says max $15-20 risk, but
+  # smallest possible position (1 micro contract) is often $50+. So low-
+  # conviction micro trades were structurally impossible. Exception:
+  # if smallest_possible_position_risk is the ONLY feasible size, allow
+  # it as long as it's <= the floor below.
+  single_micro_floor_pct_of_equity: 0.0025   # 25 bps = $125 on $50K
+
+  # ── Validation-grade trade class ───────────────────────────
+  # Pre-authorized lightweight class for chain testing and exploratory
+  # trades. Only Tier-1 rules apply. R:R ≥ 1.5. Single CME instrument.
+  # Single defined-risk leg. Limited to 1/session. Bypasses specialist
+  # consult requirement (only Risk Manager review).
+  validation_grade:
+    enabled: true
+    max_risk_usd: 75
+    max_per_session: 1
+    requires_specialist_consult: false
+    requires_red_team_challenge: false      # only Risk Manager
+
+  # ── Adaptive discipline based on day P&L ───────────────────
+  # When the day is going well, allow slightly more flex. When it's going
+  # poorly, tighten beyond standard rules. Defensive ladder still owns
+  # the lockdown thresholds.
+  adaptive_discipline:
+    fresh:                          # day P&L >= 0
+      rr_floor_offset:    0         # use rr_minimums as-is
+      per_trade_cap_pct:  0.005     # 50 bps standard
+    profitable_lite:                # day P&L between 0 and +$200
+      rr_floor_offset:    0
+      per_trade_cap_pct:  0.005
+    profitable_heavy:               # day P&L >= +$200 (running profit)
+      rr_floor_offset:    -0.25     # slightly looser; proven session
+      per_trade_cap_pct:  0.006     # 60 bps allowed
+    minor_drawdown:                 # day P&L between -$0 and -$100
+      rr_floor_offset:    0
+      per_trade_cap_pct:  0.005
+    moderate_drawdown:              # day P&L between -$100 and -$200
+      rr_floor_offset:    0.5       # tighter
+      per_trade_cap_pct:  0.004     # 40 bps
+    # Beyond -$200, defensive ladder takes over.
+
+  # ── Risk Manager verdict types ─────────────────────────────
+  # Today RM was binary: APPROVE / BLOCK. New: ALLOW_WITH_MODIFICATIONS,
+  # which lets RM propose a smaller size that fits, instead of blocking.
+  rm_verdict_types:
+    - allow
+    - allow_with_modifications        # RM may reduce size to fit caps
+    - block
+
+  # ── Pre-Trade Checklist tiering ────────────────────────────
+  # Hard items: missing → BLOCK
+  # Soft items: missing → APPROVE WITH NOTE (logged, but not blocking)
+  checklist_hard_items: [1, 4, 5, 6, 9, 12]   # strategy/stop/$risk/%equity/invalidation/exec plan
+  checklist_soft_items: [2, 3, 7, 8, 10, 11]  # trigger/entry/target/R:R/regime/correlation
 
 # ============================================================
 # COMBINE-MODE DEFENSIVE LADDER (new — user priority)
@@ -83,22 +170,80 @@ per_symbol:
     max_contracts: 1
     max_notional_usd: 75000
     required_stop_ticks: 20
-  # Override per contract — TODO user: review each
+
+  # Notional caps are sized as max_contracts × per-contract notional at typical
+  # 2026 price levels. Risk hook rejects orders that exceed these.
+  # Total open contracts STILL capped at account.max_open_contracts_total (5
+  # on $50K Combine) — per-symbol caps are upper bounds, not allocations.
+
+  # ── Equity index futures ───────────────────────────────────────────
   ES:   { max_contracts: 1, max_notional_usd: 300000, required_stop_ticks: 12 }
   MES:  { max_contracts: 3, max_notional_usd: 30000,  required_stop_ticks: 12 }
   NQ:   { max_contracts: 1, max_notional_usd: 400000, required_stop_ticks: 20 }
   MNQ:  { max_contracts: 3, max_notional_usd: 40000,  required_stop_ticks: 20 }
+  RTY:  { max_contracts: 1, max_notional_usd: 130000, required_stop_ticks: 16 }
+  M2K:  { max_contracts: 3, max_notional_usd: 39000,  required_stop_ticks: 16 }
+  YM:   { max_contracts: 1, max_notional_usd: 230000, required_stop_ticks: 30 }
+  MYM:  { max_contracts: 3, max_notional_usd: 69000,  required_stop_ticks: 30 }
+
+  # ── Energies ───────────────────────────────────────────────────────
   CL:   { max_contracts: 1, max_notional_usd: 80000,  required_stop_ticks: 20 }
   MCL:  { max_contracts: 2, max_notional_usd: 8000,   required_stop_ticks: 20 }
+  BZ:   { max_contracts: 1, max_notional_usd: 85000,  required_stop_ticks: 20 }
+  NG:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 25 }
+  QG:   { max_contracts: 2, max_notional_usd: 18000,  required_stop_ticks: 25 }
+  RB:   { max_contracts: 1, max_notional_usd: 100000, required_stop_ticks: 100 }
+  HO:   { max_contracts: 1, max_notional_usd: 115000, required_stop_ticks: 100 }
+  EH:   { max_contracts: 1, max_notional_usd: 60000,  required_stop_ticks: 30 }
+
+  # ── Metals ─────────────────────────────────────────────────────────
   GC:   { max_contracts: 1, max_notional_usd: 220000, required_stop_ticks: 20 }
   MGC:  { max_contracts: 2, max_notional_usd: 22000,  required_stop_ticks: 20 }
   SI:   { max_contracts: 1, max_notional_usd: 170000, required_stop_ticks: 30 }
+  SIL:  { max_contracts: 2, max_notional_usd: 60000,  required_stop_ticks: 30 }
+  HG:   { max_contracts: 1, max_notional_usd: 115000, required_stop_ticks: 30 }
+  PL:   { max_contracts: 1, max_notional_usd: 100000, required_stop_ticks: 30 }
+  PA:   { max_contracts: 1, max_notional_usd: 110000, required_stop_ticks: 30 }
+  ALI:  { max_contracts: 1, max_notional_usd: 65000,  required_stop_ticks: 30 }
+
+  # ── Grains & oilseeds ──────────────────────────────────────────────
   ZC:   { max_contracts: 1, max_notional_usd: 25000,  required_stop_ticks: 10 }
   ZS:   { max_contracts: 1, max_notional_usd: 65000,  required_stop_ticks: 15 }
+  ZW:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 15 }
+  ZL:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 30 }
+  ZM:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 20 }
+  ZO:   { max_contracts: 1, max_notional_usd: 20000,  required_stop_ticks: 15 }
+  ZR:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 20 }
+
+  # ── Softs ──────────────────────────────────────────────────────────
+  KC:   { max_contracts: 1, max_notional_usd: 85000,  required_stop_ticks: 30 }
+  CT:   { max_contracts: 1, max_notional_usd: 45000,  required_stop_ticks: 30 }
+  SB:   { max_contracts: 1, max_notional_usd: 30000,  required_stop_ticks: 30 }
+  CC:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 30 }
+  OJ:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 30 }
+  LBR:  { max_contracts: 1, max_notional_usd: 45000,  required_stop_ticks: 30 }
+
+  # ── Livestock ──────────────────────────────────────────────────────
+  LE:   { max_contracts: 1, max_notional_usd: 85000,  required_stop_ticks: 30 }
+  GF:   { max_contracts: 1, max_notional_usd: 115000, required_stop_ticks: 30 }
+  HE:   { max_contracts: 1, max_notional_usd: 40000,  required_stop_ticks: 30 }
+
+  # ── Rates (full curve) ─────────────────────────────────────────────
+  ZT:   { max_contracts: 1, max_notional_usd: 215000, required_stop_ticks: 8  }
+  ZF:   { max_contracts: 1, max_notional_usd: 120000, required_stop_ticks: 10 }
   ZN:   { max_contracts: 1, max_notional_usd: 110000, required_stop_ticks: 8  }
+  ZB:   { max_contracts: 1, max_notional_usd: 135000, required_stop_ticks: 10 }
+  UB:   { max_contracts: 1, max_notional_usd: 145000, required_stop_ticks: 10 }
+
+  # ── FX futures ─────────────────────────────────────────────────────
   "6E": { max_contracts: 1, max_notional_usd: 140000, required_stop_ticks: 20 }
+  "6B": { max_contracts: 1, max_notional_usd: 90000,  required_stop_ticks: 20 }
   "6J": { max_contracts: 1, max_notional_usd: 85000,  required_stop_ticks: 20 }
-  M6E: { max_contracts: 2, max_notional_usd: 14000,  required_stop_ticks: 20 }
+  "6A": { max_contracts: 1, max_notional_usd: 70000,  required_stop_ticks: 20 }
+  "6C": { max_contracts: 1, max_notional_usd: 80000,  required_stop_ticks: 20 }
+  "6S": { max_contracts: 1, max_notional_usd: 115000, required_stop_ticks: 20 }
+  M6E:  { max_contracts: 2, max_notional_usd: 28000,  required_stop_ticks: 20 }
+  M6B:  { max_contracts: 2, max_notional_usd: 18000,  required_stop_ticks: 20 }
 
 # ============================================================
 # SECTOR / CORRELATION LIMITS
@@ -112,13 +257,38 @@ sector_limits:
   rates:       { max_net_contracts: 2 }
   fx_futures:  { max_net_contracts: 2 }
   index_macro: { max_net_contracts: 2 }
-# Correlated-basket check (block if net exposure across correlated symbols exceeds)
+# Correlated-basket check (block if net exposure across correlated symbols exceeds).
+# Net = absolute sum of signed positions across the basket.
 correlated_baskets:
   - name: risk_on_index
     symbols: [ES, MES, NQ, MNQ, RTY, M2K, YM, MYM]
     max_net_contracts: 3
   - name: precious_metals
-    symbols: [GC, MGC, SI, SIL]
+    symbols: [GC, MGC, SI, SIL, PL, PA]
+    max_net_contracts: 2
+  - name: petroleum_complex
+    symbols: [CL, MCL, BZ, RB, HO]
+    max_net_contracts: 3
+  - name: nat_gas_complex
+    symbols: [NG, QG]
+    max_net_contracts: 2
+  - name: grains_oilseeds
+    symbols: [ZC, ZW, ZS, ZL, ZM, ZO, ZR]
+    max_net_contracts: 3
+  - name: tropical_softs
+    symbols: [KC, CT, SB, CC, OJ]
+    max_net_contracts: 2
+  - name: livestock_complex
+    symbols: [LE, GF, HE]
+    max_net_contracts: 2
+  - name: rates_curve
+    symbols: [ZT, ZF, ZN, ZB, UB]
+    max_net_contracts: 3
+  - name: g10_fx
+    symbols: ["6E", "6B", "6J", "6A", "6C", "6S", M6E, M6B]
+    max_net_contracts: 3
+  - name: industrial_metals
+    symbols: [HG, ALI]
     max_net_contracts: 2
 
 # ============================================================
@@ -152,5 +322,9 @@ options:
 sessions:
   block_first_n_seconds_after_open: 60
   block_last_n_seconds_before_close: 120
-  no_new_positions_after_local_time: "15:45"   # America/Chicago
+  # 24/5 trading enabled per user 2026-04-28. Globex futures trade Sun 17:00 CT
+  # through Fri 16:00 CT with brief daily break ~16:00-17:00 CT. The cutoff
+  # below is set to the very end of the daily window so we still respect the
+  # Globex daily-break maintenance window but otherwise trade all hours.
+  no_new_positions_after_local_time: "15:55"   # America/Chicago — only blocks the last 5 min before daily Globex maintenance break
   pause_around_high_impact_events: true

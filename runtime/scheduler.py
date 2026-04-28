@@ -48,8 +48,14 @@ class Scheduler:
     async def run(self) -> AsyncIterator[Event]:
         """Yield session + tick events forever. Caller decides when to stop."""
         last_open_state = None
+        last_stress_date: str | None = None
+        last_metrics_date: str | None = None
+
         while True:
             open_now = self.is_cme_open_now()
+            now_ct = datetime.now(tz=CT)
+            today = now_ct.strftime("%Y-%m-%d")
+
             if last_open_state is None:
                 last_open_state = open_now
                 if open_now:
@@ -60,6 +66,24 @@ class Scheduler:
                     source="scheduler",
                 )
                 last_open_state = open_now
+
+            # 06:00 CT daily — stress test event (only once per day)
+            if (
+                now_ct.time() >= time(6, 0)
+                and now_ct.time() < time(6, 30)
+                and last_stress_date != today
+            ):
+                yield Event(kind=EventKind.STRESS_TEST_DUE, source="scheduler")
+                last_stress_date = today
+
+            # 17:00 CT daily — Compliance metrics sweep (post-close)
+            if (
+                now_ct.time() >= time(17, 0)
+                and now_ct.time() < time(17, 30)
+                and last_metrics_date != today
+            ):
+                yield Event(kind=EventKind.DAILY_METRICS_DUE, source="scheduler")
+                last_metrics_date = today
 
             if open_now:
                 yield Event(kind=EventKind.TICK, source="scheduler")

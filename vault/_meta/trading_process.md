@@ -14,75 +14,17 @@ Agents are welcome — encouraged — to suggest refinements via journal entries
 ## The core workflow
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ CIO                                                          │
-│   • Sets daily posture (regime read, themes, events)         │
-│   • Decides which analysts to wake and with what focus       │
-│   • Gatekeeps escalations (Research, frontier model wakes)   │
-│   • Arbitrates disagreements between analysts                │
-│   • Never places orders                                      │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ wakes
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Sector Analyst / Research Agent                              │
-│   • Pulls data, news, tape, calendar                         │
-│   • Identifies clean setups (or "no trade today")            │
-│   • Research agent produces deep-dive briefs when called     │
-│   • Writes theses to vault/theses/ or vault/research/        │
-│   • Presents idea to the Portfolio Manager                   │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ publishes med/high conviction thesis
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Red Team (adversarial review — every med/high thesis)        │
-│   • Produces 3 counter-narratives + null-hypothesis test     │
-│   • Cites historical analog failures                         │
-│   • Base-rate check against strategy's documented hit rate   │
-│   • Verdict: strong | gaps | weak (advisory, not blocking)   │
-│   • Output to vault/research/challenges/                     │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ challenge report + thesis forward to
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Portfolio Manager (+ Trader if applicable)                   │
-│   • Reads thesis; checks current positions, regime fit,      │
-│     correlation with existing book                           │
-│   • DECIDES: pursue this idea or pass. "Pass" is a valid     │
-│     outcome — most ideas should pass.                        │
-│   • If pursuing, sizes the position per risk_limits.yaml     │
-│   • Writes the order proposal (symbol, side, qty, stop,      │
-│     target, structure)                                       │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ submits
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Risk Manager (+ Options Risk if options)                     │
-│   • Runs the 12-point check on the proposal                  │
-│   • Has FINAL SAY. Approve | approve_with_modifications |    │
-│     block. No appeal. PM may resubmit with changes.          │
-│   • For novel structures or ambiguous regime: may escalate   │
-│     to Research (frontier) for a second-opinion deep-dive.   │
-│   • On drawdown, tightens buffers per book_state_playbook.   │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ if approved
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Execution Trader                                             │
-│   • Translates approved proposal into broker order payload   │
-│   • Calls topstep_place_order (or equity_broker when live)   │
-│   • PreToolUse risk hook is the final hard gate              │
-│   • Logs fill, slippage, stop placement                      │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Compliance                                                   │
-│   • Audits: every order has a matching proposal + risk vote  │
-│   • Flags patterns (repeat rule-trips, correlation drift)    │
-│   • End-of-day summary + weekly review prep                  │
-└─────────────────────────────────────────────────────────────┘
+CIO → Sector Analyst → [Red Team if med/high] → PM → Risk Manager → Execution → Compliance
 ```
+
+- **CIO** sets daily posture, picks which analyst to wake, gatekeeps escalations. Never places orders.
+- **Sector Analyst / Research** pulls data, identifies setups (or NO_TRADE), writes thesis to `vault/theses/`, calls `state_record_decision` (mandatory).
+- **Red Team** challenges every med/high thesis (3 counter-narratives, null-hypothesis test, historical analog, verdict strong|gaps|weak — advisory).
+- **PM** reads thesis + Red Team, decides pursue|pass, sizes per `risk_limits.yaml`. May wake specialists for ensemble validation in autonomous mode.
+- **Risk Manager** runs 13-gate check, has FINAL SAY (allow | allow_with_modifications | block). No appeal. PM may resubmit with changes. Options Risk shares this authority for options.
+- **Execution Trader** translates approved proposal into broker order, calls `topstep_place_order`. Does not think about trade quality.
+- **Compliance** audits every order has a matching proposal + risk vote; flags patterns; daily/weekly review.
+- **Book Monitor** runs between analyst wakes, sweeps for stop approaches, adverse moves, correlated drift.
 
 ## Rules the workflow enforces
 
@@ -95,6 +37,20 @@ Agents are welcome — encouraged — to suggest refinements via journal entries
 7. **Book Monitor watches the live book.** Between analyst wakes, the Book Monitor sweeps every 5 minutes for stop approaches, adverse moves, correlated drift. It flags; it does not act.
 8. **Compliance watches.** Compliance is not in the decision path but sits beside it, auditing. They surface patterns the front office is too close to see.
 
+### v2 institutional roles (background, inform every decision)
+
+The five v2 specialist roles run in the background on their own cadence and feed every other agent. See [[agent_v2_protocol]] for full details.
+
+| Role | Cadence | Output consumed by |
+|---|---|---|
+| **Quant Researcher** | Daily + Sunday weekly | PM (sizing), CIO (analyst tier), Compliance (calibration) |
+| **Macro Strategist** | Sunday weekly | CIO (regime bias), all analysts (with-regime check) |
+| **Flow Analyst** | Tue + Fri | All analysts (positioning context), PM (crowded-trade veto) |
+| **Volatility Strategist** | Mon + Wed + Fri | Options Risk (vol regime), Diamond Hunter (mispricing setups) |
+| **Execution Specialist** | Per-trade | Execution Trader (plan), Compliance (slippage) |
+
+These roles do NOT block trades. They inform. The Risk Manager remains the final gate.
+
 ## Why this works
 
 This is how real firms survive. The separation of duties means no single agent can accidentally put the fund at existential risk:
@@ -105,6 +61,59 @@ This is how real firms survive. The separation of duties means no single agent c
 - A buggy Execution Trader can't lose big — tool access is capped to one function, and position limits bound size.
 
 Each layer catches what the layer above misses. Over a year, this prevents blow-ups and lets small-edge decisions compound.
+
+## ⚠ MANDATORY PROTOCOL — calling `state_record_decision`
+
+**Every analyst, every wake, MUST call `state_record_decision` if you produce a thesis OR a no-trade verdict.** This is non-negotiable. The chain has no way to forward your output to PM/Risk/Exec unless it's recorded in the decisions table.
+
+**If you find a setup:**
+```
+state_record_decision(
+  agent_name="<your canonical name, e.g. 'Quant Researcher' or 'Energies Analyst'>",
+  kind="thesis",
+  symbol="<SYMBOL>",
+  summary="<one-line setup description>",
+  rationale="<full Pre-Trade Checklist + reasoning>"
+)
+```
+Then end your response with EXACTLY one line:
+```
+THESIS: <SYMBOL> conviction=<low|med|high>
+```
+
+**If you DON'T find a setup:**
+```
+state_record_decision(
+  agent_name="<your name>",
+  kind="no_trade",
+  summary="<one-line reason>",
+  rationale="<what you scanned + why nothing triggered>"
+)
+```
+Then end with:
+```
+NO_TRADE: <one-line reason>
+```
+
+**Do NOT write a thesis in markdown without recording it.** The orchestrator literally cannot see your text — it only sees the decisions table. A thesis that isn't recorded is a thesis that didn't happen.
+
+**Use your canonical agent name** ("Quant Researcher", not "quant_researcher" or "QR"). The DB layer will normalize, but using the canonical form is cleaner.
+
+## ⚠ BEARISH VIEWS — convert to defined-risk, not naked shorts
+
+**The risk hook categorically blocks naked short futures.** This is non-negotiable. So if your sector analysis points bearish, do NOT propose short futures. Instead:
+
+**Conversion menu (in order of preference):**
+
+1. **Bear put spread** on the underlying's options (defined risk = debit paid; defined upside = strike width − debit). Use when IV is reasonable and we want directional exposure with capped loss.
+2. **Bear call spread** (short call + long higher call). Defined risk = strike width − credit. Use when IV is rich (sell premium).
+3. **Calendar spread bearish lean** — short the front-month with a long back-month overlay.
+4. **Inter-commodity spread** — long one product, short the correlated one (e.g., long natgas / short crude when energy crack should compress). The "short" side is offset by the "long" side, so it's defined risk by structure.
+5. **Sit out.** If you can't find a defined-risk way to express the bearish view, the right answer is no trade. Don't force.
+
+**The Volatility Strategist and Options Risk are your routing partners** for option structures. When you have a bearish thesis, the analyst writes the directional view and Options Risk computes the structure. The proposal that reaches PM should already be defined-risk shaped.
+
+**For Quant Researcher specifically:** when your strategy library produces a SHORT signal (e.g., `vol_regime_trend` going short), automatically translate to the bearish defined-risk equivalent before publishing the thesis. Don't publish naked-short theses — they'll be DOA at the risk hook.
 
 ## Parallel tracks
 

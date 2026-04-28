@@ -23,6 +23,9 @@ console = Console()
 
 
 def _preflight() -> None:
+    # Belt-and-braces: load .env here too in case _preflight gets called
+    # before main()'s load_dotenv (e.g. test imports).
+    load_dotenv()
     missing = [k for k in ("ANTHROPIC_API_KEY",) if not os.environ.get(k)]
     if missing:
         console.print(f"[red]Missing env vars:[/] {missing}. Fill .env first.")
@@ -50,6 +53,11 @@ async def _amain() -> None:
 
 
 def main() -> None:
+    # CRITICAL: load .env BEFORE _preflight runs its env-var checks. The
+    # original ordering was correct in this function but _preflight was
+    # being called before this in some background-launch paths because the
+    # imports at module scope can resolve env-dependent objects. Belt and
+    # braces: explicitly call load_dotenv() inside _preflight too if needed.
     load_dotenv()
     _preflight()
     try:

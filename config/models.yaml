@@ -20,8 +20,8 @@ defaults:
 agents:
   cio:                cheap          # orchestration = routing + arbitration, not reasoning
   portfolio_manager:  cheap          # deterministic sizing math
-  risk_manager:       deep           # safety critical — keep deep
-  options_risk:       deep           # options math + IV regime reasoning
+  risk_manager:       deep           # Opus 4.7 — safety critical. Originally this failed due to the SDK 32K command-line limit; prompt trim resolved it.
+  options_risk:       deep           # Opus 4.7 — options math + IV regime reasoning
   execution_trader:   cheap
   compliance:         cheap
   research:           frontier       # the one place frontier is justified
@@ -29,9 +29,16 @@ agents:
   book_monitor:       cheap          # position watcher — mostly NO_CHANGE outputs
   diamond_hunter:     cheap          # asymmetric-convexity hunter — rare wakes
   fund_engineer:      cheap          # autonomous brain-builder — constrained scope
+  edge_hunter:        cheap          # fast intraday setup-spotter — every tick
+
+  # Institutional research roles (added for hit-rate improvement)
+  quant_researcher:    balanced      # factor decomposition + physics + Jane Street math
+  macro_strategist:    deep          # weekly thematic memos — multi-month bias
+  flow_analyst:        balanced      # CFTC COT + dealer gamma + fund flows
+  volatility_strategist: balanced    # vol surface + term structure + skew (now also covers single-name options when equities desk activates)
+  # NOTE: execution_specialist merged into execution_trader (2026-04-27)
 
   # Futures analysts — Haiku default; CIO escalates specific asks to Sonnet.
-  # Ags is split into three specialists for better coverage.
   analyst_energies:    cheap
   analyst_metals:      cheap
   analyst_grains:      cheap
@@ -41,14 +48,10 @@ agents:
   analyst_fx_futures:  cheap
   analyst_index_macro: cheap
 
-  # Equities desk — learning mode; cheap is fine
-  equity_pm:               cheap
-  equity_execution_trader: cheap
-  analyst_growth_tech:     cheap
-  analyst_defensive:       cheap
-  analyst_cyclicals:       cheap
-  analyst_financials:      cheap
-  single_name_options:     balanced   # genuinely harder reasoning — keeps Sonnet
+  # Equities desk — RETIRED 2026-04-27. Equities not trading on Topstep
+  # (Combine is futures-only). When equities activate, recreate a leaner
+  # team. Removed: equity_pm, equity_execution_trader, analyst_growth_tech,
+  # analyst_defensive, analyst_cyclicals, analyst_financials, single_name_options.
 
 # ── Per-call escalation ──────────────────────────────────────
 # An agent can request a one-shot escalation to a higher tier for a specific

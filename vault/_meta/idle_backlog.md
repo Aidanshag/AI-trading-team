@@ -190,7 +190,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 
 ## Options Risk
 
-- [ ] P1 Options structure primer — one-pager per allowed structure (long call, long put, debit spreads, credit spreads, iron condor, iron fly, calendar, diagonal) with Greeks profile, IV regime fit, typical DTE. File: `vault/playbooks/options_structures.md`.
+- [x] P1 Options structure primer — one-pager per allowed structure (long call, long put, debit spreads, credit spreads, iron condor, iron fly, calendar, diagonal) with Greeks profile, IV regime fit, typical DTE. File: `vault/playbooks/options_structures.md`. (2026-04-28 21:33 UTC — Fund Engineer)
 - [ ] P2 IV-regime fit matrix: which structures fit which IV rank percentile. File: `vault/playbooks/iv_regime_fit.md`.
 - [ ] P2 Pin-risk and assignment-risk protocols. File: `vault/playbooks/pin_and_assignment.md`.
 

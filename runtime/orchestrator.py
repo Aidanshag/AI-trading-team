@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,10 @@ import yaml
 
 from hooks import audit_logger, cost_tracker, risk_gate
 from state.db import get_db
-from tools import equity_broker, fundamentals_mcp, market_data, news, state_store, topstep, vault
+from tools import (
+    equity_broker, fundamentals_mcp, market_data, news,
+    options_mcp, state_store, topstep, vault,
+)
 
 from .events import Event, EventKind
 from .scheduler import Scheduler
@@ -41,6 +45,8 @@ CONFIG_DIR = Path("config")
 VAULT_DIR = Path("vault")
 TEAM_NOTE = VAULT_DIR / "_meta" / "team.md"
 TRADING_PROCESS_NOTE = VAULT_DIR / "_meta" / "trading_process.md"
+V2_PROTOCOL_NOTE = VAULT_DIR / "_meta" / "agent_v2_protocol.md"
+PRETRADE_CHECKLIST_NOTE = VAULT_DIR / "_meta" / "pre_trade_checklist.md"
 IDLE_PROTOCOL_NOTE = VAULT_DIR / "_meta" / "idle_protocol.md"
 PLATFORM_IMPORTS_DIR = VAULT_DIR / "platform_agents" / "imported"
 FUND_YAML = CONFIG_DIR / "fund.yaml"
@@ -92,7 +98,24 @@ def _team_preamble(agent_role_slug: str | None = None) -> str:
             "\n\n---\n\n# Trading process (the firm's workflow)\n\n"
             + TRADING_PROCESS_NOTE.read_text(encoding="utf-8")
         )
-    if _idle_work_enabled() and IDLE_PROTOCOL_NOTE.exists():
+    if V2_PROTOCOL_NOTE.exists():
+        parts.append(
+            "\n\n---\n\n# Agent v2 Protocol — institutional skills upgrade\n\n"
+            + V2_PROTOCOL_NOTE.read_text(encoding="utf-8")
+        )
+    if PRETRADE_CHECKLIST_NOTE.exists():
+        parts.append(
+            "\n\n---\n\n# Pre-Trade Checklist (mandatory)\n\n"
+            + PRETRADE_CHECKLIST_NOTE.read_text(encoding="utf-8")
+        )
+    # Idle protocol only loaded for Fund Engineer (the agent that
+    # actually consumes the idle backlog). Other agents don't need it
+    # and including it eats SDK command-line budget.
+    if (
+        _idle_work_enabled()
+        and IDLE_PROTOCOL_NOTE.exists()
+        and (agent_role_slug or "").lower() in ("fund_engineer", "fund-engineer")
+    ):
         parts.append(
             "\n\n---\n\n# Idle-work protocol (ACTIVE)\n\n"
             + IDLE_PROTOCOL_NOTE.read_text(encoding="utf-8")
@@ -144,6 +167,9 @@ READ_ONLY_TOOLS = [
     "mcp__fundamentals__cftc_commitments",
     "mcp__fundamentals__usda_crop_progress",
     "mcp__fundamentals__usda_cattle_on_feed",
+    "mcp__options__compute_greeks",
+    "mcp__options__compute_implied_vol",
+    "mcp__options__compute_structure_greeks",
     "mcp__topstep__topstep_get_account",
     "mcp__topstep__topstep_get_positions",
     "mcp__topstep__topstep_get_working_orders",
@@ -208,6 +234,7 @@ class Orchestrator:
             "market_data":   market_data.server,
             "news":          news.server,
             "fundamentals":  fundamentals_mcp.server,
+            "options":       options_mcp.server,
             "state_store":   state_store.server,
             "vault":         vault.server,
         }
@@ -245,6 +272,14 @@ class Orchestrator:
         returns a stub response for wiring tests.
         """
         spec = self.specs[agent_name]
+
+        # Autonomous-mode wake-budget gate. Refuse new wakes when daily
+        # caps (count or spend) would be exceeded. Supervised mode skips
+        # this gate — the user is the budget arbiter then.
+        gated = _check_autonomy_wake_budget(self.db, agent_name)
+        if gated is not None:
+            return gated
+
         # Per-agent tier override in models.yaml wins over frontmatter default
         effective_tier = self._resolve_tier_for_agent(agent_name, spec.model_tier)
         model = self._resolve_model(effective_tier)
@@ -396,6 +431,75 @@ class Orchestrator:
         return {"status": "challenged", "challenge": challenge}
 
     # ------------------------------------------------------------
+    # PM ensemble — wake specialists for cross-validation
+    # ------------------------------------------------------------
+    SPECIALIST_AGENTS = (
+        "Quant Researcher",
+        "Macro Strategist",
+        "Flow Analyst",
+        "Volatility Strategist",
+    )
+
+    async def pm_wake_specialists(
+        self,
+        pm_response_text: str,
+        thesis: dict[str, Any],
+        max_wakes: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Parse PM output for `WAKE_SPECIALIST: <agent> | <question>` lines
+        and wake each in parallel. Returns specialist responses for
+        injection into PM's second-pass evaluation.
+
+        Caps:
+        - Max 3 specialist wakes per PM evaluation (default).
+        - Specialist must be in SPECIALIST_AGENTS allowlist.
+        - One pass — specialists cannot recursively wake more specialists.
+        """
+        import re as _re
+        pattern = _re.compile(
+            r"^\s*WAKE_SPECIALIST\s*:\s*([^|\n]+?)\s*\|\s*(.+)$",
+            flags=_re.MULTILINE,
+        )
+        requests = []
+        for match in pattern.finditer(pm_response_text):
+            name = match.group(1).strip()
+            question = match.group(2).strip()
+            if name not in self.SPECIALIST_AGENTS:
+                continue
+            if name not in self.specs:
+                continue
+            requests.append((name, question))
+            if len(requests) >= max_wakes:
+                break
+
+        if not requests:
+            return []
+
+        # Wake all specialists in parallel
+        async def _one(name: str, q: str) -> dict[str, Any]:
+            task = (
+                f"PM-INITIATED CONSULT. Thesis under review: {thesis.get('summary', 'n/a')}. "
+                f"PM's specific question for you: {q}\n\n"
+                "Respond concisely (under 250 words) with your sector view. "
+                "Do not propose orders; PM has the proposal."
+            )
+            r = await self.wake_agent(name, task)
+            return {"specialist": name, "question": q,
+                    "response": (r.get("final_text") or "")[:1500]}
+
+        responses = await asyncio.gather(*[_one(n, q) for n, q in requests])
+        # Log each consult
+        for resp in responses:
+            self.db.record_decision(
+                agent="Portfolio Manager",
+                kind="specialist_consult",
+                summary=f"PM consulted {resp['specialist']}: {resp['question'][:80]}",
+                rationale=resp['response'][:1000],
+                model="orchestrator",
+            )
+        return responses
+
+    # ------------------------------------------------------------
     # Trade workflow — enforces the routing invariant
     # ------------------------------------------------------------
     async def submit_proposal(self, proposal: dict[str, Any]) -> dict[str, Any]:
@@ -472,8 +576,52 @@ class Orchestrator:
                 await self.idle_tick_workflow()
             case EventKind.WEEKLY_REVIEW:
                 await self.weekly_review_workflow()
+            case EventKind.STRESS_TEST_DUE:
+                await self.stress_test_workflow()
+            case EventKind.DAILY_METRICS_DUE:
+                await self.daily_metrics_workflow()
             case _:
                 pass
+
+    async def stress_test_workflow(self) -> dict[str, Any]:
+        """Pre-market stress test (06:00 CT daily). Run all scenarios; if any
+        breaches the internal DLL ceiling, wake CIO + Risk Manager."""
+        from tools.stress_test import run_stress
+        report = run_stress()
+        breach = report.any_breaches()
+        self.db.record_decision(
+            agent="System", kind="stress_test",
+            summary=f"Stress test: {'BREACH' if breach else 'within'}",
+            rationale=report.summary(),
+        )
+        if breach:
+            await self.wake_agent(
+                "Risk Manager",
+                f"Pre-market stress test BREACHED internal DLL on at least one "
+                f"scenario. Report:\n\n{report.summary()}\n\n"
+                "Decide: which positions to flag for size reduction or close.",
+            )
+        return {"status": "stress_done", "breach": breach}
+
+    async def daily_metrics_workflow(self) -> dict[str, Any]:
+        """Daily Compliance metrics sweep — calibration, decay, missing reviews."""
+        from tools.agent_metrics import daily_metrics_snapshot
+        snap = daily_metrics_snapshot()
+        self.db.record_decision(
+            agent="System", kind="daily_metrics",
+            summary="Daily metrics computed",
+            rationale=str(snap)[:2000],
+        )
+        # If there are missing post-mortems or any decayed strategies, surface
+        if snap.get("missing_post_mortems") or any(
+            s.get("decay_flag") for s in snap.get("strategy_decay", [])
+        ):
+            await self.wake_agent(
+                "Compliance",
+                f"Daily metrics flag: review missing post-mortems and decay flags.\n\n"
+                f"Snapshot: {snap}",
+            )
+        return {"status": "metrics_done", "snapshot": snap}
 
     async def idle_tick_workflow(self) -> dict[str, Any]:
         """Off-hours tick: wake Fund Engineer to do brain-building work.
@@ -537,10 +685,22 @@ class Orchestrator:
         return await self.run_analyst_chain(analyst)
 
     async def session_close_workflow(self) -> dict[str, Any]:
-        """End-of-day: CIO wrap + Compliance summary."""
+        """End-of-day: CIO wrap + Compliance summary + auto-halt re-engage."""
         await self.wake_agent("CIO", "SESSION CLOSE. Publish daily wrap to journal.")
         await self.wake_agent("Compliance", "End-of-day audit + compliance summary.")
-        return {"status": "session_closed"}
+        # Re-engage auto-halt so no orders fire overnight without explicit
+        # human re-authorization. No-op if fund.yaml has the feature disabled.
+        new_halt_ts = re_engage_auto_halt(reason="session_close")
+        result: dict[str, Any] = {"status": "session_closed"}
+        if new_halt_ts:
+            self.db.record_decision(
+                agent="orchestrator", kind="auto_halt_engaged",
+                summary=f"trading_halt_until set to {new_halt_ts}",
+                rationale="session_close_workflow re-armed the kill-switch timestamp",
+                model="system",
+            )
+            result["auto_halt_until"] = new_halt_ts
+        return result
 
     async def tick_workflow(self) -> dict[str, Any]:
         """Mid-session tick: CIO decides if any analyst needs to wake."""
@@ -618,19 +778,62 @@ class Orchestrator:
                 ),
             )
 
-        # 3. PM sizes a proposal
-        pm_result = await self.wake_agent(
-            "Portfolio Manager",
-            (
-                f"Thesis: {thesis}\n"
-                f"Red Team challenge: {challenge.get('final_text', 'n/a') if challenge else 'skipped (low conviction)'}\n\n"
-                "Decide pursue|pass. If pursue, produce an order proposal "
-                "(symbol, side, qty, order_type, stop, target, rationale). "
-                "Record via state_record_decision kind=order_proposal. "
-                "End with PROPOSE or PASS."
-            ),
+        # 3. PM evaluates — first pass. PM may emit WAKE_SPECIALIST lines
+        #    to consult Quant / Macro / Flow / Vol / Execution specialists
+        #    before deciding. Capped at 3 specialist wakes per evaluation.
+        autonomous = bool(_load_fund_yaml().get("autonomous_mode", False))
+        pm_first_prompt = (
+            f"Thesis: {thesis}\n"
+            f"Red Team challenge: {challenge.get('final_text', 'n/a') if challenge else 'skipped (low conviction)'}\n\n"
+            "Step 1 — Decide whether you need specialist input.\n"
+            f"{'You may consult up to 3 specialists' if autonomous else 'In autonomous mode you may consult specialists; in supervised mode skip this step'} "
+            "by emitting lines of the form:\n"
+            "  WAKE_SPECIALIST: <agent_name> | <focused question>\n"
+            "Allowed specialists: Quant Researcher, Macro Strategist, Flow Analyst, "
+            "Volatility Strategist, Execution Specialist.\n"
+            "If no consultation needed, skip this step.\n\n"
+            "Step 2 — Decide pursue|pass and produce proposal/PASS in same response.\n"
+            "If pursue, produce order_proposal (symbol, side, qty, order_type, "
+            "stop_loss_price, target_price, rationale) and record via "
+            "state_record_decision kind=order_proposal.\n"
+            "End with EXACTLY 'DECISION: PROPOSE' or 'DECISION: PASS'."
         )
-        if "PROPOSE" not in pm_result.get("final_text", "").upper():
+        pm_result = await self.wake_agent("Portfolio Manager", pm_first_prompt)
+        pm_text = pm_result.get("final_text", "") or ""
+
+        # 3b. If PM requested specialist consults AND we're in autonomous
+        #     mode, wake them in parallel and re-prompt PM with the input.
+        if autonomous and "WAKE_SPECIALIST:" in pm_text.upper():
+            specialist_responses = await self.pm_wake_specialists(
+                pm_text, thesis, max_wakes=3,
+            )
+            if specialist_responses:
+                consult_summary = "\n\n".join(
+                    f"--- {r['specialist']} on '{r['question']}' ---\n{r['response']}"
+                    for r in specialist_responses
+                )
+                pm_second_prompt = (
+                    f"Thesis: {thesis}\n"
+                    f"Red Team: {challenge.get('final_text', 'n/a') if challenge else 'skipped'}\n\n"
+                    f"Specialist consults you requested:\n{consult_summary}\n\n"
+                    "Now make your final decision. Produce order_proposal if "
+                    "pursuing (symbol, side, qty, order_type, stop_loss_price, "
+                    "target_price, rationale). Record via state_record_decision "
+                    "kind=order_proposal. End with EXACTLY: 'DECISION: PROPOSE' "
+                    "or 'DECISION: PASS'."
+                )
+                pm_result = await self.wake_agent("Portfolio Manager", pm_second_prompt)
+                pm_text = pm_result.get("final_text", "") or ""
+
+        # 3c. Parse final PM decision (robust against 're-propose')
+        import re as _re
+        decision_match = _re.search(
+            r"DECISION\s*[:\-]\s*(PROPOSE|PASS)\b", pm_text.upper()
+        )
+        decision = decision_match.group(1) if decision_match else (
+            "PROPOSE" if pm_text.upper().rstrip().endswith("PROPOSE") else "PASS"
+        )
+        if decision != "PROPOSE":
             return {"status": "pm_passed", "analyst": analyst_name}
 
         proposal = self._latest_proposal()
@@ -644,15 +847,34 @@ class Orchestrator:
     # DB helpers — read latest decisions for chain handoffs
     # ------------------------------------------------------------
     def _latest_thesis_for(self, agent_name: str) -> dict[str, Any] | None:
+        """Look up the most recent thesis from a given agent.
+
+        Agent name matching is FUZZY because the SDK has historically
+        recorded names in multiple formats (e.g. "Quant Researcher" vs
+        "quant_researcher"). We try the literal name first, then a few
+        normalized variants. This protects the chain against agent
+        protocol bugs where the name format drifts.
+        """
+        candidates = [
+            agent_name,                                    # "Quant Researcher"
+            agent_name.lower(),                            # "quant researcher"
+            agent_name.lower().replace(" ", "_"),          # "quant_researcher"
+            agent_name.lower().replace(" ", ""),           # "quantresearcher"
+            agent_name.replace(" ", "_"),                  # "Quant_Researcher"
+        ]
+        # Dedupe preserving order
+        seen = set()
+        candidates = [c for c in candidates if not (c in seen or seen.add(c))]
+
+        placeholders = ",".join(["?"] * len(candidates))
         row = self.db.connect().execute(
-            "SELECT * FROM decisions WHERE agent = ? AND kind = 'thesis' "
-            "ORDER BY id DESC LIMIT 1",
-            (agent_name,),
+            f"SELECT * FROM decisions WHERE agent IN ({placeholders}) "
+            "AND kind = 'thesis' ORDER BY id DESC LIMIT 1",
+            candidates,
         ).fetchone()
         if not row:
             return None
         d = dict(row)
-        # Parse rationale for fields if structured (best-effort)
         return {
             "agent": d.get("agent"),
             "symbol": d.get("symbol"),
@@ -702,13 +924,121 @@ def _extract_field(text: str, field: str) -> str | None:
 
 
 def _extract_verdict(agent_result: dict[str, Any]) -> str:
-    """Pull a verdict token from an agent's text response."""
-    text = (agent_result.get("final_text") or "").lower()
-    if "block" in text or "denied" in text or "rejected" in text:
+    """Pull a verdict token from an agent's text response.
+
+    Looks for the explicit `VERDICT: ALLOW|ALLOW_WITH_MODIFICATIONS|BLOCK`
+    line first (most reliable). Falls back to keyword search if absent.
+    """
+    raw = agent_result.get("final_text") or ""
+    text = raw.upper()
+
+    # 1. Explicit VERDICT: line — most reliable, scan from end
+    import re
+    matches = re.findall(
+        r"VERDICT\s*[:\-]\s*(ALLOW_WITH_MODIFICATIONS|ALLOW|BLOCK)\b",
+        text,
+    )
+    if matches:
+        return matches[-1].lower()  # last verdict wins (final declaration)
+
+    # 2. Stand-alone APPROVE/BLOCK markers (less reliable but specific)
+    last_lines = [ln.strip() for ln in text.splitlines() if ln.strip()][-15:]
+    for line in reversed(last_lines):
+        if re.match(r"^(\*\*)?(APPROVE|ALLOW)\b", line):
+            return "allow"
+        if re.match(r"^(\*\*)?BLOCK\b", line):
+            return "block"
+
+    # 3. Last-resort keyword search (the original logic — buggy but a fallback)
+    if "block" in text.lower() or "denied" in text.lower() or "rejected" in text.lower():
         return "block"
-    if "allow_with_modifications" in text or "modify" in text:
+    if "allow_with_modifications" in text.lower() or "modify" in text.lower():
         return "allow_with_modifications"
-    if "allow" in text or "approved" in text:
+    if "allow" in text.lower() or "approved" in text.lower():
         return "allow"
-    # Conservative default
     return "block"
+
+
+# ============================================================================
+# Autonomous-mode guardrails
+# ============================================================================
+
+def _load_fund_yaml() -> dict[str, Any]:
+    try:
+        return yaml.safe_load(Path("config/fund.yaml").read_text()) or {}
+    except Exception:
+        return {}
+
+
+def _check_autonomy_wake_budget(db, agent_name: str) -> dict[str, Any] | None:
+    """Block new wakes when the autonomy daily caps are exceeded.
+
+    Returns a stub-style result dict to refuse the wake (logged), or None
+    to allow it. Only fires under fund.yaml:autonomous_mode == True.
+    Supervised mode bypasses entirely — the user is the budget arbiter.
+    """
+    fund = _load_fund_yaml()
+    if not fund.get("autonomous_mode", False):
+        return None
+    g = fund.get("autonomy_guardrails", {}) or {}
+    max_wakes = int(g.get("max_wakes_per_day", 0) or 0)
+    max_usd = float(g.get("max_usd_per_day", 0) or 0)
+
+    today_utc = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    conn = db.connect()
+
+    if max_wakes > 0:
+        n = (conn.execute(
+            "SELECT COUNT(*) FROM decisions WHERE kind = 'wake' AND ts LIKE ?",
+            (f"{today_utc}%",),
+        ).fetchone()[0]) or 0
+        if n >= max_wakes:
+            db.record_risk_event(
+                severity="block", rule="autonomy_wake_count_cap",
+                agent=agent_name,
+                detail={"wakes_today": n, "cap": max_wakes},
+            )
+            return {"refused": True, "agent": agent_name,
+                    "reason": f"autonomy wake count cap reached ({n}/{max_wakes})"}
+
+    if max_usd > 0:
+        spent = (conn.execute(
+            "SELECT COALESCE(SUM(usd_est), 0) FROM costs WHERE day = ?",
+            (today_utc,),
+        ).fetchone()[0]) or 0.0
+        if spent >= max_usd:
+            db.record_risk_event(
+                severity="block", rule="autonomy_spend_cap",
+                agent=agent_name,
+                detail={"usd_today": spent, "cap_usd": max_usd},
+            )
+            return {"refused": True, "agent": agent_name,
+                    "reason": f"autonomy spend cap reached (${spent:.2f}/${max_usd:.2f})"}
+    return None
+
+
+def re_engage_auto_halt(reason: str = "session_close") -> str | None:
+    """Write a fresh `trading_halt_until` value into risk_limits.yaml so
+    the risk hook auto-blocks orders until the next session opens.
+
+    Reads `auto_halt_resume_offset_hours` from fund.yaml (default 16).
+    Returns the new ISO timestamp, or None if disabled / write failed.
+    """
+    fund = _load_fund_yaml()
+    if not fund.get("auto_halt_at_session_close", False):
+        return None
+    offset = float(fund.get("auto_halt_resume_offset_hours", 16))
+    resume_at = datetime.now(tz=timezone.utc) + timedelta(hours=offset)
+    new_ts = resume_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    path = Path("config/risk_limits.yaml")
+    text = path.read_text(encoding="utf-8")
+    # Surgical replacement: only touch the line we own
+    import re
+    pattern = re.compile(r'^(\s*trading_halt_until:\s*)["\']?[^"\'\n]*["\']?',
+                          flags=re.MULTILINE)
+    if not pattern.search(text):
+        return None
+    new_text = pattern.sub(rf'\1"{new_ts}"', text, count=1)
+    path.write_text(new_text, encoding="utf-8")
+    return new_ts

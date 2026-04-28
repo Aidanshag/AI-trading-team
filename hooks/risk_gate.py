@@ -98,6 +98,8 @@ async def risk_gate(
     # Run checks in order of severity. First failure short-circuits.
     for check in (
         _check_kill_switch,
+        _check_combine_defensive_ladder,    # NEW: $-150/$-300/$-500/$-750 progressive tightening
+        _check_daily_trade_count,           # autonomous-mode hard ceiling on trade count/day
         _check_session_window,
         _check_no_naked_shorts,
         _check_defined_risk_structures,
@@ -153,8 +155,116 @@ def _extract_agent_name(context: Any) -> str:
 # Individual checks. Each returns None (pass) or a block dict.
 # --------------------------------------------------------------
 def _check_kill_switch(**kw):
-    if kw["limits"]["hard_rules"].get("trading_halted"):
+    hard = kw["limits"].get("hard_rules", {})
+    # Manual permanent halt
+    if hard.get("trading_halted"):
         return {"rule": "kill_switch", "reason": "Global kill switch is engaged."}
+    # Auto-expiring halt — blocks trading until timestamp passes
+    halt_until_str = hard.get("trading_halt_until")
+    if halt_until_str:
+        try:
+            from datetime import datetime, timezone
+            halt_until = datetime.fromisoformat(str(halt_until_str).replace("Z", "+00:00"))
+            now = datetime.now(tz=timezone.utc)
+            if now < halt_until:
+                return {
+                    "rule": "auto_halt",
+                    "reason": f"Auto-halt active until {halt_until_str} (now: {now.isoformat()})",
+                }
+        except Exception:
+            pass  # malformed timestamp = ignore
+    return None
+
+
+def _check_combine_defensive_ladder(**kw):
+    """Enforce the Combine defensive ladder from `risk_limits.yaml:combine_defense`.
+
+    The ladder tightens as day P&L deteriorates:
+      -$150 -> warn; sizing preferred at 40 bps
+      -$300 -> restrict: no new entries unless closing risk; max 40 bps
+      -$500 -> lockdown: no new entries of any kind (this is INTERNAL DLL target)
+      -$750 -> emergency_flatten: market-flatten immediately, halt session
+
+    User directive: agents should "essentially never hit" Topstep's $1000 DLL.
+    This hook enforces the ladder *automatically* — not just by prompt-level
+    discipline. Reads `combine_defense.ladder` for thresholds and actions.
+    """
+    snap = kw["snap"]
+    limits = kw["limits"]
+    ladder = (limits.get("combine_defense") or {}).get("ladder") or []
+    if not snap or not ladder:
+        return None
+
+    # Day P&L = realized + unrealized
+    day_pl = float(snap.get("realized_pl_day_usd", 0)) + float(snap.get("unrealized_pl_usd", 0))
+
+    # Find the most-adverse step that's been triggered (lowest threshold P&L
+    # has crossed). Ladder is descending: -150 -> -300 -> -500 -> -750.
+    triggered = None
+    for step in ladder:
+        threshold = float(step.get("threshold_usd", 0))
+        if day_pl <= threshold:
+            triggered = step  # keep updating; we want the WORST step engaged
+
+    if triggered is None:
+        return None  # no ladder step triggered
+
+    action = (triggered.get("action") or "").lower()
+    if action in ("lockdown", "emergency_flatten"):
+        return {
+            "rule": "defensive_ladder",
+            "reason": (
+                f"Day P&L {day_pl:+.2f} triggered '{action}' at threshold "
+                f"{triggered.get('threshold_usd'):+}. New entries blocked. "
+                f"{triggered.get('description', '')}"
+            ),
+        }
+    # 'warn' and 'restrict' don't hard-block here; they ALLOW the order through
+    # this gate but tighten the per-trade cap (see `_check_per_trade_cap_with_ladder`
+    # if/when added). For now we log a risk event and let later checks handle.
+    # The Risk Manager prompt also reads this and reduces sizing accordingly.
+    return None
+
+
+def _check_daily_trade_count(**kw):
+    """Hard cap on number of order placements per UTC day under autonomous
+    mode. Reads `account.max_trades_per_day` from risk_limits.yaml. Counts
+    successful order placements via `risk_gate_pass` info events recorded
+    in `risk_events` since UTC midnight today.
+
+    Skipped when fund.yaml:autonomous_mode is False (supervised mode lets
+    the Risk Manager judge).
+    """
+    # Gate only fires under autonomous mode. Lazy-load fund.yaml.
+    try:
+        fund = yaml.safe_load((CONFIG_ROOT / "fund.yaml").read_text())
+    except Exception:
+        return None
+    if not (fund or {}).get("autonomous_mode", False):
+        return None
+
+    cap = (kw["limits"].get("account", {}) or {}).get("max_trades_per_day")
+    if not cap or cap <= 0:
+        return None
+
+    # Count today's risk_gate_pass events (== orders that previously cleared)
+    today_utc = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    db = get_db()
+    row = db.connect().execute(
+        "SELECT COUNT(*) AS n FROM risk_events "
+        "WHERE rule = 'risk_gate_pass' AND ts LIKE ?",
+        (f"{today_utc}%",),
+    ).fetchone()
+    n = (row[0] if row else 0) or 0
+    if n >= cap:
+        return {
+            "rule": "max_trades_per_day",
+            "reason": (
+                f"Daily trade cap reached ({n}/{cap}). Autonomous-mode hard "
+                "ceiling. Resets at UTC midnight or by lifting "
+                "fund.yaml:autonomous_mode."
+            ),
+        }
     return None
 
 

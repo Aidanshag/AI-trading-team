@@ -24,6 +24,58 @@ def utcnow_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
 
 
+# Canonical agent names — the form the orchestrator uses for wake_agent
+# and the form _latest_thesis_for / chain helpers expect. record_decision
+# normalizes any input to one of these. Add new agents to this set.
+_CANONICAL_AGENT_NAMES = frozenset({
+    "CIO", "Portfolio Manager", "Risk Manager", "Options Risk",
+    "Execution Trader", "Compliance",
+    "Research", "Red Team", "Book Monitor", "Diamond Hunter",
+    "Fund Engineer", "Quant Researcher", "Macro Strategist",
+    "Flow Analyst", "Volatility Strategist", "Edge Hunter",
+    "Energies Analyst", "Metals Analyst", "Grains Analyst",
+    "Softs Analyst", "Livestock Analyst", "Rates Analyst",
+    "FX Futures Analyst", "Index/Macro Analyst",
+    # Pseudo-agents used by the orchestrator + driver scripts:
+    "orchestrator", "manual_pm_bypass",
+    # Retired 2026-04-27 (equities desk dormant): Equity PM, Equity
+    # Execution Trader, Cyclicals/Defensive/Financials/Growth-Tech
+    # Analysts, Single-Name Options Specialist, Execution Specialist.
+})
+
+
+def _canonicalize_agent_name(agent: str) -> str:
+    """Map any case/separator variant to the canonical form.
+
+    Examples:
+      "quant_researcher"     → "Quant Researcher"
+      "QUANT RESEARCHER"     → "Quant Researcher"
+      "Quant-Researcher"     → "Quant Researcher"
+      "RiskManager"          → "Risk Manager" (camelCase split)
+      "manual_injection"     → "manual_injection" (unmapped, preserve)
+    """
+    if not agent:
+        return agent
+    # Already canonical?
+    if agent in _CANONICAL_AGENT_NAMES:
+        return agent
+
+    # Build a normalized lookup: lowercase, strip separators
+    def _norm(s: str) -> str:
+        s = s.lower()
+        for ch in ("_", "-", "/", " ", "."):
+            s = s.replace(ch, "")
+        return s
+
+    target = _norm(agent)
+    for canonical in _CANONICAL_AGENT_NAMES:
+        if _norm(canonical) == target:
+            return canonical
+    # Unknown agent — preserve as-is (could be a manual_injection or
+    # custom test agent). Better to log it than to silently drop.
+    return agent
+
+
 class Database:
     def __init__(self, path: Path | str = DEFAULT_DB_PATH) -> None:
         self.path = Path(path)
@@ -86,6 +138,11 @@ class Database:
         tokens_in: int | None = None,
         tokens_out: int | None = None,
     ) -> int:
+        # Normalize agent name to canonical form ("Quant Researcher",
+        # "Risk Manager", etc) regardless of how the caller wrote it.
+        # Catches the bug where agents called state_record_decision with
+        # snake_case or lowercase names and the chain couldn't find them.
+        agent = _canonicalize_agent_name(agent)
         with self.tx() as c:
             cur = c.execute(
                 """INSERT INTO decisions

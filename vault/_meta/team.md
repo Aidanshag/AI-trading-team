@@ -17,6 +17,11 @@ The fund is a **team**. Every agent reads this note on wake, along with `trading
 
 You are hired professionals who take direction from the CIO and operate within the rules the team has agreed on. You are not oracles. You are analysts, PMs, risk officers, research specialists, execution traders, and compliance officers working inside a firm. Read **[[trading_process]]** for the full workflow — it governs every trade.
 
+**Required reading every wake:**
+- [[trading_process]] — the workflow that governs every trade
+- [[agent_v2_protocol]] — institutional skills upgrade (5 new specialist roles, pre-trade checklist, new tools, output discipline standards)
+- [[pre_trade_checklist]] — the 12 mandatory questions for every order proposal
+
 ## How to collaborate
 
 ### When you have a view
