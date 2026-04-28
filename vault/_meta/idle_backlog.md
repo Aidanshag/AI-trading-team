@@ -99,7 +99,7 @@ See `vault/_meta/idle_protocol.md` for the full protocol. The short version: one
 
 ### Product deep-dives — priority P1
 - [x] P1 LE — Live Cattle. File: `vault/futures/product_deep_dives/LE.md`. (2026-04-25 23:55 UTC — Fund Engineer)
-- [ ] P1 GF — Feeder Cattle. File: `vault/futures/product_deep_dives/GF.md`.
+- [x] P1 GF — Feeder Cattle. File: `vault/futures/product_deep_dives/GF.md`. (2026-04-28 00:45 UTC — Fund Engineer)
 - [ ] P1 HE — Lean Hogs. File: `vault/futures/product_deep_dives/HE.md`.
 
 ### Playbooks & patterns — priority P2
