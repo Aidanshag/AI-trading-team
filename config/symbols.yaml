@@ -11,17 +11,18 @@ symbols:
   RTY: { name: "E-mini Russell 2000",    sector: index_macro, tick_size: 0.10,  tick_value: 5.00,  session_tz: America/Chicago }
   M2K: { name: "Micro Russell 2000",     sector: index_macro, tick_size: 0.10,  tick_value: 0.50,  session_tz: America/Chicago }
   YM:  { name: "E-mini Dow",             sector: index_macro, tick_size: 1.00,  tick_value: 5.00,  session_tz: America/Chicago }
-  MYM: { name: "Micro Dow",              sector: index_macro, tick_size: 1.00,  tick_value: 0.50,  session_tz: America/Chicago }
+  MYM: { name: "Micro Dow",              sector: index_macro, tick_size: 0.50,  tick_value: 0.50,  session_tz: America/Chicago }
+  NKD: { name: "Nikkei 225 (USD)",       sector: index_macro, tick_size: 5.00,  tick_value: 25.00, session_tz: America/Chicago }
 
   # ── Energies (expanded: every tradeable petro derivative) ──
   CL:  { name: "Crude Oil WTI",          sector: energies, tick_size: 0.01,   tick_value: 10.00, session_tz: America/New_York }
   MCL: { name: "Micro Crude Oil",        sector: energies, tick_size: 0.01,   tick_value: 1.00,  session_tz: America/New_York }
-  BZ:  { name: "Brent Crude (Last Day)", sector: energies, tick_size: 0.01,   tick_value: 10.00, session_tz: America/New_York }
   NG:  { name: "Natural Gas Henry Hub",  sector: energies, tick_size: 0.001,  tick_value: 10.00, session_tz: America/New_York }
+  MNG: { name: "Micro Natural Gas",      sector: energies, tick_size: 0.005,  tick_value: 1.25,  session_tz: America/New_York }
   QG:  { name: "E-mini Natural Gas",     sector: energies, tick_size: 0.005,  tick_value: 12.50, session_tz: America/New_York }
   RB:  { name: "RBOB Gasoline",          sector: energies, tick_size: 0.0001, tick_value: 4.20,  session_tz: America/New_York }
   HO:  { name: "NY ULSD (Diesel)",       sector: energies, tick_size: 0.0001, tick_value: 4.20,  session_tz: America/New_York }
-  EH:  { name: "Ethanol",                sector: energies, tick_size: 0.001,  tick_value: 2.90,  session_tz: America/Chicago }
+  # BZ (Brent), EH (Ethanol) removed 2026-04-29 — not on Topstep.
 
   # ── Metals (expanded: all tradeable metals) ──
   GC:  { name: "Gold",                   sector: metals, tick_size: 0.10,   tick_value: 10.00, session_tz: America/New_York }
@@ -29,31 +30,26 @@ symbols:
   SI:  { name: "Silver",                 sector: metals, tick_size: 0.005,  tick_value: 25.00, session_tz: America/New_York }
   SIL: { name: "Micro Silver",           sector: metals, tick_size: 0.005,  tick_value: 5.00,  session_tz: America/New_York }
   HG:  { name: "Copper",                 sector: metals, tick_size: 0.0005, tick_value: 12.50, session_tz: America/New_York }
+  MHG: { name: "Micro Copper",           sector: metals, tick_size: 0.0005, tick_value: 1.25,  session_tz: America/New_York }
   PL:  { name: "Platinum",               sector: metals, tick_size: 0.10,   tick_value: 5.00,  session_tz: America/New_York }
-  PA:  { name: "Palladium",              sector: metals, tick_size: 0.10,   tick_value: 10.00, session_tz: America/New_York }
-  ALI: { name: "Aluminum",               sector: metals, tick_size: 0.25,   tick_value: 6.25,  session_tz: America/New_York }
+  # PA (Palladium), ALI (Aluminum) removed 2026-04-29 — not on Topstep.
 
-  # ── Grains & Oilseeds ──
-  ZC:  { name: "Corn",                   sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
-  ZS:  { name: "Soybeans",               sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
-  ZW:  { name: "Wheat (CBOT SRW)",       sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
-  ZL:  { name: "Soybean Oil",            sector: grains, tick_size: 0.0001, tick_value: 6.00,  session_tz: America/Chicago }
-  ZM:  { name: "Soybean Meal",           sector: grains, tick_size: 0.10,   tick_value: 10.00, session_tz: America/Chicago }
-  ZO:  { name: "Oats",                   sector: grains, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
-  ZR:  { name: "Rough Rice",             sector: grains, tick_size: 0.005,  tick_value: 10.00, session_tz: America/Chicago }
+  # ── Grains & Oilseeds (sector: ag — merged with livestock per risk_limits.yaml) ──
+  ZC:  { name: "Corn",                   sector: ag, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZS:  { name: "Soybeans",               sector: ag, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZW:  { name: "Wheat (CBOT SRW)",       sector: ag, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZL:  { name: "Soybean Oil",            sector: ag, tick_size: 0.0001, tick_value: 6.00,  session_tz: America/Chicago }
+  ZM:  { name: "Soybean Meal",           sector: ag, tick_size: 0.10,   tick_value: 10.00, session_tz: America/Chicago }
+  # NOTE: ZO (Oats), ZR (Rough Rice) removed 2026-04-29 — not on Topstep.
+  # Archive deep-dives at vault/_archive/.
 
-  # ── Softs (tropicals + lumber) ──
-  KC:  { name: "Coffee (Arabica)",       sector: softs, tick_size: 0.05,   tick_value: 18.75, session_tz: America/New_York }
-  CT:  { name: "Cotton",                 sector: softs, tick_size: 0.01,   tick_value: 5.00,  session_tz: America/New_York }
-  SB:  { name: "Sugar #11",              sector: softs, tick_size: 0.01,   tick_value: 11.20, session_tz: America/New_York }
-  CC:  { name: "Cocoa",                  sector: softs, tick_size: 1.00,   tick_value: 10.00, session_tz: America/New_York }
-  OJ:  { name: "Orange Juice",           sector: softs, tick_size: 0.05,   tick_value: 7.50,  session_tz: America/New_York }
-  LBR: { name: "Lumber",                 sector: softs, tick_size: 0.50,   tick_value: 13.75, session_tz: America/Chicago }
+  # ── Softs ── REMOVED 2026-04-29: KC, CT, SB, CC, OJ, LBR are ICE-listed
+  # and not tradeable on Topstep. Vault deep-dives archived.
 
-  # ── Livestock ──
-  LE:  { name: "Live Cattle",            sector: livestock, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
-  GF:  { name: "Feeder Cattle",          sector: livestock, tick_size: 0.025, tick_value: 12.50, session_tz: America/Chicago }
-  HE:  { name: "Lean Hogs",              sector: livestock, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
+  # ── Livestock (sector: ag — merged with grains per risk_limits.yaml) ──
+  LE:  { name: "Live Cattle",            sector: ag, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
+  HE:  { name: "Lean Hogs",              sector: ag, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
+  # GF (Feeder Cattle) removed — not on Topstep.
 
   # ── Rates ──
   ZT:  { name: "2-Year T-Note",          sector: rates, tick_size: 0.0078125, tick_value: 15.625, session_tz: America/Chicago }
@@ -71,3 +67,10 @@ symbols:
   "6S": { name: "Swiss Franc",           sector: fx_futures, tick_size: 0.0001,    tick_value: 12.50, session_tz: America/Chicago }
   M6E: { name: "Micro Euro FX",          sector: fx_futures, tick_size: 0.0001,    tick_value: 1.25,  session_tz: America/Chicago }
   M6B: { name: "Micro British Pound",    sector: fx_futures, tick_size: 0.0001,    tick_value: 0.625, session_tz: America/Chicago }
+  E7:  { name: "E-mini Euro FX",         sector: fx_futures, tick_size: 0.0001,    tick_value: 6.25,  session_tz: America/Chicago }
+
+  # ── Additional contracts confirmed available on Topstep (verified 2026-04-28) ──
+  QM:  { name: "E-mini Crude Oil",       sector: energies, tick_size: 0.025,   tick_value: 12.50, session_tz: America/New_York }
+
+  # ── Crypto futures (CME) ──
+  METK: { name: "Micro Ether",           sector: crypto, tick_size: 0.50,    tick_value: 0.05,  session_tz: America/Chicago }

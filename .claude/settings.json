@@ -1,0 +1,51 @@
+{
+  "_doc": "Project-shared settings. Authorizes the autonomous-improvement loop (/improve-fund) to make changes without prompting. Local overrides go in settings.local.json.",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit(vault/_meta/**)",
+      "Edit(vault/_templates/**)",
+      "Edit(vault/lessons/**)",
+      "Edit(vault/journal/**)",
+      "Edit(vault/playbooks/**)",
+      "Edit(vault/reading_list/**)",
+      "Edit(.claude/commands/**)",
+      "Edit(scripts/**)",
+      "Edit(tests/**)",
+      "Edit(tools/**)",
+      "Edit(agents/**)",
+      "Edit(config/**)",
+      "Edit(state/schema.sql)",
+      "Edit(state/db.py)",
+      "Edit(hooks/**)",
+      "Edit(runtime/**)",
+      "Write(vault/_meta/**)",
+      "Write(vault/lessons/**)",
+      "Write(vault/journal/**)",
+      "Write(.claude/commands/**)",
+      "Write(scripts/**)",
+      "Write(tests/**)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git worktree*)",
+      "Bash(python -m pytest*)",
+      "Bash(python -m scripts.*)",
+      "Bash(python -m state.db*)",
+      "PowerShell(*)",
+      "ToolSearch",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(rm -rf*)",
+      "Bash(taskkill*)"
+    ]
+  }
+}

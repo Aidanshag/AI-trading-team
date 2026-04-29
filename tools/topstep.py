@@ -121,11 +121,58 @@ async def find_contract(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def place_order(args: dict[str, Any]) -> dict[str, Any]:
+    """Place a Topstep order with DB-side idempotency + audit-log persistence.
+
+    The schema's UNIQUE(client_order_id) on the orders table is our
+    duplicate-submission guard. We INSERT first (status='proposed') so
+    a retry of the same client_order_id raises IntegrityError before
+    a second broker call ever happens.
+
+    Stop-entry orders default to time_in_force='day' to prevent the
+    overnight-fill failure mode (2026-04-29 ZN lesson). To override,
+    explicitly pass time_in_force='gtc'.
+    """
+    from state.db import get_db, utcnow_iso
+    import sqlite3
+
+    client_order_id = args.get("client_order_id") or f"fund_{uuid.uuid4().hex[:12]}"
+    db = get_db()
+
+    # Stop-entry safety: force 'day' TIF unless caller explicitly opts into GTC.
+    # Stop-entry orders that persist overnight have filled in thin liquidity
+    # and produced unprofitable fills — the ZN ORB loss was exactly this.
+    order_type = (args.get("order_type") or "").lower()
+    if order_type in ("stop", "stop_limit") and not args.get("time_in_force"):
+        args["time_in_force"] = "day"
+
+    # 1. Pre-flight INSERT — fails if the client_order_id was used before.
+    try:
+        with db.tx() as c:
+            c.execute(
+                """INSERT INTO orders
+                    (client_order_id, agent, ts_proposed, symbol, contract_month,
+                     side, order_type, qty, limit_price, stop_price,
+                     status, risk_verdict)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (client_order_id, args.get("agent") or "execution_trader",
+                 utcnow_iso(), args["symbol"], args.get("contract_month"),
+                 args["side"], args["order_type"], int(args["qty"]),
+                 args.get("limit_price"), args.get("stop_price"),
+                 "proposed", "allow"),  # if we got here, risk hook said allow
+            )
+    except sqlite3.IntegrityError:
+        return _json_text({
+            "status": "duplicate",
+            "error": f"client_order_id {client_order_id!r} already used — "
+                     "idempotent rejection. Generate a new id and retry if intentional.",
+            "client_order_id": client_order_id,
+        })
+
+    # 2. Submit to broker
     try:
         client = get_client()
         account_id = get_account_id()
         contract_id = client.front_month_contract_id(args["symbol"])
-        client_order_id = args.get("client_order_id") or f"fund_{uuid.uuid4().hex[:12]}"
 
         result = client.place_order(
             account_id=account_id,
@@ -138,6 +185,24 @@ async def place_order(args: dict[str, Any]) -> dict[str, Any]:
             time_in_force=args.get("time_in_force", "day"),
             client_order_id=client_order_id,
         )
+
+        # 3. Mark as submitted with broker order id (best-effort lookup)
+        broker_oid = None
+        if isinstance(result, dict):
+            broker_oid = (result.get("orderId") or result.get("id")
+                          or result.get("brokerOrderId"))
+        try:
+            with db.tx() as c:
+                c.execute(
+                    """UPDATE orders SET ts_submitted=?, status=?, broker_order_id=?
+                        WHERE client_order_id=?""",
+                    (utcnow_iso(), "submitted",
+                     str(broker_oid) if broker_oid else None,
+                     client_order_id),
+                )
+        except Exception:
+            pass  # broker submitted; DB update failed but trade is real
+
         return _json_text({
             "status": "submitted",
             "client_order_id": client_order_id,
@@ -145,7 +210,18 @@ async def place_order(args: dict[str, Any]) -> dict[str, Any]:
             "result": result,
         })
     except ProjectXError as e:
-        return _json_text({"error": str(e), "status": "failed"})
+        # Broker rejected — mark the row so a retry with same id stays blocked
+        try:
+            with db.tx() as c:
+                c.execute(
+                    """UPDATE orders SET status=?, risk_reason=?
+                        WHERE client_order_id=?""",
+                    ("rejected", f"broker_error: {e}"[:500], client_order_id),
+                )
+        except Exception:
+            pass
+        return _json_text({"error": str(e), "status": "failed",
+                           "client_order_id": client_order_id})
 
 
 @tool(
@@ -179,16 +255,26 @@ async def flatten_all(args: dict[str, Any]) -> dict[str, Any]:
         client = get_client()
         account_id = get_account_id()
 
-        # 1. Cancel all working orders
+        # 1. Cancel all working orders. Track failures explicitly — a
+        # surviving stop combined with a market close = double exit.
+        from state.db import get_db
+        db = get_db()
         open_orders = client.get_working_orders(account_id)
-        cancelled = []
+        cancelled: list[str] = []
+        cancel_failed: list[dict[str, Any]] = []
         for o in open_orders:
+            oid = o.get("id") or o.get("orderId")
             try:
-                oid = o.get("id") or o.get("orderId")
                 client.cancel_order(account_id, oid)
-                cancelled.append(oid)
-            except ProjectXError:
-                pass
+                cancelled.append(str(oid))
+            except ProjectXError as e:
+                cancel_failed.append({"order_id": oid, "error": str(e)})
+                db.record_risk_event(
+                    severity="warn", rule="flatten_cancel_failed",
+                    detail={"order_id": oid, "error": str(e)[:300],
+                            "context": "flatten_all step 1 — surviving stop "
+                                       "may double-exit when position closes"},
+                )
 
         # 2. Close each open position via the native close endpoint
         # (cleaner than reversing with opposite-side market orders)
@@ -205,9 +291,10 @@ async def flatten_all(args: dict[str, Any]) -> dict[str, Any]:
                 closed.append({"contract": contract_id, "error": str(e)})
 
         return _json_text({
-            "status": "flattened",
+            "status": "flattened" if not cancel_failed else "flattened_with_warnings",
             "reason": args.get("reason", "unspecified"),
             "cancelled_orders": cancelled,
+            "cancel_failures": cancel_failed,
             "closed_positions": closed,
         })
     except ProjectXError as e:

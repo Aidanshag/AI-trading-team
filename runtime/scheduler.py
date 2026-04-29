@@ -26,8 +26,15 @@ DAILY_BREAK_END = time(17, 0)
 
 
 class Scheduler:
-    def __init__(self, tick_minutes: int = 15) -> None:
+    def __init__(
+        self,
+        tick_minutes: int = 5,                    # default cadence during open hours
+        tick_minutes_opening_hour: int = 1,       # faster cadence in first 30 min after RTH open
+        tick_minutes_closing_hour: int = 1,       # faster cadence in last 30 min before RTH close
+    ) -> None:
         self.tick_minutes = tick_minutes
+        self.tick_minutes_opening_hour = tick_minutes_opening_hour
+        self.tick_minutes_closing_hour = tick_minutes_closing_hour
 
     def is_cme_open_now(self, now: datetime | None = None) -> bool:
         now = (now or datetime.now(tz=CT)).astimezone(CT)
@@ -93,4 +100,16 @@ class Scheduler:
                 # The orchestrator gates this on config/fund.yaml:idle_work_enabled.
                 yield Event(kind=EventKind.IDLE_TICK, source="scheduler")
 
-            await asyncio.sleep(self.tick_minutes * 60)
+            # Adaptive cadence: faster ticks in opening / closing 30 min of RTH
+            # so we catch the volatility-rich windows. RTH = 8:30-15:00 CT for
+            # equity index; rough proxy across products.
+            sleep_minutes = self.tick_minutes
+            if open_now:
+                t = now_ct.time()
+                # Opening hour: 8:30-9:00 CT (US equity open, mega-volume)
+                if time(8, 30) <= t < time(9, 0):
+                    sleep_minutes = self.tick_minutes_opening_hour
+                # Closing hour: 14:30-15:00 CT (last 30 min of equity RTH)
+                elif time(14, 30) <= t < time(15, 0):
+                    sleep_minutes = self.tick_minutes_closing_hour
+            await asyncio.sleep(sleep_minutes * 60)

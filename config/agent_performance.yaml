@@ -46,18 +46,15 @@ reclassification_weekly: true
 tracked_agents:
   - Energies Analyst
   - Metals Analyst
-  - Grains Analyst
-  - Softs Analyst
-  - Livestock Analyst
+  - Ag Analyst                    # merged Grains + Livestock (2026-04-29)
   - Rates Analyst
   - FX Futures Analyst
   - Index/Macro Analyst
-  - Growth/Tech Analyst
-  - Defensive Analyst
-  - Cyclicals Analyst
-  - Financials Analyst
-  - Single-Name Options Specialist
+  - Edge Hunter                   # micro setup-spotter — track hit-rate per strategy
   - Research
   - Portfolio Manager
-  - Equity PM
   - Red Team      # tracked differently: calibration of "strong/gaps/weak" verdicts vs outcomes
+  # Retired (do not track active wakes; historical records preserved):
+  #  - Grains Analyst, Livestock Analyst, Softs Analyst → merged/removed
+  #  - Equity PM, Growth/Tech, Defensive, Cyclicals, Financials,
+  #    Single-Name Options Specialist → equities desk dormant on Topstep

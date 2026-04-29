@@ -36,14 +36,23 @@ def _preflight() -> None:
         console.print("[yellow]State DB missing — initializing schema.[/]")
     db.init_schema()
 
-    mode = os.environ.get("FUND_MODE", "paper").lower()
+    # Strip whitespace + inline comments from .env value (e.g.
+    # "live       # paper | live" → "live"). Common .env-parser quirk
+    # that previously caused FUND_MODE comparisons to silently fail.
+    raw_mode = os.environ.get("FUND_MODE", "paper")
+    mode = raw_mode.split("#", 1)[0].strip().lower()
     console.print(f"[bold]Fund starting in [cyan]{mode}[/] mode.[/]")
     if mode == "live":
-        console.print("[red bold]LIVE MODE — real orders will be placed.[/]")
+        console.print("[red bold]LIVE MODE — real orders will be placed via Topstep/ProjectX.[/]")
         console.print(
-            "[red]Halting: set FUND_MODE=paper until ProjectX client is "
-            "implemented and fully reviewed.[/]"
+            "[yellow]Risk hook is the final gate. Verify "
+            "config/risk_limits.yaml before letting the runtime run unattended.[/]"
         )
+        # The stale 2026-04-23 halt-on-live guard was removed 2026-04-29.
+        # ProjectX client is implemented (tools/projectx_client.py) and
+        # has placed real fills (ZN order #2897285454 was the validation).
+    elif mode != "paper":
+        console.print(f"[red]Unknown FUND_MODE={raw_mode!r}. Set to 'paper' or 'live'.[/]")
         sys.exit(3)
 
 

@@ -31,9 +31,41 @@ autonomous_mode: true
 
 # Autonomous-mode cost + activity guardrails (independent of idle_work).
 autonomy_guardrails:
-  max_wakes_per_day: 60           # all wakes combined; protects API budget
-  max_usd_per_day: 5.00           # hard daily $ ceiling on API spend
+  max_wakes_per_day: 200          # high-frequency cadence: 5-min ticks + parallel scans
+  max_usd_per_day: 15.00          # hard daily $ ceiling on API spend (~$300/mo at full util)
   halt_action: "block_wakes"      # when exceeded: refuse new wakes (don't crash)
+
+# ── Autonomous-mode trade restrictions (added 2026-04-30 post DLL-breach)
+# These tighten the supervised defaults whenever autonomous_mode: true.
+# Every restriction here targets a specific failure mode from the 2026-04-29
+# incident. When autonomous_mode is FALSE, these are ignored — supervised
+# trading uses the looser values from risk_limits.yaml directly.
+autonomous_restrictions:
+  # WINDOW — RTH only. Today's loss happened entirely 23:30-03:00 ET.
+  rth_only:        true
+  rth_start_et:    "07:30"      # 30 min after 07:00 ET cash futures action
+  rth_end_et:      "14:30"      # 30 min before 15:00 ET cash close
+
+  # DAILY CAPS (override values from risk_limits.yaml.account):
+  internal_dll_target_usd:    250    # halved from $500 supervised
+  daily_fee_budget_usd:        15    # halved from $30 supervised
+  max_concurrent_positions:     2    # vs 5 supervised
+  max_trades_per_day:           4    # vs 8 supervised
+
+  # CONVICTION + R:R: skip "low" conviction; lift R:R floor.
+  min_conviction:              med   # only med/high fire under autonomous
+  rr_floor_override:           2.5   # vs 2.0 standard
+
+  # PER-STRATEGY: each strategy can place at most N trades per session.
+  # Stops the "narrow_range_break fired 30 times" pattern.
+  per_strategy_per_session_cap: 1
+
+  # HEALTH CHECKS — auto-halt when system anomalies appear:
+  require_snapshot_within_minutes: 5    # refuse to trade with stale data
+  consecutive_losers_halt:         3    # 3 losses in a row → 60-min pause
+  consecutive_loser_pause_minutes: 60
+  agent_wake_error_threshold:      5    # 5 wake_errors / 30 min → halt
+  agent_wake_error_window_minutes: 30
 
 # ── Auto-halt at session close ──────────────────────────────
 # When true, session_close_workflow re-engages trading_halt_until in

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS account_snapshots (
     unrealized_pl_usd    REAL NOT NULL,
     realized_pl_day_usd  REAL NOT NULL,
     trailing_dd_usd      REAL NOT NULL,
-    open_contracts_total INTEGER NOT NULL
+    open_contracts_total INTEGER NOT NULL,
+    can_trade            INTEGER NOT NULL DEFAULT 1   -- broker canTrade flag (0=halted server-side)
 );
 CREATE INDEX IF NOT EXISTS idx_account_snap_ts ON account_snapshots(ts);
 
@@ -133,6 +134,50 @@ CREATE TABLE IF NOT EXISTS costs (
     cached_in   INTEGER NOT NULL DEFAULT 0,
     usd_est     REAL NOT NULL,
     UNIQUE(day, agent, model)
+);
+
+-- ── Shadow trades (hypothetical signals for cross-ticker screening) ──
+-- Records every TRIGGER the team finds, even ones that fail the focus
+-- universe gate or were skipped for other reasons. Outcomes are filled
+-- in retroactively by scripts/resolve_shadow_trades.py. The shadow
+-- recap (scripts/shadow_trade_recap.py) reads this to recommend new
+-- symbols/strategies to add to the active set.
+CREATE TABLE IF NOT EXISTS shadow_trades (
+    id              INTEGER PRIMARY KEY,
+    ts_signal       TEXT NOT NULL,                     -- when the trigger fired
+    agent           TEXT NOT NULL,                     -- Edge Hunter, analyst, etc.
+    symbol          TEXT NOT NULL,
+    strategy        TEXT NOT NULL,                     -- ORB, NR7, vol_regime_trend, ...
+    side            TEXT NOT NULL CHECK (side IN ('long','short')),
+    entry_price     REAL NOT NULL,
+    stop_price      REAL NOT NULL,
+    target_price    REAL NOT NULL,
+    risk_usd        REAL,
+    rr_planned      REAL,
+    conviction      TEXT,                              -- low | med | high | validation
+    horizon         TEXT,                              -- intraday | swing | position
+    -- Why this is shadow rather than real
+    shadow_reason   TEXT NOT NULL,                     -- focus_universe_blocked | risk_block | sector_disabled | scout_only | budget_exhausted
+    -- Resolution (filled in later by resolve script)
+    ts_resolved     TEXT,
+    outcome         TEXT,                              -- target_hit | stop_hit | time_stopped | invalidated | unresolved
+    pnl_r           REAL,                              -- R-multiple (target = +rr_planned, stop = -1)
+    notes           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_ts ON shadow_trades(ts_signal);
+CREATE INDEX IF NOT EXISTS idx_shadow_symbol ON shadow_trades(symbol);
+CREATE INDEX IF NOT EXISTS idx_shadow_strategy ON shadow_trades(strategy);
+CREATE INDEX IF NOT EXISTS idx_shadow_unresolved ON shadow_trades(outcome) WHERE outcome IS NULL;
+
+-- ── Daily P&L (one row per UTC trading day, finalized at session close) ──
+-- Powers the Topstep 50%-consistency advisory in the risk hook. UPSERT'd
+-- by session_close_workflow from the day's last account_snapshot.
+CREATE TABLE IF NOT EXISTS daily_pl (
+    day                  TEXT PRIMARY KEY,            -- YYYY-MM-DD UTC
+    realized_pl_usd      REAL NOT NULL,
+    peak_realized_pl_usd REAL,                        -- intraday high-water from snapshots
+    trade_count          INTEGER,
+    closed_at            TEXT NOT NULL                -- ISO-8601 UTC
 );
 
 -- ── News / events ingested (for audit of what agents saw) ───────

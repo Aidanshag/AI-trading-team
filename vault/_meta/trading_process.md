@@ -99,21 +99,33 @@ NO_TRADE: <one-line reason>
 
 **Use your canonical agent name** ("Quant Researcher", not "quant_researcher" or "QR"). The DB layer will normalize, but using the canonical form is cleaner.
 
-## ⚠ BEARISH VIEWS — convert to defined-risk, not naked shorts
+## ⚠ BEARISH VIEWS — naked short futures permitted, naked short options forbidden
 
-**The risk hook categorically blocks naked short futures.** This is non-negotiable. So if your sector analysis points bearish, do NOT propose short futures. Instead:
+**Policy split (effective 2026-04-29 — verify in `config/risk_limits.yaml` before citing):**
 
-**Conversion menu (in order of preference):**
+- **Naked short futures: PERMITTED.** Relaxed by user directive. Backstops still bind: stop-loss requirement, $250 per-trade cap, defensive ladder, Topstep $1000 DLL, $500 internal soft-DLL. Risk hook does NOT block outright short futures — propose them when the read is bearish and the structural-stop level is clean.
+- **Naked short options: HARD-BLOCKED.** `allow_naked_short_calls/puts/strangles/straddles` all `false`. Any naked short option proposal will be vetoed at the hook layer. The unbounded loss profile cannot be capped by per-trade rules.
 
-1. **Bear put spread** on the underlying's options (defined risk = debit paid; defined upside = strike width − debit). Use when IV is reasonable and we want directional exposure with capped loss.
-2. **Bear call spread** (short call + long higher call). Defined risk = strike width − credit. Use when IV is rich (sell premium).
+**For bearish views on instruments where you'd prefer defined risk anyway** (rich IV, event risk, thin liquidity, or just "I want a capped tail"), the structures below remain available:
+
+1. **Bear put spread** — defined risk = debit paid. Use when IV is reasonable and you want directional exposure with capped loss.
+2. **Bear call spread** (short call + long higher call) — defined risk = strike width − credit. Use when IV is rich (sell premium).
 3. **Calendar spread bearish lean** — short the front-month with a long back-month overlay.
-4. **Inter-commodity spread** — long one product, short the correlated one (e.g., long natgas / short crude when energy crack should compress). The "short" side is offset by the "long" side, so it's defined risk by structure.
-5. **Sit out.** If you can't find a defined-risk way to express the bearish view, the right answer is no trade. Don't force.
+4. **Inter-commodity spread** — long one product, short the correlated one. The "short" side is offset by the "long", so structurally defined risk.
 
-**The Volatility Strategist and Options Risk are your routing partners** for option structures. When you have a bearish thesis, the analyst writes the directional view and Options Risk computes the structure. The proposal that reaches PM should already be defined-risk shaped.
+**The Volatility Strategist and Options Risk are your routing partners** for option structures. When you have a bearish thesis and want defined risk, the analyst writes the directional view and Options Risk computes the structure.
 
-**For Quant Researcher specifically:** when your strategy library produces a SHORT signal (e.g., `vol_regime_trend` going short), automatically translate to the bearish defined-risk equivalent before publishing the thesis. Don't publish naked-short theses — they'll be DOA at the risk hook.
+**For Quant Researcher specifically:** when your strategy library produces a SHORT signal (e.g., `vol_regime_trend` going short), you may now publish it as an outright short futures proposal. The earlier "convert to defined-risk before publishing" rule no longer applies for futures (still applies if you'd otherwise want a naked short option).
+
+## 🎯 PRIMARY GOAL — pass Topstep Combine, get funded, earn cash
+
+**Read `vault/_meta/topstep_pass_strategy.md` and `vault/_meta/economic_health.md` on first wake.** Those documents are the single source of truth.
+
+**Headline:** don't lose $1,000 in any one day; don't give back $2,000 from peak; accumulate $3,000 profit slowly across ≥5 trading days; no day > 50% of total profit. Pass → get funded → earn monthly cash. **"Win small, win consistently."** Even +$100/day passes in 30 days. Don't chase $3K in a week — breaks consistency rule.
+
+**Firm-imposed caps:** $500 internal DLL (50% of Topstep's $1K), $700 daily profit cap (consistency-rule protection).
+
+**Monthly cost baseline:** ~$575 (API $250 + Claude sub $100 + Topstep $175 + buffer $50). Targets: breakeven $575/mo, worthwhile $1,150/mo, comfortable $1,725/mo. Discipline IS profit — wasted wakes burn $0.05-0.30 each. CIO daily brief reports MTD profit vs these thresholds.
 
 ## Parallel tracks
 
@@ -131,3 +143,40 @@ This process is the current best-known structure. It is NOT set in stone. When t
 - [[idle_backlog]] — the queue of expansion tasks.
 - Playbooks: [[market_wizards]], [[risk_officer_principles]], [[position_sizing]], [[psychology_and_discipline]], [[macro_framework]], [[trend_following]], [[quant_principles]].
 - Routines: [[daily_routine]], [[weekly_review]].
+
+---
+
+## 🛡 Risk safety floor — what changed in this week's overhaul (added 2026-04-29)
+
+The PreToolUse risk hook had several P&L-aware rules that *looked* armed in config but silently no-op'd because the data they read didn't exist. As of this week the gaps are closed. Agents should know what the hook now actually catches:
+
+### Snapshot pipeline (the foundation)
+- `runtime/orchestrator.py:capture_account_snapshot` runs at session open and at the start of every TICK. It pulls live broker balance, position list, and `canTrade` flag, computes unrealized P&L from positions × latest 1-min bar close, and writes a row to `account_snapshots`.
+- Before this, the table was empty — DLL, TDD, defensive ladder, daily-target-lock, and consistency-rule checks all early-returned. They now have data.
+- Realized day P&L is anchored to the first snapshot of the UTC day. Backfill of yesterday's `daily_pl` row runs at first tick of a new day if `session_close_workflow` didn't get a chance to finalize it.
+
+### `canTrade` enforcement (new check `_check_broker_can_trade`)
+- If Topstep flips the account to `canTrade=false` server-side (DLL hit at their layer, account paused, post-loss cooldown), the hook blocks all order proposals and logs a `broker_can_trade_false` warn event.
+- Auto-clears once the broker flips it back and the next snapshot lands. No manual intervention needed.
+
+### Pre-trade projection on DLL / TDD / defensive ladder
+- Old behavior: "are we already breached?". New behavior: "would this trade's *worst-case loss* push us over?".
+- New rules surfaced in `risk_events`: `daily_loss_limit_projected`, `trailing_drawdown_projected`, `defensive_ladder_projected`.
+- Worst-case is resolved from the order in this order: defined-risk structure max_loss → stop+limit + tick metadata → fallback `per_trade_risk_pct_of_equity × balance` (50 bps).
+- Practical implication for analysts: a $250-risk trade proposed when day P&L is already at -$760 will be blocked even though we're still above the $1000 DLL — the projection sees the $1010 outcome and stops it.
+
+### Consistency-rule advisory (advisory tier — does NOT block)
+- `_check_consistency_rule` reads `daily_pl` history (finalized at session close) and computes today's share of net profit-to-date. If today exceeds the 50% cap, a `consistency_rule_advisory` warn event is logged.
+- It is advisory because the consistency rule applies at *payout* time, not pre-trade. Risk Manager should factor sizing-down based on these warns; PM should respect any `allow_with_modifications` verdict that cites the advisory.
+- Will be promoted to a hard block once a Combine is run through to payout and we're confident in the math.
+
+### Stop-out detection — typed signal, not LIKE-match
+- `_check_post_stop_cooldown` no longer parses summary text. It reads `risk_events.rule='stop_hit_observed'` (primary) and falls back to `decisions.kind='stop_hit'` (legacy).
+- The reconciler emits `stop_hit_observed` automatically when a position closure is paired with a recently-filled STOP-type broker order. No agent needs to write this — but if Execution Trader logs a manual stop-out, use `kind='stop_hit'`, not free-form "stopped out" prose.
+
+### Sector caps actually enforced now
+- `symbols.yaml` had `grains` and `livestock` sectors but `risk_limits.yaml:sector_limits` only had the merged `ag` — the basket cap silently disabled for 7 ag symbols. Fixed: every per_symbol entry now maps to a sector that exists in sector_limits, and a regression test locks this in.
+
+### Where to look when something blocks
+- `risk_events` table is the audit trail. Every `severity='block'` row has `rule` (which check tripped) and `detail.reason` (human-readable explanation). Query: `SELECT ts, rule, json_extract(detail,'$.reason') FROM risk_events WHERE severity='block' ORDER BY id DESC LIMIT 20`.
+- The hook is the *floor*. If it blocks, the policy or config is the source of truth — don't try to route around it. If it's wrong, fix `config/risk_limits.yaml`, not the hook.

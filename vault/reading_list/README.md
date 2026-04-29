@@ -59,3 +59,18 @@ Curated reading that raises the fund's intellectual floor. Agents use this list 
 - **Research agent**: when asked to deep-dive a topic, ground the answer in relevant book chapters and papers here.
 - **Risk Manager**: reread When Genius Failed and Fooled by Randomness on repeat.
 - **User**: already a market junkie. Use this list to compare against what you're already consuming; add your own finds here.
+
+## Distilled output
+
+The reading on this list does not enter agent prompts as text — token cost is real. Instead it gets distilled into:
+
+- [`vault/_meta/principles.md`](../_meta/principles.md) — single-page canon of one-liner rules indexed by situation, with explicit citations to the source book/paper. **Every agent reads this on first wake.** When a principle is enforced in code, the entry is marked `→ encoded:`.
+- [`vault/_meta/economics.md`](../_meta/economics.md) — the cost equation the team operates under. Monthly fixed cost, per-trade math, what a profitable day looks like.
+
+The pipeline:
+
+```
+book / paper / podcast  →  one-line rule in principles.md  →  (when high-leverage) code/config rule
+```
+
+If a principle from the reading list isn't yet in `principles.md`, propose it during the weekly review. If it's been there for a quarter and isn't yet `→ encoded:`, ask whether it CAN be encoded — most should be.

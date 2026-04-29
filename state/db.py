@@ -33,9 +33,11 @@ _CANONICAL_AGENT_NAMES = frozenset({
     "Research", "Red Team", "Book Monitor", "Diamond Hunter",
     "Fund Engineer", "Quant Researcher", "Macro Strategist",
     "Flow Analyst", "Volatility Strategist", "Edge Hunter",
-    "Energies Analyst", "Metals Analyst", "Grains Analyst",
-    "Softs Analyst", "Livestock Analyst", "Rates Analyst",
-    "FX Futures Analyst", "Index/Macro Analyst",
+    "Energies Analyst", "Metals Analyst", "Ag Analyst",
+    "Rates Analyst", "FX Futures Analyst", "Index/Macro Analyst",
+    # Legacy names kept for historical thesis lookup (decisions table
+    # may still hold rows recorded under these prior identities):
+    "Grains Analyst", "Livestock Analyst", "Softs Analyst",
     # Pseudo-agents used by the orchestrator + driver scripts:
     "orchestrator", "manual_pm_bypass",
     # Retired 2026-04-27 (equities desk dormant): Equity PM, Equity
@@ -98,6 +100,24 @@ class Database:
     def init_schema(self) -> None:
         conn = self.connect()
         conn.executescript(SCHEMA_PATH.read_text())
+        self._migrate_columns(conn)
+
+    def _migrate_columns(self, conn: sqlite3.Connection) -> None:
+        """Idempotent column additions for existing databases.
+
+        SQLite's CREATE TABLE IF NOT EXISTS won't add new columns to a table
+        that already exists, so any column added to schema.sql after the
+        first init needs an explicit ALTER TABLE here. Each entry is a
+        no-op if the column is already present.
+        """
+        migrations = [
+            ("account_snapshots", "can_trade",
+             "ALTER TABLE account_snapshots ADD COLUMN can_trade INTEGER NOT NULL DEFAULT 1"),
+        ]
+        for table, col, ddl in migrations:
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if col not in cols:
+                conn.execute(ddl)
 
     @contextmanager
     def tx(self):
@@ -124,6 +144,52 @@ class Database:
     def realized_pl_today(self) -> float:
         snap = self.latest_account_snapshot()
         return float(snap["realized_pl_day_usd"]) if snap else 0.0
+
+    def first_snapshot_today_utc(self) -> dict[str, Any] | None:
+        """Earliest account_snapshot for today (UTC). Used as the start-of-day
+        balance anchor when computing realized day P&L."""
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        row = self.connect().execute(
+            "SELECT * FROM account_snapshots WHERE ts LIKE ? "
+            "ORDER BY ts ASC LIMIT 1",
+            (f"{today}%",),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def peak_eod_balance(self, *, fallback: float = 0.0) -> float:
+        """High-water mark of EOD balances seen so far. Used as the TDD
+        anchor (TDD floor = peak − 2000, capped at starting balance)."""
+        rows = self.connect().execute(
+            "SELECT MAX(balance_usd) AS peak FROM account_snapshots"
+        ).fetchone()
+        if not rows or rows[0] is None:
+            return fallback
+        return max(float(rows[0]), fallback)
+
+    def record_account_snapshot(
+        self,
+        *,
+        balance_usd: float,
+        environment: str = "combine",
+        unrealized_pl_usd: float = 0.0,
+        realized_pl_day_usd: float = 0.0,
+        trailing_dd_usd: float = 0.0,
+        open_contracts_total: int = 0,
+        can_trade: bool = True,
+    ) -> int:
+        """Append a snapshot row. Used by the per-tick capture path."""
+        with self.tx() as c:
+            cur = c.execute(
+                """INSERT INTO account_snapshots
+                       (ts, environment, balance_usd, unrealized_pl_usd,
+                        realized_pl_day_usd, trailing_dd_usd,
+                        open_contracts_total, can_trade)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (utcnow_iso(), environment, balance_usd, unrealized_pl_usd,
+                 realized_pl_day_usd, trailing_dd_usd, open_contracts_total,
+                 1 if can_trade else 0),
+            )
+            return int(cur.lastrowid or 0)
 
     def record_decision(
         self,
@@ -153,6 +219,160 @@ class Database:
                  vault_path, model, tokens_in, tokens_out),
             )
             return int(cur.lastrowid or 0)
+
+    # ── Shadow trades (cross-ticker hypothetical signal screening) ──
+    def record_shadow_trade(
+        self,
+        *,
+        agent: str,
+        symbol: str,
+        strategy: str,
+        side: str,
+        entry_price: float,
+        stop_price: float,
+        target_price: float,
+        shadow_reason: str,
+        risk_usd: float | None = None,
+        rr_planned: float | None = None,
+        conviction: str | None = None,
+        horizon: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """Record a hypothetical TRIGGER for after-the-fact performance review.
+
+        shadow_reason is one of:
+          focus_universe_blocked | risk_block | sector_disabled |
+          scout_only | budget_exhausted | duplicate_position
+        """
+        agent = _canonicalize_agent_name(agent)
+        if side not in ("long", "short"):
+            raise ValueError(f"side must be 'long' or 'short', got {side!r}")
+        with self.tx() as c:
+            cur = c.execute(
+                """INSERT INTO shadow_trades
+                    (ts_signal, agent, symbol, strategy, side,
+                     entry_price, stop_price, target_price, risk_usd,
+                     rr_planned, conviction, horizon, shadow_reason, notes)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (utcnow_iso(), agent, symbol, strategy, side,
+                 entry_price, stop_price, target_price, risk_usd,
+                 rr_planned, conviction, horizon, shadow_reason, notes),
+            )
+            return int(cur.lastrowid or 0)
+
+    def unresolved_shadow_trades(self, *, age_min_minutes: int = 0) -> list[dict[str, Any]]:
+        """Return shadow trades with outcome IS NULL.
+
+        age_min_minutes: only return trades older than this (avoids resolving
+        trades that haven't had time to play out yet). Comparison is done
+        Python-side to keep ISO-8601 timezone formatting consistent with
+        utcnow_iso() (SQLite's datetime() strips timezone)."""
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(tz=timezone.utc) - timedelta(minutes=age_min_minutes)
+                  ).isoformat(timespec="seconds")
+        rows = self.connect().execute(
+            """SELECT * FROM shadow_trades
+                WHERE outcome IS NULL
+                  AND ts_signal <= ?
+                ORDER BY ts_signal""",
+            (cutoff,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def resolve_shadow_trade(
+        self,
+        shadow_id: int,
+        *,
+        outcome: str,
+        pnl_r: float,
+        notes: str | None = None,
+    ) -> None:
+        """Set outcome on a shadow trade. outcome ∈
+        target_hit | stop_hit | time_stopped | invalidated"""
+        with self.tx() as c:
+            c.execute(
+                """UPDATE shadow_trades
+                      SET ts_resolved=?, outcome=?, pnl_r=?, notes=COALESCE(?, notes)
+                    WHERE id=?""",
+                (utcnow_iso(), outcome, pnl_r, notes, shadow_id),
+            )
+
+    def shadow_trade_stats(self, *, days: int = 14) -> list[dict[str, Any]]:
+        """Per-(symbol, strategy) hit-rate + avg R over the last N days.
+
+        Only counts resolved trades. Used by shadow_trade_recap.py to
+        recommend candidates for promotion to the active universe.
+        """
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=days)
+                  ).isoformat(timespec="seconds")
+        rows = self.connect().execute(
+            """SELECT symbol, strategy,
+                      COUNT(*)                                   AS n,
+                      SUM(CASE WHEN outcome='target_hit' THEN 1 ELSE 0 END) AS wins,
+                      AVG(pnl_r)                                 AS avg_r,
+                      MIN(pnl_r)                                 AS min_r,
+                      MAX(pnl_r)                                 AS max_r
+                 FROM shadow_trades
+                WHERE outcome IS NOT NULL
+                  AND ts_signal >= ?
+                GROUP BY symbol, strategy
+                ORDER BY n DESC""",
+            (cutoff,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Daily P&L history (Topstep consistency rule) ─────────
+    def upsert_daily_pl(
+        self,
+        *,
+        day: str,
+        realized_pl_usd: float,
+        peak_realized_pl_usd: float | None = None,
+        trade_count: int | None = None,
+    ) -> None:
+        """Finalize a UTC trading day's realized P&L. Idempotent on `day`."""
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO daily_pl
+                       (day, realized_pl_usd, peak_realized_pl_usd, trade_count, closed_at)
+                   VALUES (?,?,?,?,?)
+                   ON CONFLICT(day) DO UPDATE SET
+                       realized_pl_usd      = excluded.realized_pl_usd,
+                       peak_realized_pl_usd = excluded.peak_realized_pl_usd,
+                       trade_count          = excluded.trade_count,
+                       closed_at            = excluded.closed_at""",
+                (day, realized_pl_usd, peak_realized_pl_usd, trade_count, utcnow_iso()),
+            )
+
+    def daily_pl_history(self, *, exclude_day: str | None = None) -> list[dict[str, Any]]:
+        """All finalized daily_pl rows. Optionally exclude a given day
+        (used to keep today's running P&L separate from history)."""
+        if exclude_day:
+            rows = self.connect().execute(
+                "SELECT * FROM daily_pl WHERE day != ? ORDER BY day",
+                (exclude_day,),
+            ).fetchall()
+        else:
+            rows = self.connect().execute(
+                "SELECT * FROM daily_pl ORDER BY day"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def total_realized_to_date(self, *, exclude_day: str | None = None) -> float:
+        """Sum of realized_pl across all finalized daily_pl rows. Used by
+        the Topstep consistency-rule advisory check."""
+        if exclude_day:
+            row = self.connect().execute(
+                "SELECT COALESCE(SUM(realized_pl_usd), 0) AS total "
+                "FROM daily_pl WHERE day != ?",
+                (exclude_day,),
+            ).fetchone()
+        else:
+            row = self.connect().execute(
+                "SELECT COALESCE(SUM(realized_pl_usd), 0) AS total FROM daily_pl"
+            ).fetchone()
+        return float(row[0]) if row else 0.0
 
     def record_risk_event(
         self,

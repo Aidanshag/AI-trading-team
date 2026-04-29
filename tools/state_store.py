@@ -103,12 +103,76 @@ async def state_risk_events_today(args: dict[str, Any]) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": str(rows)}]}
 
 
+@tool(
+    "state_record_shadow_trade",
+    (
+        "Record a hypothetical TRIGGER for after-the-fact performance review. "
+        "Use this when you spot a clean rule-based setup on a ticker that is "
+        "outside the focus universe, blocked by risk, or otherwise not "
+        "actionable right now. The shadow recap evaluates these for promotion "
+        "to the active universe. shadow_reason ∈ focus_universe_blocked | "
+        "risk_block | sector_disabled | scout_only | budget_exhausted | duplicate_position. "
+        "side ∈ long | short. conviction ∈ low | med | high | validation. "
+        "horizon ∈ intraday | swing | position."
+    ),
+    {
+        "agent": str,
+        "symbol": str,
+        "strategy": str,
+        "side": str,
+        "entry_price": float,
+        "stop_price": float,
+        "target_price": float,
+        "shadow_reason": str,
+        "risk_usd": float,
+        "rr_planned": float,
+        "conviction": str,
+        "horizon": str,
+        "notes": str,
+    },
+)
+async def state_record_shadow_trade(args: dict[str, Any]) -> dict[str, Any]:
+    sid = get_db().record_shadow_trade(
+        agent=args["agent"],
+        symbol=args["symbol"],
+        strategy=args["strategy"],
+        side=args["side"],
+        entry_price=float(args["entry_price"]),
+        stop_price=float(args["stop_price"]),
+        target_price=float(args["target_price"]),
+        shadow_reason=args["shadow_reason"],
+        risk_usd=float(args["risk_usd"]) if args.get("risk_usd") is not None else None,
+        rr_planned=float(args["rr_planned"]) if args.get("rr_planned") is not None else None,
+        conviction=args.get("conviction"),
+        horizon=args.get("horizon"),
+        notes=args.get("notes"),
+    )
+    return {"content": [{"type": "text", "text": f"shadow_trade_id={sid}"}]}
+
+
+@tool(
+    "state_shadow_trade_stats",
+    (
+        "Per-(symbol, strategy) hit-rate + avg R-multiple over the last N days "
+        "(default 14). Reads only resolved shadow trades. Used by CIO + "
+        "Quant Researcher to identify symbols/strategies worth promoting."
+    ),
+    {"days": int},
+)
+async def state_shadow_trade_stats(args: dict[str, Any]) -> dict[str, Any]:
+    days = int(args.get("days") or 14)
+    rows = get_db().shadow_trade_stats(days=days)
+    return {"content": [{"type": "text", "text": str(rows)}]}
+
+
 TOOLS = [
     state_account_snapshot,
     state_positions,
     state_record_decision,
     state_recent_decisions,
     state_risk_events_today,
+    state_record_shadow_trade,
+    state_shadow_trade_stats,
 ]
 
 server = create_sdk_mcp_server(name="state_store", version="0.1.0", tools=TOOLS)

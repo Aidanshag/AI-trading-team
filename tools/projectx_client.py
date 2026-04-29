@@ -286,6 +286,24 @@ class ProjectXClient:
         )
         return data.get("orders", []) if isinstance(data, dict) else data
 
+    def get_order_history(
+        self,
+        account_id: int | str,
+        *,
+        start_timestamp: str | None = None,
+        end_timestamp: str | None = None,
+    ) -> list[dict]:
+        """Filled / cancelled / rejected orders since `start_timestamp`.
+        ISO-8601 with timezone (e.g. '2026-04-29T13:00:00Z').
+        Used by reconcile to detect stop-fill closures for anti-tilt cooldown."""
+        body: dict[str, Any] = {"accountId": int(account_id)}
+        if start_timestamp:
+            body["startTimestamp"] = start_timestamp
+        if end_timestamp:
+            body["endTimestamp"] = end_timestamp
+        data = self._request("POST", "order_search", json=body)
+        return data.get("orders", []) if isinstance(data, dict) else data
+
     def place_order(
         self,
         account_id: int | str,

@@ -43,7 +43,7 @@ Products: [[LE]] live cattle, [[GF]] feeder cattle, [[HE]] lean hogs. See the [[
 - Historical: works in stable-demand regimes; fails during a beef demand shock year (2014 cycle peak).
 
 **Common traps**:
-- Sizing for an outright short — firm rule forbids naked short futures. Options structure only.
+- Sizing for an outright short — naked short futures are now permitted (2026-04-29 policy update), but options structures still preferred for livestock since report-cycle gap risk is real and a stop can be jumped over a limit-locked move.
 - Fading a placement surprise when boxed beef is also rallying — demand-side override kills the trade.
 - Holding through next-month's report — placements revisions can reverse the thesis in 30 days.
 
@@ -67,7 +67,7 @@ Products: [[LE]] live cattle, [[GF]] feeder cattle, [[HE]] lean hogs. See the [[
 **Structure**:
 - Long GF put spread (defined risk), DTE 30–60, OTM strikes.
 - Size: 50 bps of equity max-loss.
-- Alternative: short feeder / long corn paired trade by DV01 — but firm rule blocks naked short GF.
+- Alternative: short feeder / long corn paired trade by DV01. (NOTE: GF is no longer on Topstep — the paired trade only works in a venue that lists feeder cattle. Naked short futures policy was relaxed 2026-04-29 but instrument availability is the binding constraint here.)
 
 **Exit rules**:
 - Target: GF drops to feeder-breakeven (calculable from LE forward + new corn price).

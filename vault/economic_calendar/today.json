@@ -1,0 +1,14 @@
+[
+  {
+    "ts_utc": "2026-04-29T14:30:00Z",
+    "impact": "high",
+    "event": "EIA Crude Oil Inventory",
+    "symbols_affected": [
+      "CL",
+      "MCL",
+      "QM",
+      "RB",
+      "HO"
+    ]
+  }
+]

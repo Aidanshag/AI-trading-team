@@ -64,6 +64,21 @@ def _spent_today() -> float:
 
 def _verify_state() -> tuple[bool, str]:
     """Returns (ok, reason)."""
+    # Preflight: API budget check. If we're at/near the daily cap,
+    # halt before we wake anyone. Returns 1 = halt engaged; 0 = ok.
+    try:
+        import subprocess
+        r = subprocess.run(
+            [sys.executable, "-m", "scripts.api_budget_check"],
+            capture_output=True, timeout=30,
+        )
+        if r.returncode == 1:
+            return False, "API budget kill switch engaged — see risk_events"
+    except Exception as e:
+        # If the check itself fails, log but don't block (fail-open here
+        # because budget-check failure shouldn't ground real trading).
+        print(f"[warn] api_budget_check failed: {e}", file=sys.stderr)
+
     cfg = yaml.safe_load(Path("config/risk_limits.yaml").read_text())
     halt_until_str = cfg["hard_rules"].get("trading_halt_until")
     now = datetime.now(tz=timezone.utc)

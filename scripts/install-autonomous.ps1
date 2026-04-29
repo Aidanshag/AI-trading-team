@@ -26,17 +26,32 @@ Register-ScheduledTask -TaskName "FundCIOMorningWake" -Description "One-shot CIO
 Write-Host "  registered" -ForegroundColor Green
 
 # Task 2 — FundRuntimeBoot
-Write-Host "[2/2] FundRuntimeBoot (at user logon)" -ForegroundColor Yellow
+# Triggers (all three for redundancy — non-admin install must use these):
+#   1. AtLogOn — fires when user logs in (covers daily reboot/logon path)
+#   2. Daily 08:00 — fires once a day even if no logon happened (e.g.
+#      laptop never restarts)
+#   3. Repetition every 30 min — if the runtime ever crashes, the next
+#      cycle re-launches it. start-runtime.ps1 is idempotent: if a python
+#      process already holds the runtime, it exits without spawning a dup.
+Write-Host "[2/2] FundRuntimeBoot (logon + daily 08:00 + every 30min retry)" -ForegroundColor Yellow
 if (-not (Test-Path $BootScript)) {
     Write-Host "  [skip] start-runtime.ps1 missing" -ForegroundColor DarkYellow
 } else {
-    $trigger2 = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-    $psArg = '-NoProfile -ExecutionPolicy Bypass -File "' + $BootScript + '"'
+    $logonTrigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    $dailyTrigger  = New-ScheduledTaskTrigger -Daily -At "8:00AM"
+    # Repeat every 30 min for 24h after each daily trigger (catches crashes)
+    $dailyTrigger.Repetition = (New-ScheduledTaskTrigger -Once -At "8:00AM" `
+        -RepetitionInterval (New-TimeSpan -Minutes 30) `
+        -RepetitionDuration (New-TimeSpan -Hours 24)).Repetition
+
+    $psArg    = '-NoProfile -ExecutionPolicy Bypass -File "' + $BootScript + '"'
     $action2  = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $psArg -WorkingDirectory $ProjectRoot
 
     Get-ScheduledTask -TaskName "FundRuntimeBoot" -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
-    Register-ScheduledTask -TaskName "FundRuntimeBoot" -Description "Launches runtime/main.py at logon." -Trigger $trigger2 -Action $action2 -Settings $settings -Principal $principal | Out-Null
-    Write-Host "  registered" -ForegroundColor Green
+    Register-ScheduledTask -TaskName "FundRuntimeBoot" `
+        -Description "Launches runtime/main.py at logon + daily 08:00 with 30-min retry. Idempotent: duplicate launches no-op." `
+        -Trigger $logonTrigger,$dailyTrigger -Action $action2 -Settings $settings -Principal $principal | Out-Null
+    Write-Host "  registered (logon + daily 08:00 + 30min retry)" -ForegroundColor Green
 }
 
 Write-Host ""

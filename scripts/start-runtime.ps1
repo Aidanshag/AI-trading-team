@@ -40,16 +40,39 @@ if ($existing) {
     exit 0
 }
 
-# Launch detached. Output redirected so process is not tied to console.
-$proc = Start-Process -FilePath $Python `
-    -ArgumentList "-m", "runtime.main" `
+# Launch in a NEW visible PowerShell window with full console handles.
+# Background detached launch (Start-Process -RedirectStandardOutput
+# -WindowStyle Hidden) broke the Claude Agent SDK's anyio.open_process
+# call - the SDK could not fork the claude.exe subprocess and every wake
+# failed with FileNotFoundError. Solution: give python a real console.
+#
+# Tee-Object writes to both the screen and the log file so you can:
+#   (a) watch live activity in the runtime window
+#   (b) review logs/runtime_stdout.log later
+#
+# To stop: close the runtime window, or run scripts/stop-runtime.ps1.
+$psCmd = @'
+$Host.UI.RawUI.WindowTitle = 'Fund Runtime - LIVE'
+Set-Location 'PROJECT_ROOT_PLACEHOLDER'
+Get-Content '.env' | ForEach-Object {
+    if ($_ -match '^\s*([A-Z_]+)\s*=\s*(.+)$') {
+        [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim(), 'Process')
+    }
+}
+& 'PYTHON_PATH_PLACEHOLDER' -m runtime.main 2>&1 | Tee-Object -FilePath 'STDOUT_LOG_PLACEHOLDER' -Append
+Read-Host 'Runtime exited. Press Enter to close this window'
+'@
+$psCmd = $psCmd.Replace('PROJECT_ROOT_PLACEHOLDER', $ProjectRoot)
+$psCmd = $psCmd.Replace('PYTHON_PATH_PLACEHOLDER', $Python)
+$psCmd = $psCmd.Replace('STDOUT_LOG_PLACEHOLDER', $StdoutLog)
+
+$proc = Start-Process -FilePath "powershell.exe" `
+    -ArgumentList "-NoProfile", "-NoExit", "-Command", $psCmd `
     -WorkingDirectory $ProjectRoot `
-    -RedirectStandardOutput $StdoutLog `
-    -RedirectStandardError $StderrLog `
-    -WindowStyle Hidden `
     -PassThru
 
-Write-Host "Runtime launched. PID: $($proc.Id)" -ForegroundColor Green
-Write-Host "  Stdout: $StdoutLog"
-Write-Host "  Stderr: $StderrLog"
+Write-Host "Runtime launched in new window. PID: $($proc.Id)" -ForegroundColor Green
+Write-Host "  A 'Fund Runtime - LIVE' window is now open showing live activity."
+Write-Host "  Logs also tee'd to: $StdoutLog"
+Write-Host "  To stop: close that window, or run scripts/stop-runtime.ps1"
 $proc.Id | Out-File (Join-Path $LogDir "runtime.pid")

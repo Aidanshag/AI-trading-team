@@ -1,0 +1,57 @@
+# Focus universe — temporary restriction on tradeable symbols.
+#
+# When `focus_period_active: true`, the risk hook rejects orders on any
+# symbol not in `allowed_symbols`. Analysts/Edge Hunter scan ONLY these.
+# Auto-tuning system gets to accumulate per-instrument data faster.
+#
+# To extend, change focus_period_expires.
+# To disable entirely, set focus_period_active: false.
+
+focus_period_active: true
+focus_period_started:  "2026-04-29T01:00:00Z"
+focus_period_expires:  "2026-05-02T22:00:00Z"   # End of Globex Friday CT
+rationale: |
+  3-day focus window per user directive (2026-04-29). Concentrate
+  attention on one high-liquidity / cleanest-setup instrument per sector.
+  Goals:
+   - Accumulate per-instrument trade data faster (auto-tuning convergence)
+   - Sharpen analyst expertise on specific products (NG storage cycle,
+     ZN ladder behavior, GC mean-reversion patterns)
+   - Reduce API spend (Edge Hunter scans ~6 instruments not 22)
+   - Cleaner post-mortems with consistent context
+
+# One symbol per sector (recommended starter set; user may edit).
+# Sectors with empty lists are disabled this week.
+allowed_symbols:
+  index_macro:  [MES]            # E-mini S&P micro — cheaper testing, deep liquidity
+  energies:     [NG]             # Natural gas — user-specified; high vol, clear EIA Thursday catalyst
+  metals:       [GC]             # Gold — cleanest mean-reversion patterns, stable spreads
+  rates:        [ZN]             # 10-year T-note — most liquid Treasury futures
+  fx_futures:   [6E]             # EUR/USD — most liquid FX, tightest spreads
+  grains:       []               # DISABLED — off-season; no WASDE/Crop Progress this week
+  livestock:    []               # DISABLED — limited hours, low priority
+  crypto:       []               # DISABLED — Micro Ether testing later
+  softs:        []               # Already off (ICE-listed, not on Topstep)
+
+# Per-symbol focus notes for analysts (what to watch for this week)
+focus_notes:
+  NG:
+    primary_driver: "EIA Natural Gas Storage Report — Thursday 10:30 ET (typically the week's main catalyst)"
+    setups_to_watch: [vol_regime_trend, bollinger_squeeze_break, support_resistance_bounce]
+    avoid: [opening_range_breakout]   # too thin overnight per ZN lesson
+  GC:
+    primary_driver: "DXY moves + real-yield (TIPS) — gold fades USD strength, rallies on real-yield drops"
+    setups_to_watch: [bollinger_mean_reversion, vwap_reversion, support_resistance_bounce]
+    avoid: []
+  ZN:
+    primary_driver: "Treasury auctions, Fed-speak, and CFTC positioning extremes (currently 90th+ pct long)"
+    setups_to_watch: [vol_regime_trend, range_mean_reversion]
+    avoid: [opening_range_breakout]   # learned from 2026-04-29 ZN loss
+  6E:
+    primary_driver: "ECB-Fed rate differential, US data prints, DXY"
+    setups_to_watch: [keltner_breakout, support_resistance_bounce, vwap_reversion]
+    avoid: []
+  MES:
+    primary_driver: "Earnings + macro data; tight intraday ranges this week"
+    setups_to_watch: [pullback_in_trend, narrow_range_break, inside_bar_break]
+    avoid: [opening_range_breakout]   # earnings week chop

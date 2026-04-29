@@ -57,13 +57,18 @@ def test_auto_halt_in_past_does_not_block():
     assert verdict is None
 
 
-def test_malformed_halt_timestamp_ignored():
+def test_malformed_halt_timestamp_fails_closed():
+    """Bug fix 2026-04-29: malformed kill-switch timestamps now fail
+    CLOSED rather than silently passing the order through. A typo in
+    the YAML must not allow trades — it must force investigation."""
     verdict = _check_kill_switch(
         tool_name="x", order={}, agent="X",
         limits=_limits(halt_until="not a real timestamp"), topstep={}, symbols={},
         snap=None, positions=[],
     )
-    assert verdict is None
+    assert verdict is not None
+    assert verdict["rule"] == "kill_switch_malformed"
+    assert "unparseable" in verdict["reason"]
 
 
 def test_manual_halt_overrides_expired_auto():

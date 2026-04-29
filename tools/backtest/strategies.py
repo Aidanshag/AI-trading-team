@@ -697,6 +697,251 @@ def rsi2_extreme_reversion(
                 yield Signal.exit(date=date, price=close, reason=f"rsi2_exit r={r:.1f}")
 
 
+# =====================================================================
+# ADDITIONAL INTRADAY STRATEGIES (added 2026-04-28 for HFT-flavor)
+# =====================================================================
+
+
+def vwap_reversion(
+    bars: pd.DataFrame,
+    deviation_atr_mult: float = 2.0,
+    rr_target: float = 2.0,
+) -> Iterator[Signal]:
+    """Mean-revert when price is > N×ATR away from session VWAP.
+    Long when price is far below VWAP; short when far above. Defined
+    risk: stop = current price ± 1×ATR; target = VWAP.
+
+    Use case: intraday mean-reversion around the volume-weighted price.
+    Best on liquid futures (ES, NQ, CL, GC) during regular session.
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    typical = (h + l + c) / 3
+    # Cumulative VWAP — assumes a session reset would be applied externally
+    vwap = (typical * bars.get("Volume", typical * 0 + 1)).cumsum() / \
+           bars.get("Volume", typical * 0 + 1).cumsum()
+    atr = _atr(bars, 14)
+
+    for i in range(20, len(bars)):
+        date = bars.index[i]
+        price = float(c.iloc[i])
+        v = float(vwap.iloc[i])
+        a = atr.iloc[i]
+        if pd.isna(v) or pd.isna(a) or a == 0:
+            continue
+        deviation = (price - v) / a
+        if deviation < -deviation_atr_mult:
+            # Far below VWAP: long
+            stop = price - 1.0 * a
+            target = v
+            if (target - price) / max(price - stop, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="long", price=price, stop=stop, target=target,
+                    reason=f"vwap_rev_long dev={deviation:.2f}σ",
+                )
+        elif deviation > deviation_atr_mult:
+            # Far above VWAP: short
+            stop = price + 1.0 * a
+            target = v
+            if (price - target) / max(stop - price, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="short", price=price, stop=stop, target=target,
+                    reason=f"vwap_rev_short dev={deviation:.2f}σ",
+                )
+
+
+def volume_spike_reversal(
+    bars: pd.DataFrame,
+    volume_spike_mult: float = 3.0,
+    rr_target: float = 2.0,
+) -> Iterator[Signal]:
+    """Fade a wide-range bar with abnormal volume — institutional flow
+    capitulation creates mean-reversion opportunity.
+
+    Trigger: TR > 2× ATR AND volume > N× recent-avg-volume AND prior
+    bar closed in the outer 25% of its range (climax).
+    Long after wide DOWN bar; short after wide UP bar.
+    """
+    h, l, c, o = bars["High"], bars["Low"], bars["Close"], bars["Open"]
+    if "Volume" not in bars.columns:
+        return  # need volume
+    v = bars["Volume"]
+    prev_c = c.shift(1)
+    tr = pd.concat([h - l, (h - prev_c).abs(), (l - prev_c).abs()], axis=1).max(axis=1)
+    atr = _atr(bars, 14)
+    avg_vol = v.rolling(20).mean()
+
+    for i in range(20, len(bars) - 1):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        avg = avg_vol.iloc[i]
+        if pd.isna(a) or pd.isna(avg) or avg == 0:
+            continue
+        bar_v = float(v.iloc[i])
+        bar_tr = float(tr.iloc[i])
+        if bar_tr <= 2.0 * a or bar_v < volume_spike_mult * avg:
+            continue
+        # Climactic close in outer 25% of range
+        bar_h, bar_l = float(h.iloc[i]), float(l.iloc[i])
+        bar_c = float(c.iloc[i])
+        rng = max(bar_h - bar_l, 1e-9)
+        outer = (bar_c - bar_l) / rng
+        if outer < 0.25:
+            # Down climax — fade long
+            entry = bar_c
+            stop = bar_l - 0.25 * a
+            target = bar_c + rr_target * (entry - stop)
+            yield Signal.entry(
+                date=date, side="long", price=entry, stop=stop, target=target,
+                reason=f"vol_spike_rev_long V={bar_v/avg:.1f}× TR={bar_tr/a:.1f}×",
+            )
+        elif outer > 0.75:
+            # Up climax — fade short
+            entry = bar_c
+            stop = bar_h + 0.25 * a
+            target = bar_c - rr_target * (stop - entry)
+            yield Signal.entry(
+                date=date, side="short", price=entry, stop=stop, target=target,
+                reason=f"vol_spike_rev_short V={bar_v/avg:.1f}× TR={bar_tr/a:.1f}×",
+            )
+
+
+def support_resistance_bounce(
+    bars: pd.DataFrame,
+    lookback: int = 50,
+    proximity_atr: float = 0.3,
+    rr_target: float = 2.0,
+) -> Iterator[Signal]:
+    """Long when price touches a tested support level (≥3 prior touches);
+    short at tested resistance. Stop just beyond the level; target the
+    range mid-point or nearest opposing level.
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    atr = _atr(bars, 14)
+
+    for i in range(lookback + 1, len(bars)):
+        date = bars.index[i]
+        price = float(c.iloc[i])
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        # Define recent range
+        window_h = float(h.iloc[i - lookback:i].max())
+        window_l = float(l.iloc[i - lookback:i].min())
+
+        # Count touches near support / resistance
+        eps = proximity_atr * a
+        n_l_touches = int(((l.iloc[i - lookback:i] - window_l).abs() < eps).sum())
+        n_h_touches = int(((h.iloc[i - lookback:i] - window_h).abs() < eps).sum())
+
+        # Long bounce off support
+        if abs(price - window_l) < eps and n_l_touches >= 3:
+            entry = price
+            stop = window_l - 0.5 * a
+            target = (window_h + window_l) / 2
+            if (target - entry) / max(entry - stop, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="long", price=entry, stop=stop, target=target,
+                    reason=f"sr_bounce_long touches={n_l_touches}",
+                )
+        # Short fade at resistance
+        elif abs(price - window_h) < eps and n_h_touches >= 3:
+            entry = price
+            stop = window_h + 0.5 * a
+            target = (window_h + window_l) / 2
+            if (entry - target) / max(stop - entry, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="short", price=entry, stop=stop, target=target,
+                    reason=f"sr_bounce_short touches={n_h_touches}",
+                )
+
+
+def gap_fill(
+    bars: pd.DataFrame,
+    min_gap_atr: float = 0.75,
+    rr_target: float = 1.5,
+) -> Iterator[Signal]:
+    """Open gap > min_gap_atr × ATR → fade back toward prior close.
+
+    Use case: overnight gaps that don't have a strong news driver tend
+    to fill within the first 1–2 hours. Defined risk: stop beyond gap
+    extreme; target = prior close (the gap fill).
+    """
+    o, c, h, l = bars["Open"], bars["Close"], bars["High"], bars["Low"]
+    prev_c = c.shift(1)
+    atr = _atr(bars, 14)
+
+    for i in range(20, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        gap = float(o.iloc[i] - prev_c.iloc[i])
+        if abs(gap) < min_gap_atr * a:
+            continue
+        if gap > 0:
+            # Gap up → fade short, target prior close
+            entry = float(o.iloc[i])
+            stop = entry + 0.5 * a
+            target = float(prev_c.iloc[i])
+            if (entry - target) / max(stop - entry, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="short", price=entry, stop=stop, target=target,
+                    reason=f"gap_up_fade gap={gap/a:+.1f}×ATR",
+                )
+        else:
+            # Gap down → fade long, target prior close
+            entry = float(o.iloc[i])
+            stop = entry - 0.5 * a
+            target = float(prev_c.iloc[i])
+            if (target - entry) / max(entry - stop, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="long", price=entry, stop=stop, target=target,
+                    reason=f"gap_down_fade gap={gap/a:+.1f}×ATR",
+                )
+
+
+def pivot_reversal(
+    bars: pd.DataFrame,
+    pivot_lookback: int = 5,
+    rr_target: float = 2.0,
+) -> Iterator[Signal]:
+    """Pivot-point reversal — bar makes new N-bar high then closes red
+    (long fade) or new N-bar low then closes green (short fade). Classic
+    reversal signal at exhaustion points.
+    """
+    h, l, c, o = bars["High"], bars["Low"], bars["Close"], bars["Open"]
+    atr = _atr(bars, 14)
+
+    for i in range(pivot_lookback + 1, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        bar_h, bar_l, bar_c, bar_o = (float(h.iloc[i]), float(l.iloc[i]),
+                                       float(c.iloc[i]), float(o.iloc[i]))
+        prior_h = float(h.iloc[i - pivot_lookback:i].max())
+        prior_l = float(l.iloc[i - pivot_lookback:i].min())
+
+        # Pivot high reversal: new high made + close red
+        if bar_h > prior_h and bar_c < bar_o:
+            entry = bar_c
+            stop = bar_h + 0.25 * a
+            target = bar_c - rr_target * (stop - entry)
+            yield Signal.entry(
+                date=date, side="short", price=entry, stop=stop, target=target,
+                reason=f"pivot_high_rev",
+            )
+        # Pivot low reversal: new low made + close green
+        elif bar_l < prior_l and bar_c > bar_o:
+            entry = bar_c
+            stop = bar_l - 0.25 * a
+            target = bar_c + rr_target * (entry - stop)
+            yield Signal.entry(
+                date=date, side="long", price=entry, stop=stop, target=target,
+                reason=f"pivot_low_rev",
+            )
+
+
 STRATEGY_REGISTRY = {
     # Original 5
     "donchian_breakout": donchian_breakout,
@@ -704,17 +949,23 @@ STRATEGY_REGISTRY = {
     "volatility_breakout": volatility_breakout,
     "pullback_in_trend": pullback_in_trend,
     "range_mean_reversion": range_mean_reversion,
-    # New volatility strategies
+    # Volatility strategies
     "bollinger_squeeze_break": bollinger_squeeze_break,
     "keltner_breakout": keltner_breakout,
     "vol_regime_trend": vol_regime_trend,
     "vol_spike_fade": vol_spike_fade,
-    # New intraday-cadence strategies
+    # Intraday-cadence strategies
     "opening_range_breakout": opening_range_breakout,
     "narrow_range_break": narrow_range_break,
     "inside_bar_break": inside_bar_break,
     # Mean-reversion overlay
     "rsi2_extreme_reversion": rsi2_extreme_reversion,
+    # NEW (2026-04-28): more intraday flexibility for HFT-style trading
+    "vwap_reversion": vwap_reversion,
+    "volume_spike_reversal": volume_spike_reversal,
+    "support_resistance_bounce": support_resistance_bounce,
+    "gap_fill": gap_fill,
+    "pivot_reversal": pivot_reversal,
 }
 
 

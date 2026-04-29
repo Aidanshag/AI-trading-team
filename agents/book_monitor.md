@@ -32,6 +32,29 @@ Deterministic procedure. Same steps every time.
 - **CORRELATED_DRIFT**: two or more positions in the same sector have moved together by > 1% in the last 30 min. The correlation the book assumed independent may have concentrated.
 - **STOP_UNREALISTIC**: current price has widened the stop's distance past 2× the entry-time ATR. The stop is no longer protecting the same risk it was.
 
+### Exit-style triggers (NEW — coordinate with Execution Trader)
+
+When you see a position whose `active_exit_style` flag is set, also check these style-specific triggers:
+
+- **BREAKEVEN_MOVE_DUE** (`exit_style: breakeven_then_trail`): position has touched +1R unrealized. Flag for ET to move the stop to entry price (lock no-loss).
+- **TRAIL_UPDATE_DUE** (`exit_style: trailing_stop_atr` or after breakeven): position has extended by +0.5×ATR since the last stop update. Flag for ET to trail the stop higher (longs) or lower (shorts).
+- **SCALE_OUT_DUE** (`exit_style: scale_out_thirds`): position has touched the next +1R level and a partial-exit limit order is not yet on the book. Flag for ET to take 1/3 off.
+- **TIME_EXIT_DUE** (`exit_style: time_based_exit`): position held longer than the configured time-cap. Flag for ET to close at market regardless of P&L.
+- **VOL_COLLAPSE_EXIT_DUE** (`exit_style: volatility_collapse_exit`): realized vol on the symbol has dropped below 0.7× entry-time vol. The mean-reversion-on-vol thesis has played out — flag for ET to close.
+
+These are flags only — Execution Trader is the actor. You do not place exit orders yourself.
+
+### Working-order management (NEW — coordinate with Execution Trader)
+
+When you see WORKING ORDERS that haven't filled yet:
+
+- **LIMIT_REPRICE_DUE**: limit/stop-limit order has been working for ≥15 min without fill, current ask is ≤1 tick from the limit price. Flag for ET to re-price the limit closer to current quote.
+- **LIMIT_STALE**: limit order has been working for ≥15 min, current ask is >3 ticks from the limit. The entry has drifted away. Flag for ET to cancel and bounce back to PM.
+- **STOP_ENTRY_NOT_TRIGGERED**: buy-stop/sell-stop order has been working ≥30 min without trigger AND price has been moving AWAY from the trigger level for ≥10 min. Flag for ET to evaluate whether to convert to immediate-fill or cancel.
+- **WORKING_ORDER_INVALIDATED**: original thesis's invalidation condition has triggered while a working order still sits awaiting fill. Flag for ET to CANCEL immediately.
+
+These coordinate with Execution Trader's operational flexibility section — ET decides whether to re-price, cancel, or convert based on the thesis type and current state.
+
 ### If no triggers fire
 
 Respond with exactly: `NO_CHANGE` (just that token). No prose, no wasted budget.

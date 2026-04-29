@@ -6,7 +6,7 @@ $ProjectRoot = $PSScriptRoot | Split-Path -Parent
 $PidFile = Join-Path $ProjectRoot "logs\runtime.pid"
 
 if (-not (Test-Path $PidFile)) {
-    Write-Host "No PID file at $PidFile — runtime may not be running" -ForegroundColor Yellow
+    Write-Host "No PID file at $PidFile - runtime may not be running" -ForegroundColor Yellow
     exit 0
 }
 

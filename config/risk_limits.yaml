@@ -6,7 +6,14 @@
 # GLOBAL HARD RULES (non-negotiable — enforced by risk hook)
 # ============================================================
 hard_rules:
-  no_naked_shorts: true       # blocks outright short futures and uncovered short options
+  # 2026-04-29: relaxed by user directive — short futures now permitted.
+  # Short OPTIONS are still blocked by config/risk_limits.yaml:options
+  # (allow_naked_short_calls/puts/strangles/straddles all = false), so the
+  # genuine unlimited-risk failure mode stays prohibited. The futures
+  # short opens up roughly 2x the trigger surface area in mixed markets.
+  # Defensive ladder, daily target lock, $250 per-trade cap, stop-loss
+  # requirement, and Topstep DLL are all still active as backstops.
+  no_naked_shorts: false
   require_stop_on_every_trade: true
   # Manual halt switch — emergency kill. Set true to block all orders permanently.
   trading_halted: false
@@ -50,9 +57,12 @@ account:
   # ── INTERNAL SOFT-DLL (critical — agents target THIS, not Topstep's) ─
   # User directive: "they should essentially never hit this daily loss limit".
   # Risk Manager treats these internal thresholds as hard floors.
-  internal_dll_target_usd: 500    # 50% of Topstep DLL — absolute worst-day limit
-  internal_dll_cooldown_usd: 300  # 30% of Topstep DLL — tighten sizing, no new adds
-  internal_dll_alert_usd: 150     # 15% of Topstep DLL — heightened attention
+  # 2026-04-30: TIGHTENED post-incident. Was 500/300/150. Halved to 250/150/75
+  # for first day post-DLL-breach. RESTORE to 500/300/150 after one clean
+  # session (no rule blocks, no agent cascades, EOD positive).
+  internal_dll_target_usd: 250    # was 500 — temporarily tightened
+  internal_dll_cooldown_usd: 150  # was 300 — temporarily tightened
+  internal_dll_alert_usd: 75      # was 150 — temporarily tightened
 
   # Per-trade risk cap (independent of DLL): no single idea risks more than X
   per_trade_risk_pct_of_equity: 0.005   # 50 bps per trade max ($250 on $50K)
@@ -153,9 +163,14 @@ combine_defense:
     - threshold_usd: -500         # internal_dll_target
       action: "lockdown"
       description: "Flat the book at next available opportunity. No new entries of any kind. Close all working orders."
-    - threshold_usd: -750         # 75% of Topstep DLL — approaching breach
-      action: "emergency_flatten"
-      description: "Flatten at market immediately. Trading halted for session."
+    # ── TEMPORARY 2026-04-29 (USER OVERRIDE) ──
+    # The -$750 emergency_flatten level is DISABLED for the rest of tonight's
+    # session per user directive. Topstep's $1000 DLL remains the broker-side
+    # hard backstop. The -$500 lockdown above still blocks new entries.
+    # RESTORE BEFORE NEXT SESSION:
+    #   - threshold_usd: -750
+    #     action: "emergency_flatten"
+    #     description: "Flatten at market immediately. Trading halted for session."
 
   # Topstep DLL is INTRADAY-TRAILING from the session's high-water mark.
   # That means a profitable morning + losing afternoon can still breach DLL
@@ -185,48 +200,44 @@ per_symbol:
   M2K:  { max_contracts: 3, max_notional_usd: 39000,  required_stop_ticks: 16 }
   YM:   { max_contracts: 1, max_notional_usd: 230000, required_stop_ticks: 30 }
   MYM:  { max_contracts: 3, max_notional_usd: 69000,  required_stop_ticks: 30 }
+  NKD:  { max_contracts: 1, max_notional_usd: 200000, required_stop_ticks: 20 }
 
-  # ── Energies ───────────────────────────────────────────────────────
+  # ── Energies (Topstep-listed only) ─────────────────────────────────
   CL:   { max_contracts: 1, max_notional_usd: 80000,  required_stop_ticks: 20 }
   MCL:  { max_contracts: 2, max_notional_usd: 8000,   required_stop_ticks: 20 }
-  BZ:   { max_contracts: 1, max_notional_usd: 85000,  required_stop_ticks: 20 }
   NG:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 25 }
+  MNG:  { max_contracts: 2, max_notional_usd: 4000,   required_stop_ticks: 25 }
   QG:   { max_contracts: 2, max_notional_usd: 18000,  required_stop_ticks: 25 }
   RB:   { max_contracts: 1, max_notional_usd: 100000, required_stop_ticks: 100 }
   HO:   { max_contracts: 1, max_notional_usd: 115000, required_stop_ticks: 100 }
-  EH:   { max_contracts: 1, max_notional_usd: 60000,  required_stop_ticks: 30 }
+  QM:   { max_contracts: 1, max_notional_usd: 40000,  required_stop_ticks: 20 }
+  # BZ (Brent), EH (Ethanol) removed 2026-04-29 — not on Topstep.
 
-  # ── Metals ─────────────────────────────────────────────────────────
+  # ── Metals (Topstep-listed only) ───────────────────────────────────
   GC:   { max_contracts: 1, max_notional_usd: 220000, required_stop_ticks: 20 }
   MGC:  { max_contracts: 2, max_notional_usd: 22000,  required_stop_ticks: 20 }
   SI:   { max_contracts: 1, max_notional_usd: 170000, required_stop_ticks: 30 }
   SIL:  { max_contracts: 2, max_notional_usd: 60000,  required_stop_ticks: 30 }
   HG:   { max_contracts: 1, max_notional_usd: 115000, required_stop_ticks: 30 }
+  MHG:  { max_contracts: 2, max_notional_usd: 12000,  required_stop_ticks: 30 }
   PL:   { max_contracts: 1, max_notional_usd: 100000, required_stop_ticks: 30 }
-  PA:   { max_contracts: 1, max_notional_usd: 110000, required_stop_ticks: 30 }
-  ALI:  { max_contracts: 1, max_notional_usd: 65000,  required_stop_ticks: 30 }
+  # PA (Palladium), ALI (Aluminum) removed 2026-04-29 — not on Topstep.
 
-  # ── Grains & oilseeds ──────────────────────────────────────────────
+  # ── Grains & oilseeds (Topstep-listed only) ────────────────────────
   ZC:   { max_contracts: 1, max_notional_usd: 25000,  required_stop_ticks: 10 }
   ZS:   { max_contracts: 1, max_notional_usd: 65000,  required_stop_ticks: 15 }
   ZW:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 15 }
   ZL:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 30 }
   ZM:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 20 }
-  ZO:   { max_contracts: 1, max_notional_usd: 20000,  required_stop_ticks: 15 }
-  ZR:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 20 }
+  # ZO (Oats), ZR (Rough Rice) removed 2026-04-29 — not on Topstep.
 
-  # ── Softs ──────────────────────────────────────────────────────────
-  KC:   { max_contracts: 1, max_notional_usd: 85000,  required_stop_ticks: 30 }
-  CT:   { max_contracts: 1, max_notional_usd: 45000,  required_stop_ticks: 30 }
-  SB:   { max_contracts: 1, max_notional_usd: 30000,  required_stop_ticks: 30 }
-  CC:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 30 }
-  OJ:   { max_contracts: 1, max_notional_usd: 35000,  required_stop_ticks: 30 }
-  LBR:  { max_contracts: 1, max_notional_usd: 45000,  required_stop_ticks: 30 }
+  # ── Softs ── REMOVED 2026-04-29: KC, CT, SB, CC, OJ, LBR are ICE-listed
+  # and not tradeable on Topstep.
 
-  # ── Livestock ──────────────────────────────────────────────────────
+  # ── Livestock (Topstep-listed only) ────────────────────────────────
   LE:   { max_contracts: 1, max_notional_usd: 85000,  required_stop_ticks: 30 }
-  GF:   { max_contracts: 1, max_notional_usd: 115000, required_stop_ticks: 30 }
   HE:   { max_contracts: 1, max_notional_usd: 40000,  required_stop_ticks: 30 }
+  # GF (Feeder Cattle) removed 2026-04-29 — not on Topstep.
 
   # ── Rates (full curve) ─────────────────────────────────────────────
   ZT:   { max_contracts: 1, max_notional_usd: 215000, required_stop_ticks: 8  }
@@ -251,12 +262,12 @@ per_symbol:
 sector_limits:
   energies:    { max_net_contracts: 2 }
   metals:      { max_net_contracts: 2 }
-  grains:      { max_net_contracts: 2 }
-  softs:       { max_net_contracts: 1 }   # thinner liquidity
-  livestock:   { max_net_contracts: 1 }   # limit-move risk
+  ag:          { max_net_contracts: 2 }   # merged grains + livestock 2026-04-29
   rates:       { max_net_contracts: 2 }
   fx_futures:  { max_net_contracts: 2 }
   index_macro: { max_net_contracts: 2 }
+  crypto:      { max_net_contracts: 1 }   # Micro Ether only on Topstep
+  # Retired 2026-04-29: softs (ICE-only), grains/livestock split (now `ag`).
 # Correlated-basket check (block if net exposure across correlated symbols exceeds).
 # Net = absolute sum of signed positions across the basket.
 correlated_baskets:
@@ -264,22 +275,19 @@ correlated_baskets:
     symbols: [ES, MES, NQ, MNQ, RTY, M2K, YM, MYM]
     max_net_contracts: 3
   - name: precious_metals
-    symbols: [GC, MGC, SI, SIL, PL, PA]
+    symbols: [GC, MGC, SI, SIL, PL]
     max_net_contracts: 2
   - name: petroleum_complex
-    symbols: [CL, MCL, BZ, RB, HO]
+    symbols: [CL, MCL, QM, RB, HO]
     max_net_contracts: 3
   - name: nat_gas_complex
-    symbols: [NG, QG]
+    symbols: [NG, QG, MNG]
     max_net_contracts: 2
   - name: grains_oilseeds
-    symbols: [ZC, ZW, ZS, ZL, ZM, ZO, ZR]
+    symbols: [ZC, ZW, ZS, ZL, ZM]
     max_net_contracts: 3
-  - name: tropical_softs
-    symbols: [KC, CT, SB, CC, OJ]
-    max_net_contracts: 2
   - name: livestock_complex
-    symbols: [LE, GF, HE]
+    symbols: [LE, HE]
     max_net_contracts: 2
   - name: rates_curve
     symbols: [ZT, ZF, ZN, ZB, UB]
@@ -288,8 +296,10 @@ correlated_baskets:
     symbols: ["6E", "6B", "6J", "6A", "6C", "6S", M6E, M6B]
     max_net_contracts: 3
   - name: industrial_metals
-    symbols: [HG, ALI]
+    symbols: [HG, MHG]
     max_net_contracts: 2
+  # Retired 2026-04-29 — not on Topstep:
+  #   tropical_softs (KC/CT/SB/CC/OJ), BZ/EH/PA/ALI/GF/ZO/ZR removed
 
 # ============================================================
 # OPTIONS-SPECIFIC (checked by options risk agent + hook)
@@ -317,14 +327,155 @@ options:
   close_at_dte: 2            # force-close rule handed to exec trader
 
 # ============================================================
+# TRADE FEES (per round-trip per contract — Topstep schedule)
+# ============================================================
+# Critical 2026-04-29: tonight's session lost $500+ to fee bleed from
+# over-trading. Auto-trader reads these costs and rejects any trade
+# whose target-profit < 3× round-trip fee.
+fees_round_trip_usd:
+  default: 5.00
+  # E-minis (full-size)
+  ES:   5.00
+  NQ:   5.00
+  RTY:  5.00
+  YM:   5.00
+  # Micros — much cheaper
+  MES:  1.50
+  MNQ:  1.50
+  M2K:  1.50
+  MYM:  1.50
+  # Energies
+  CL:   5.00
+  MCL:  1.50
+  NG:   5.00
+  MNG:  1.50
+  QG:   2.50
+  RB:   5.00
+  HO:   5.00
+  QM:   3.00
+  # Metals
+  GC:   5.00
+  MGC:  1.50
+  SI:   5.00
+  SIL:  2.50
+  HG:   5.00
+  MHG:  1.50
+  PL:   5.00
+  # Grains
+  ZC:   5.00
+  ZS:   5.00
+  ZW:   5.00
+  ZL:   5.00
+  ZM:   5.00
+  # Livestock
+  LE:   5.00
+  HE:   5.00
+  # Rates
+  ZT:   3.00
+  ZF:   3.00
+  ZN:   3.00
+  ZB:   3.00
+  UB:   3.00
+  # FX
+  "6E": 5.00
+  "6B": 5.00
+  "6J": 5.00
+  "6A": 5.00
+  "6C": 5.00
+  "6S": 5.00
+  M6E:  1.50
+  M6B:  1.50
+  E7:   3.00
+  # Index — Nikkei
+  NKD:  5.00
+
+# Fee-aware decision rules
+fee_decision:
+  # Skip a trade if expected reward (target − entry) < this × round-trip fee.
+  # 3× means "even if I only win 1 in 3 trades I still net positive."
+  min_reward_to_fee_ratio: 3.0
+  # If true, fees count against the daily target lock too.
+  fees_count_toward_pl: true
+
+# ============================================================
+# COMBINE PACING (profit lock-in)
+# ============================================================
+# The defensive ladder catches losses. This catches "winning, then bleeding
+# it back." Topstep's 50% consistency rule punishes asymmetric days.
+combine_pacing:
+  daily_soft_target_usd:  200    # +$200: log advisory; sizing tightens
+  daily_hard_target_usd:  400    # +$400: BLOCK new entries; manage book only
+  partial_giveback_pct:   0.40   # if peak +$300 then back to +$180 → lockdown
+
+# ============================================================
+# ANTI-TILT (added 2026-04-29)
+# ============================================================
+anti_tilt:
+  post_stop_cooldown_minutes: 15   # no new entries within 15 min of any stop-out
+
+# ============================================================
+# REGIME GATES (added 2026-04-29 — post DLL-breach)
+# ============================================================
+# The 2026-04-29 incident bled $1,013 via 100+ micro round-trips during
+# 03:30-07:00 UTC (Asian thin tape). Strategies generated technical
+# triggers that were actually random walk noise.
+regime_gates:
+  # When time is in this window (Eastern), no new entries are placed.
+  thin_tape:
+    enabled: true
+    start_et: "21:00"
+    end_et:   "04:00"
+    action:   "block_all_entries"
+    reason:   "Thin-tape window — random walk dominates; signals are noise."
+
+  # Strategies that fire on chop / mean-reversion / range patterns.
+  # Used by future regime classifier; advisory for now.
+  regime_sensitive_strategies:
+    - rsi2_extreme_reversion
+    - bollinger_mean_reversion
+    - range_mean_reversion
+    - vwap_reversion
+    - vol_spike_fade
+    - support_resistance_bounce
+    - volume_spike_reversal
+    - gap_fill
+    - pivot_reversal
+    - narrow_range_break
+    - inside_bar_break
+    - opening_range_breakout
+
+# ============================================================
+# COST DISCIPLINE (added 2026-04-29 — fee-frequency lesson)
+# ============================================================
+# The bleed was death-by-fees: ~100 round-trips × $1.50 = ~$150 in fees alone.
+# Per-trade gates aren't enough at high frequency.
+cost_discipline:
+  daily_fee_budget_usd:           30.00   # ~10 micros or ~6 full-size before halt
+  per_symbol_trade_count_warn:     3      # warn / log advisory
+  per_symbol_trade_count_block:    5      # hard block: no more entries on this symbol today
+  max_trades_per_day_cost_aware:  12      # aggregate trade count for the day
+
+# ============================================================
+# STRATEGY BLACKLIST (lessons promoted to RULE tier — encoded as data)
+# ============================================================
+strategy_blacklist:
+  - { symbol: ZN, strategy: opening_range_breakout, reason: "2026-04-29 lesson — ORB on ZN fills overnight in thin liquidity" }
+  - { symbol: NG, strategy: opening_range_breakout, reason: "Inherited from ZN lesson — overnight thin-tape risk" }
+
+# ============================================================
 # TIME / SESSION GUARDS
 # ============================================================
 sessions:
   block_first_n_seconds_after_open: 60
   block_last_n_seconds_before_close: 120
+  # 2026-04-30: gives the snapshot pipeline time to write rows before any
+  # trade fires. Catches "system started, fired immediately, snapshot table
+  # still empty, P&L checks no-op" — the failure mode of 2026-04-29.
+  block_first_n_minutes_after_globex_reopen: 30
+  # Pre/post blackout around high-impact events. Reads
+  # vault/economic_calendar/today.json. 0 disables the check.
+  high_impact_blackout_minutes: 5
   # 24/5 trading enabled per user 2026-04-28. Globex futures trade Sun 17:00 CT
-  # through Fri 16:00 CT with brief daily break ~16:00-17:00 CT. The cutoff
-  # below is set to the very end of the daily window so we still respect the
-  # Globex daily-break maintenance window but otherwise trade all hours.
+  # through Fri 16:00 CT with brief daily break ~16:00-17:00 CT.
   no_new_positions_after_local_time: "15:55"   # America/Chicago — only blocks the last 5 min before daily Globex maintenance break
   pause_around_high_impact_events: true

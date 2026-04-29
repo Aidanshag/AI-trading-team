@@ -41,12 +41,14 @@ agents:
   # Futures analysts — Haiku default; CIO escalates specific asks to Sonnet.
   analyst_energies:    cheap
   analyst_metals:      cheap
-  analyst_grains:      cheap
-  analyst_softs:       cheap
-  analyst_livestock:   cheap
+  analyst_ag:          cheap          # merged Grains + Livestock (2026-04-29)
   analyst_rates:       cheap
   analyst_fx_futures:  cheap
   analyst_index_macro: cheap
+  # Retired 2026-04-29 (Topstep cleanup):
+  #  - analyst_softs    — KC/CT/SB/CC/OJ/LBR are ICE-listed, not Topstep
+  #  - analyst_grains   — merged into analyst_ag
+  #  - analyst_livestock — merged into analyst_ag (only LE/HE remain)
 
   # Equities desk — RETIRED 2026-04-27. Equities not trading on Topstep
   # (Combine is futures-only). When equities activate, recreate a leaner
