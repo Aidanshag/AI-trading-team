@@ -6,9 +6,13 @@ description: Autonomous improvement cycle — audit the fund, propose ONE improv
 
 You are running an autonomous improvement cycle on the AI trading fund. **You operate in propose-only mode by default.** Do not merge changes to main without an explicit instruction in the prompt.
 
+## Top priority — read first
+
+**`vault/_meta/current_goal.md`** is the team's #1 directive. Right now: pass the $50K Topstep Combine. Above everything. Every improvement you propose should be evaluated against: *"does this move the fund closer to passing the Combine?"* Improvements that don't are deferred until after the Combine is passed.
+
 ## Goal
 
-Pick ONE high-leverage improvement, implement it in an isolated git worktree, run all tests, and post a clean diff + summary back. Don't try to fix everything in one cycle — one focused change, fully tested.
+Pick ONE high-leverage improvement (Combine-relevant first), implement it in an isolated git worktree, run all tests, and post a clean diff + summary back. Don't try to fix everything in one cycle — one focused change, fully tested.
 
 ## Step 1 — Read the backlog
 

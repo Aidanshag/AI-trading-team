@@ -1,6 +1,16 @@
 # Top-level fund toggles that don't fit elsewhere.
 # Kept small; most config lives in the specialized files.
 
+# ── CURRENT PHASE — the single goal driving every decision ──
+# Phase: combine | maintain | funded
+#   combine  → pass the $50K Combine ($3K cumulative, no DLL/TDD breach,
+#              ≥5 days, no day > 50% consistency). All other goals deferred.
+#              ← THIS IS THE CURRENT PHASE.
+#   maintain → after passing, hold $3K+ for 5 trading days before withdrawal.
+#   funded   → live funded account, monthly NET P&L is the KPI.
+# Source of truth canon: vault/_meta/current_goal.md
+current_phase: combine
+
 # ── Idle-work mode ──────────────────────────────────────────
 # When true, agents with nothing live to do pull from the idle backlog at
 # vault/_meta/idle_backlog.md. Expands the brain autonomously while the
