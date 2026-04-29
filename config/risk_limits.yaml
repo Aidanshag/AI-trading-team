@@ -43,6 +43,11 @@ account:
   trailing_drawdown_usd: 2000     # TDD; follows highest account balance (EOD)
   max_open_contracts_total: 5     # $50K tier max; start lower while scaling
   consistency_cap_pct: 0.50       # no single day > 50% of total profit to date
+  profit_target_usd: 3000         # $3,000 cumulative profit = Combine pass eligibility
+  # Once profit_target_usd is reached, switch to MAINTAIN MODE: only defensive
+  # / closing trades, no new entries that risk more than 25% of accumulated
+  # buffer. The team's job after hitting $3K is to NOT GIVE IT BACK.
+  maintain_after_target: true
 
   # ── Firm-wide percentage rule (applies in addition) ─────────
   daily_loss_limit_pct: 0.02      # 2% of equity. On $50K = $1000. Aligns w/Topstep.
@@ -406,6 +411,26 @@ combine_pacing:
   daily_soft_target_usd:  200    # +$200: log advisory; sizing tightens
   daily_hard_target_usd:  400    # +$400: BLOCK new entries; manage book only
   partial_giveback_pct:   0.40   # if peak +$300 then back to +$180 → lockdown
+
+  # ── CONSISTENCY TARGET (Topstep 50% rule, encoded as a daily ceiling) ──
+  # The consistency rule says no single day's P&L can exceed 50% of total
+  # profit-to-date at submission. Operationally that means each day should
+  # cap at ~50% of the daily_hard_target — giving the next day room to be
+  # a comparable contributor.
+  # 50% of $400 daily_hard_target = $200. After +$200 in any single day,
+  # treat further wins as "consistency-protective surplus" — log them but
+  # tighten new entries to defensive only. This caps a SINGLE great day
+  # from forcing a string of $400 days to satisfy the 50% rule at submission.
+  consistency_daily_ceiling_usd: 200    # 50% of daily_hard_target
+
+  # ── PROFIT TARGET MAINTAIN MODE ──
+  # Once cumulative profit ≥ account.profit_target_usd ($3,000):
+  #   - No new entries that risk more than 25% of the buffer above target
+  #   - Existing positions are managed (stops/targets) but not added to
+  #   - Each day's loss tolerance halves
+  # The job after $3K is preserving the result, not adding to it.
+  maintain_mode_per_trade_buffer_pct: 0.25
+  maintain_mode_dll_halving:           true
 
 # ============================================================
 # ANTI-TILT (added 2026-04-29)

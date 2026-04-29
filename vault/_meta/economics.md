@@ -36,6 +36,27 @@ That's **~$20 per trading day** before a single trade. **A flat day is a -$20 da
 | Comfortable | $1,725 | $40/day net profit. Pays for itself + buys time. |
 | Combine pass + payout | $3,000+ | Hits the Topstep target, eligible for funded account. |
 
+## Topstep Combine targets (the single goal)
+
+| Target | Value | Source |
+|---|---|---|
+| **Profit target** | **$3,000** cumulative | Topstep $50K Combine; once hit, MAINTAIN it (don't give back) |
+| **Consistency target** | each day ≤ 50% of daily hard target = **$200/day** | Topstep 50% rule + firm-imposed protective ceiling |
+| **DLL** | -$1,000/day | Topstep — broker hard rule |
+| **Internal soft DLL** | -$250/day (post-incident) / -$500 normal | firm-imposed |
+| **TDD** | $2,000 from peak EOD balance | Topstep — broker hard rule |
+
+**The two-phase mental model:**
+- **Phase 1 — Climb to $3,000.** Win small, win consistently. Cap each day at ~$200 net to satisfy the 50% rule by submission. Don't chase $3K in a week.
+- **Phase 2 — Maintain $3,000.** Once cumulative profit ≥ $3,000, switch to MAINTAIN MODE. Only defensive trades that risk ≤25% of the buffer above target. The job is now preservation, not accumulation. **Most Combines are lost in this phase, not in Phase 1.**
+
+These are encoded in `risk_limits.yaml`:
+- `account.profit_target_usd: 3000`
+- `account.maintain_after_target: true`
+- `combine_pacing.consistency_daily_ceiling_usd: 200`
+- `combine_pacing.maintain_mode_per_trade_buffer_pct: 0.25`
+- `combine_pacing.maintain_mode_dll_halving: true`
+
 ## The math every team member must internalize
 
 ### Per-trade economics
