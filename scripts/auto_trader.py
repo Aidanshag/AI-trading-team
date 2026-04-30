@@ -576,6 +576,30 @@ def _count_open_positions(client, account_id) -> int:
     return sum(1 for p in positions if int(p.get("size") or 0) != 0)
 
 
+def _refresh_calendar_if_stale() -> None:
+    """Self-heal: rebuild vault/economic_calendar/today.json if missing or
+    >6h old. Runs at the top of each scan so the high-impact blackout
+    check has fresh data without needing a separate cron job.
+
+    No-op on failure — the staleness warn in the risk hook already surfaces
+    the issue if this can't refresh.
+    """
+    try:
+        cal = Path("vault/economic_calendar/today.json")
+        needs_refresh = True
+        if cal.exists():
+            age_h = (datetime.now(tz=timezone.utc).timestamp() - cal.stat().st_mtime) / 3600
+            needs_refresh = age_h > 6
+        if needs_refresh:
+            import subprocess as _sp
+            _sp.run(
+                [sys.executable, "-m", "scripts.build_economic_calendar"],
+                capture_output=True, timeout=30, check=False,
+            )
+    except Exception:
+        pass
+
+
 def _in_thin_tape_window() -> tuple[bool, str]:
     """True if current ET time falls inside the thin_tape regime window.
 
@@ -883,6 +907,9 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
     # P&L-aware risk checks have data. Critical: auto_trader runs separately
     # from the orchestrator and the table goes empty otherwise. Failures
     # log + continue (better partial enforcement than zero enforcement).
+    # Self-heal economic calendar (rebuild if missing or >6h old)
+    _refresh_calendar_if_stale()
+
     snap_result = _capture_account_snapshot(client, account_id)
 
     # Step −0.95: LOSS ALERTS — fire push notifications on threshold crosses.

@@ -1,14 +1,24 @@
 [
   {
-    "ts_utc": "2026-04-29T14:30:00Z",
+    "ts_utc": "2026-04-30T12:30:00Z",
     "impact": "high",
-    "event": "EIA Crude Oil Inventory",
+    "event": "Initial Jobless Claims",
     "symbols_affected": [
-      "CL",
-      "MCL",
-      "QM",
-      "RB",
-      "HO"
+      "ZN",
+      "ZB",
+      "ES",
+      "MES",
+      "6E"
+    ]
+  },
+  {
+    "ts_utc": "2026-04-30T14:30:00Z",
+    "impact": "high",
+    "event": "EIA Natural Gas Storage",
+    "symbols_affected": [
+      "NG",
+      "MNG",
+      "QG"
     ]
   }
 ]
