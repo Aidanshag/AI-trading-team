@@ -17,6 +17,7 @@ state/*.db-shm
 
 logs/*.jsonl
 logs/*.log
+logs/*.pid
 
 .DS_Store
 Thumbs.db

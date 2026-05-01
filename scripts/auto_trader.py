@@ -710,6 +710,70 @@ def _engage_auto_halt(halt_until_iso: str, *, reason: str) -> None:
     )
 
 
+def _strategy_recent_streak(label: str, *, window_hours: int = 4) -> tuple[int, int]:
+    """Return (consecutive_losers, total_in_window) for a strategy.
+
+    A 'loser' is a thesis whose subsequent stop_hit_observed event landed
+    within window_hours of the thesis. We walk most-recent-first; the
+    streak count grows while events are losers, breaks on first non-loser.
+
+    Used by the auto-demote rule: 5 consecutive losers in 4h → suspend
+    the strategy for the rest of the session.
+    """
+    db = get_db()
+    cutoff = (datetime.now(tz=timezone.utc) - timedelta(hours=window_hours)
+              ).isoformat(timespec="seconds")
+    # Get theses for this strategy (matched via summary LIKE — strategy
+    # name is in the rationale field too, but summary is more reliable).
+    rows = db.connect().execute(
+        """SELECT ts, symbol FROM decisions
+           WHERE agent='auto_trader' AND kind='thesis'
+             AND summary LIKE ? AND ts >= ?
+           ORDER BY ts DESC""",
+        (f"%{label}%", cutoff),
+    ).fetchall()
+    if not rows:
+        return 0, 0
+    streak = 0
+    total = len(rows)
+    # For each thesis (newest first), did a stop_hit_observed for that
+    # symbol fire within the next 60 minutes?
+    for r in rows:
+        thesis_ts = r["ts"]
+        sym = r["symbol"]
+        try:
+            t = datetime.fromisoformat(str(thesis_ts).replace("Z", "+00:00"))
+        except Exception:
+            break
+        end = (t + timedelta(minutes=60)).isoformat(timespec="seconds")
+        hit = db.connect().execute(
+            "SELECT 1 FROM risk_events WHERE rule='stop_hit_observed' "
+            "  AND ts > ? AND ts < ? "
+            "  AND detail LIKE ? LIMIT 1",
+            (thesis_ts, end, f'%"{sym}"%' if sym else '%'),
+        ).fetchone()
+        if hit:
+            streak += 1
+        else:
+            break
+    return streak, total
+
+
+def _strategy_is_demoted(label: str) -> bool:
+    """Strategy is auto-demoted for the rest of the UTC day if it hit
+    a 5-consecutive-loser streak earlier today. Stored as risk_events
+    rule='strategy_demoted_today' so it survives across scans.
+    """
+    db = get_db()
+    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    row = db.connect().execute(
+        "SELECT 1 FROM risk_events WHERE rule='strategy_demoted_today' "
+        "  AND ts LIKE ? AND detail LIKE ? LIMIT 1",
+        (f"{today}%", f'%"strategy": "{label}"%'),
+    ).fetchone()
+    return row is not None
+
+
 def _strategy_hit_rate(label: str) -> tuple[float, int, str]:
     """Bayesian-blended hit rate for a strategy from strategy_performance.
 
@@ -1339,6 +1403,22 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
 
             # Try every strategy, first trigger wins
             for strat_fn, params, conviction, label in STRATEGY_ROSTER:
+                # AUTO-DEMOTE: if this strategy already had 5 consecutive
+                # losers today, skip it for the rest of the session.
+                # Bellafiore "Playbook" rule, applied per-strategy not per-book.
+                if _strategy_is_demoted(label):
+                    continue
+                streak, _ = _strategy_recent_streak(label, window_hours=4)
+                if streak >= 5:
+                    db.record_risk_event(
+                        severity="warn", rule="strategy_demoted_today",
+                        agent="auto_trader",
+                        detail={"strategy": label, "streak": streak,
+                                "reason": "5 consecutive losers in last 4h"},
+                    )
+                    print(f"  [{label}] DEMOTED for the rest of the day "
+                          f"({streak} consecutive losers in 4h)")
+                    continue
                 # AUTONOMOUS conviction floor: skip "low" conviction strategies
                 # under autonomous mode. Today's bleed was almost entirely
                 # low-conviction setups (vwap_reversion, support_resistance_bounce).
