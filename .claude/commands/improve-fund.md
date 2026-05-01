@@ -1,10 +1,10 @@
 ---
-description: Autonomous improvement cycle — audit the fund, propose ONE improvement, test in worktree, report
+description: Autonomous improvement cycle — audit, implement, test, AUTO-MERGE non-risky changes
 ---
 
 # /improve-fund
 
-You are running an autonomous improvement cycle on the AI trading fund. **You operate in propose-only mode by default.** Do not merge changes to main without an explicit instruction in the prompt.
+You are running an autonomous improvement cycle on the AI trading fund. **AUTO-MERGE MODE: as of 2026-04-30 user authorized direct merges to master for non-risky changes.** Do not wait for human review on changes that don't touch the high-risk file blocklist.
 
 ## Top priority — read first
 
@@ -44,18 +44,38 @@ Use the Agent tool with `isolation: "worktree"` to do the implementation in a fr
 5. Run `python -m scripts.preflight` — must still produce a sensible result (not a regression)
 6. Return a summary including: files changed (count + list), test result, lines added/removed
 
-## Step 4 — Report
+## Step 4 — Decide: auto-merge or propose
 
-Post a structured summary:
-- What was attempted
-- Whether tests pass
-- The diff stat
-- Whether you recommend merging (default: NO; user reviews)
-- Any unexpected things found in the audit
+**Auto-merge if ALL of:**
+- Tests pass (no regressions)
+- Files changed are NOT in the HIGH_RISK_FILES list (below)
+- The change reduces risk, fixes a bug, or improves NET monthly P&L by a clear mechanism
+- Change size < 200 lines
+
+If auto-merge → commit to master, push. PR not needed.
+If propose-only → push branch, open PR via `gh pr create`, await user review.
+
+### HIGH_RISK_FILES (always propose-only; never auto-merge)
+- `hooks/risk_gate.py` — the safety hook itself
+- `state/db.py` — persistence layer
+- `state/schema.sql` — schema (migrations need care)
+- `runtime/orchestrator.py` — agent orchestration core
+- `tools/projectx_client.py`, `tools/topstep.py` — broker code
+- `risk_limits.yaml` `hard_rules` section (the kill switches)
+- Anything in `.env*` or `.git*` (config/permissions)
+
+### LOW_RISK_FILES (auto-merge OK)
+- `vault/**` — docs, lessons, principles, backlog
+- `agents/**` — agent prompts (text-only)
+- `tests/**` — adding tests
+- `config/*.yaml` non-hard-rule sections (tuning)
+- `scripts/**` — new scripts or improvements to existing ones
+- `.claude/commands/**` — slash command definitions
+- `tools/strategy_performance.py` and other non-broker tools
 
 ## Step 5 — Update the backlog
 
-Mark the item `proposed` (NOT merged) with a pointer to the worktree branch. The user merges manually after review.
+Mark the item `merged` (with the commit SHA) on auto-merge, or `proposed` (with PR link) on propose-only.
 
 **You have explicit authorization to edit `vault/_meta/improvement_backlog.md` directly** — both updating status fields on existing items and appending newly-discovered items. Do not ask permission for these edits; they're part of the cycle. (See `.claude/settings.json` allowlist.)
 
