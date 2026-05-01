@@ -22,6 +22,8 @@ Checks (in order):
   6. Test suite is 100% green
   7. Risk hook returns SOMETHING for a synthetic order (not silently
      no-op'ing) — proves all checks are actually wired
+  8. Agent CLI (claude.exe) is launchable — advisory WARN only, since
+     the auto_trader doesn't depend on the CLI; agent chain does.
 """
 from __future__ import annotations
 
@@ -183,6 +185,41 @@ def check_tests() -> bool:
         return False
 
 
+def check_agent_cli() -> bool:
+    """Verify claude.exe is reachable and launches. Advisory only — auto_trader
+    doesn't need the CLI, but the agent chain (CIO/Quant/Edge) does. WARN
+    rather than FAIL so a missing CLI doesn't block the deterministic trader."""
+    print("Step 8/8: agent CLI launchability")
+    try:
+        from runtime.orchestrator import _resolve_cli_path
+        cli_path = os.environ.get("FUND_CLAUDE_CLI_PATH") or _resolve_cli_path()
+        if not cli_path:
+            _warn("no Claude CLI found; agent chain (CIO/Quant/Edge) will fail. "
+                  "Set FUND_CLAUDE_CLI_PATH or `npm i -g @anthropic-ai/claude-code`. "
+                  "Auto-trader is unaffected.")
+            return True
+        result = subprocess.run(
+            [cli_path, "--version"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            _warn(f"CLI at {cli_path} returned exit {result.returncode}: "
+                  f"{result.stderr.strip()[:200]}. Agent chain may fail; "
+                  f"auto-trader unaffected.")
+            return True
+        version = result.stdout.strip().split()[0] if result.stdout.strip() else "?"
+        _ok(f"agent CLI launchable: {version} ({cli_path})")
+        return True
+    except subprocess.TimeoutExpired:
+        _warn(f"CLI at {cli_path} hung > 10s on --version. Agent chain may fail; "
+              f"auto-trader unaffected.")
+        return True
+    except Exception as e:
+        _warn(f"agent CLI check error ({type(e).__name__}: {e}); "
+              f"auto-trader unaffected.")
+        return True
+
+
 def check_risk_gate_wired() -> bool:
     """Submit a synthetic order to apply_risk_gate and confirm the kill_switch
     check actually ran — sanity that the hook isn't silently no-op'ing."""
@@ -219,6 +256,7 @@ def main() -> int:
     checks.append(check_snapshot_writer())
     checks.append(check_tests())
     checks.append(check_risk_gate_wired())
+    checks.append(check_agent_cli())
     print()
     if all(checks):
         print(f"{GREEN}=== All preflight checks passed. Cleared to start session. ==={END}\n")
