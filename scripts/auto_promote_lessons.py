@@ -137,11 +137,60 @@ def main() -> int:
         print("(dry-run; not writing)")
         return 0
 
-    cfg.setdefault("strategy_blacklist", []).extend(new_entries)
-    RISK_LIMITS.write_text(yaml.safe_dump(cfg, sort_keys=False),
-                           encoding="utf-8")
+    # Targeted text-only edit. Why not yaml.safe_dump:
+    # safe_dump strips ALL comments from the file, destroying hand-curated
+    # explanations across hundreds of lines. Same lesson the halt.py script
+    # encoded after a 2026-04-29 incident. Here we INSERT rows under the
+    # existing `strategy_blacklist:` key; if it doesn't exist we append it.
+    text = RISK_LIMITS.read_text(encoding="utf-8")
+    new_lines = []
+    for e in new_entries:
+        # Match the inline-flow style already in use:
+        # - { symbol: ZN, strategy: opening_range_breakout, reason: "..." }
+        new_lines.append(
+            f'  - {{ symbol: {e["symbol"]}, strategy: {e["strategy"]}, '
+            f'reason: "{e["reason"]}" }}'
+        )
+
+    if "strategy_blacklist:" in text:
+        lines = text.split("\n")
+        out = []
+        inserted = False
+        for line in lines:
+            # Case 1: `strategy_blacklist:` followed by a block (indented `-`).
+            # Insert new entries right after the key line.
+            if not inserted and re.match(r"^strategy_blacklist:\s*$", line):
+                out.append(line)
+                out.extend(new_lines)
+                inserted = True
+                continue
+            # Case 2: `strategy_blacklist: []` (inline empty list). Convert
+            # to block-style with the new entries.
+            m = re.match(r"^(\s*strategy_blacklist:)\s*\[\s*\]\s*(#.*)?$", line)
+            if not inserted and m:
+                indent_key = m.group(1)
+                trailing = m.group(2) or ""
+                out.append(indent_key + (f"  {trailing}" if trailing else ""))
+                out.extend(new_lines)
+                inserted = True
+                continue
+            out.append(line)
+        if not inserted:
+            # `strategy_blacklist:` was on the same line as some other value
+            # we don't recognize. Bail out rather than corrupt.
+            import sys as _sys
+            print("ERROR: strategy_blacklist line shape unrecognized; "
+                  "skipping write so we don't corrupt the file.",
+                  file=_sys.stderr)
+            return 3
+        new_text = "\n".join(out)
+    else:
+        # Append a new section at end of file.
+        new_text = text.rstrip() + "\n\n# ---- Auto-promoted from lessons -----\nstrategy_blacklist:\n" + "\n".join(new_lines) + "\n"
+
+    RISK_LIMITS.write_text(new_text, encoding="utf-8")
     if not args.quiet:
-        print(f"[auto_promote] wrote {RISK_LIMITS}")
+        print(f"[auto_promote] wrote {RISK_LIMITS} (comments preserved)")
     return 0
 
 

@@ -53,11 +53,13 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Files: `agents/cio.md` (prompt update), `scripts/_session_brief.py` (if it exists), or new helper
   Acceptance: every CIO session brief opens with "MTD: gross +$X, fees -$Y, API -$Z, net +$W"
 
-- [P2] [effort: 20min] [risk: low] [status: open]
-  **Lessons → strategy_blacklist auto-promotion**
-  Why: when a `vault/lessons/*.md` is tagged `confidence: RULE`, suggest a `strategy_blacklist` entry during weekly review
-  Files: `scripts/auto_promote_lessons.py` (already exists — extend?)
-  Acceptance: weekly review surfaces RULE-tier lessons not yet in `risk_limits.yaml:strategy_blacklist`
+- [P2] [effort: 20min] [risk: low] [status: merged 2026-05-01]
+  **Lessons → strategy_blacklist auto-promotion** — DONE
+  Script existed but used yaml.safe_dump which strips comments (same bug
+  fixed in halt.py). Replaced with targeted text-only edit. Two tests
+  added (`tests/test_auto_promote_lessons.py`) — comment preservation +
+  idempotency. RULE-tier lessons now auto-encode without destroying the
+  hand-curated explanations in risk_limits.yaml.
 
 - [P2] [effort: 45min] [risk: medium] [status: open]
   **Regime classifier (live vol/volume metric)**
@@ -65,11 +67,11 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Files: new `tools/regime_classifier.py`, plumb into auto_trader
   Acceptance: regime_classifier.current_regime() returns one of {trending, choppy, event, thin}; auto_trader respects it
 
-- [P2] [effort: 30min] [risk: low] [status: open]
-  **`fund halt` and `fund resume` CLI commands**
-  Why: single-keystroke local kill switch. Sets/clears `trading_halt_until` from a shell command
-  Files: `scripts/fund.ps1`, possibly new `scripts/halt.py` and `scripts/resume.py`
-  Acceptance: `fund halt 4h` sets halt 4 hours forward; `fund resume` sets to past timestamp
+- [P2] [effort: 30min] [risk: low] [status: merged 2026-04-30]
+  **`fund halt` and `fund resume` CLI commands** — DONE
+  Implemented `scripts/halt.py` with `4h` / `30m` / `next-open` / `clear` /
+  `status` subcommands. Targeted text-edit (preserves YAML comments).
+  Wired into `fund.ps1` as `fund halt` and `fund resume` verbs.
 
 ## P3 — long-term
 
@@ -87,11 +89,12 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Acceptance: a `validated_after: YYYY-MM-DD` field on each strategy gates whether it can fire live or only shadow
   Auto-merge: false
 
-- [P3] [effort: 60min] [risk: low] [status: open]
-  **Documentation: CLAUDE.md update with new config blocks**
-  Why: the new sections (regime_gates, cost_discipline, autonomous_restrictions) need top-level documentation so future Claude sessions discover them
-  Files: `CLAUDE.md` (or create), `vault/_meta/team.md`
-  Acceptance: a `## Risk floor architecture` section in CLAUDE.md explains the major config knobs
+- [P3] [effort: 60min] [risk: low] [status: merged 2026-04-30]
+  **Documentation: CLAUDE.md update with new config blocks** — DONE
+  Created `CLAUDE.md` at project root with: top-level orientation, read-first
+  order, layout map, full risk-floor architecture (all 23 hook checks listed),
+  two-trading-paths note, operational scripts, autonomous infra, recent
+  history. New Claude sessions discover this on attach.
 
 ---
 
