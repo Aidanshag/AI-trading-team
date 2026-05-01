@@ -894,6 +894,67 @@ def _today_total_trade_count() -> int:
     return int(row[0] or 0) if row else 0
 
 
+def _trade_urgency_level() -> tuple[int, dict]:
+    """How many tiers of marginal-gate relaxation this scan should apply.
+
+    Returns (level, info_dict). Level > 0 ONLY when ALL of:
+      * autonomous_mode is True
+      * zero trades have been placed today
+      * now is INSIDE the configured RTH window
+      * sufficient session time has elapsed without a trade
+
+    Levels:
+      0  baseline (autonomous strict floors apply unmodified)
+      1  60+ min into RTH with no trades  -- relax marginal gates by one notch
+      2  120+ min into RTH with no trades -- relax marginal gates by two notches
+
+    ABSOLUTE safety floors are NEVER relaxed by this:
+      * internal_dll_target_usd, daily_loss_limit_usd, trailing_drawdown_usd
+      * max_trades_per_day, max_concurrent_positions, daily_fee_budget_usd
+      * no_naked_shorts, broker_can_trade, snapshot_freshness
+      * all 14 hook-layer checks in apply_risk_gate
+    Only rr_floor and EV gate min_expected_net relax, and each has an
+    absolute floor at its standard (non-autonomous) value (2.0 and $5).
+
+    Rationale: every no-trade day costs ~$26 in subscription drag (see
+    vault/_meta/economics.md). Without an opposing pressure for activity,
+    the gate stack treats no-trade days as success even though they're
+    losses against the cost meter. Bounded, time-decayed urgency lets
+    marginal-but-still-positive-EV trades through during dry sessions.
+    """
+    fund_cfg = _load_yaml("fund.yaml")
+    if not bool(fund_cfg.get("autonomous_mode", False)):
+        return 0, {"reason": "not_autonomous"}
+
+    if _today_total_trade_count() > 0:
+        return 0, {"reason": "already_traded_today"}
+
+    rules = fund_cfg.get("autonomous_restrictions") or {}
+    if not rules.get("rth_only"):
+        return 0, {"reason": "rth_only_off"}
+    try:
+        sh, sm = (int(x) for x in str(rules.get("rth_start_et", "07:30")).split(":"))
+        eh, em = (int(x) for x in str(rules.get("rth_end_et", "14:30")).split(":"))
+    except Exception:
+        return 0, {"reason": "rth_parse_error"}
+
+    from zoneinfo import ZoneInfo as _ZI
+    et_now = datetime.now(tz=_ZI("America/New_York"))
+    now_min = et_now.hour * 60 + et_now.minute
+    rth_open_min = sh * 60 + sm
+    rth_close_min = eh * 60 + em
+
+    if not (rth_open_min <= now_min < rth_close_min):
+        return 0, {"reason": "outside_rth"}
+
+    minutes_in = now_min - rth_open_min
+    if minutes_in < 60:
+        return 0, {"minutes_into_rth": minutes_in}
+    if minutes_in < 120:
+        return 1, {"minutes_into_rth": minutes_in}
+    return 2, {"minutes_into_rth": minutes_in}
+
+
 def _recent_thesis_in_db(symbol: str, minutes: int = 30) -> bool:
     """True if auto_trader recorded a thesis for this symbol in the last N min.
     Prevents re-firing the same setup on every consecutive 5-min scan."""
@@ -1242,10 +1303,26 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 "trades_today": today_trades, "cap": daily_count_cap}
 
     universe = load_focus_universe()
-    # Show ET (Eastern Time) for human readability — DB still stores UTC
+    # Show ET (Eastern Time) for human readability -- DB still stores UTC
     from zoneinfo import ZoneInfo
     _et = datetime.now(tz=ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S ET")
     print(f"[{_et}] scanning {len(universe)} symbols: {universe}")
+
+    # OPPORTUNITY-COST awareness: when autonomous + zero trades today + N min
+    # into RTH, gradually relax marginal gates (rr_floor, EV min) toward the
+    # standard (non-autonomous) floors. Hard safety floors (DLL, TDD, max
+    # trades, fee budget, hook-layer) are never touched. See
+    # _trade_urgency_level() docstring.
+    urgency_level, urgency_info = _trade_urgency_level()
+    if urgency_level > 0:
+        print(f"  TRADE-URGENCY level={urgency_level} "
+              f"({urgency_info.get('minutes_into_rth')} min into RTH, 0 trades). "
+              f"rr_floor and EV-min are relaxed; safety floors unchanged.")
+        db.record_risk_event(
+            severity="info", rule="trade_urgency_relaxation",
+            agent="auto_trader",
+            detail={"level": urgency_level, **urgency_info},
+        )
 
     summary = {"scanned": 0, "triggers": 0, "blocked": 0, "placed": 0,
                "skipped_already_in_trade": 0, "skipped_recent_thesis": 0,
@@ -1447,10 +1524,15 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 if signal["stop"] is None:
                     continue  # need a stop to trade
 
-                # R:R floor check — autonomous mode lifts the floor higher
+                # R:R floor: start from conviction floor (2.0 for med),
+                # autonomous tightens via override (2.5), urgency relaxes
+                # back toward conviction floor (0.2 per level, never below
+                # the conviction floor itself).
                 rr_floor = CONVICTION_RR_FLOOR.get(conviction, 2.0)
                 if autonomous and autonomous_rules.get("rr_floor_override"):
-                    rr_floor = max(rr_floor, float(autonomous_rules["rr_floor_override"]))
+                    autonomous_rr = float(autonomous_rules["rr_floor_override"])
+                    rr_floor = max(rr_floor,
+                                   autonomous_rr - urgency_level * 0.2)
                 if signal["target"]:
                     risk = abs(signal["price"] - signal["stop"])
                     reward = abs(signal["target"] - signal["price"])
@@ -1466,9 +1548,14 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 # Energies/metals tolerate 5.
                 min_stop_ticks = _min_stop_ticks_for(symbol)
                 stop_dist_ticks = abs(signal["price"] - signal["stop"]) / tick
-                if stop_dist_ticks < min_stop_ticks:
+                # Tolerate floating-point noise: a 5.0-tick stop computed as
+                # 4.9999... should not be rejected against a 5-tick floor.
+                # Caught 2026-05-01: 6E narrow_range_break stop at 4.99 ticks
+                # was being rejected against the energies-sector min of 5.
+                FP_TOLERANCE = 1e-3
+                if stop_dist_ticks < min_stop_ticks - FP_TOLERANCE:
                     print(f"  {symbol} [{tf_minutes}m] {label} | "
-                          f"SKIP - stop too tight ({stop_dist_ticks:.1f} ticks "
+                          f"SKIP - stop too tight ({stop_dist_ticks:.2f} ticks "
                           f"< sector min {min_stop_ticks})")
                     summary["skipped_stop_too_tight"] = (
                         summary.get("skipped_stop_too_tight", 0) + 1)
@@ -1512,10 +1599,12 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                     expected_net = (hit_rate * reward_usd
                                     - (1 - hit_rate) * risk_usd
                                     - fee)
-                    min_expected_net = 5.0   # $5 NET per trade minimum
-                    # Tighter under autonomous mode: $10 floor
+                    min_expected_net = 5.0   # standard $5 NET per trade floor
                     if autonomous:
-                        min_expected_net = 10.0
+                        # Autonomous tightens to $10; urgency relaxes by $2
+                        # per level, never below the standard $5 floor.
+                        min_expected_net = max(5.0,
+                                               10.0 - urgency_level * 2.0)
                     if expected_net < min_expected_net:
                         print(f"  {symbol} [{tf_minutes}m] {label} | "
                               f"EV-SKIP: expected_net ${expected_net:.2f} < "
