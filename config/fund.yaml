@@ -54,7 +54,7 @@ autonomous_restrictions:
   # WINDOW — RTH only. Today's loss happened entirely 23:30-03:00 ET.
   rth_only:        true
   rth_start_et:    "07:30"      # 30 min after 07:00 ET cash futures action
-  rth_end_et:      "14:30"      # 30 min before 15:00 ET cash close
+  rth_end_et:      "15:30"      # extended 2026-05-01 (Option A): +1h post-lunch trend tail; still 30m before 16:00 ET equity close to avoid gamma flush
 
   # DAILY CAPS (override values from risk_limits.yaml.account):
   internal_dll_target_usd:    250    # halved from $500 supervised
