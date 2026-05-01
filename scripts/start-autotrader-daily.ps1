@@ -24,6 +24,13 @@ $Python  = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $LogDir  = Join-Path $ProjectRoot "logs"
 $LogFile = Join-Path $LogDir ("autotrader_" + (Get-Date -Format "yyyyMMdd") + ".log")
 
+# Force Python's default file encoding to UTF-8. Without this, `read_text()`
+# without an explicit encoding falls back to Windows cp1252 and crashes on
+# any non-ASCII char in YAML configs (e.g. the em-dashes / arrows in
+# config/fund.yaml comments). Caught 2026-05-01 when the auto_trader died on
+# its first scan with UnicodeDecodeError at byte 391 of fund.yaml.
+$env:PYTHONUTF8 = "1"
+
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
 
 # Load .env
@@ -51,6 +58,7 @@ if ($LASTEXITCODE -ne 0) {
 $psCmd = @'
 $Host.UI.RawUI.WindowTitle = 'Fund Auto-Trader (auto-started)'
 Set-Location 'PROJECT_ROOT_PLACEHOLDER'
+$env:PYTHONUTF8 = '1'
 Get-Content '.env' | ForEach-Object {
     if ($_ -match '^\s*([A-Z_]+)\s*=\s*(.+)$') {
         [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim(), 'Process')
