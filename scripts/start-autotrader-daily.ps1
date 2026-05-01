@@ -1,4 +1,4 @@
-# Daily auto_trader launcher — invoked by the FundAutoTraderDaily scheduled task.
+# Daily auto_trader launcher -- invoked by the FundAutoTraderDaily scheduled task.
 #
 # 1. Loads .env into process env
 # 2. Runs preflight; aborts if any check fails (canTrade=false, snapshot
@@ -47,10 +47,10 @@ if (Test-Path ".\.env") {
 $preflight = & $Python -m scripts.preflight 2>&1
 $preflight | Out-File $LogFile -Append -Encoding utf8
 if ($LASTEXITCODE -ne 0) {
-    "$(Get-Date -Format o) preflight FAILED — aborting auto_trader launch" | Out-File $LogFile -Append -Encoding utf8
+    "$(Get-Date -Format o) preflight FAILED -- aborting auto_trader launch" | Out-File $LogFile -Append -Encoding utf8
     exit 1
 }
-"$(Get-Date -Format o) preflight OK — launching auto_trader" | Out-File $LogFile -Append -Encoding utf8
+"$(Get-Date -Format o) preflight OK -- launching auto_trader" | Out-File $LogFile -Append -Encoding utf8
 
 # Launch auto_trader in a new visible PowerShell window. The user can see it
 # live if they're at the keyboard; otherwise it logs to autotrader_<date>.log
@@ -59,12 +59,13 @@ $psCmd = @'
 $Host.UI.RawUI.WindowTitle = 'Fund Auto-Trader (auto-started)'
 Set-Location 'PROJECT_ROOT_PLACEHOLDER'
 $env:PYTHONUTF8 = '1'
+$env:PYTHONUNBUFFERED = '1'
 Get-Content '.env' | ForEach-Object {
     if ($_ -match '^\s*([A-Z_]+)\s*=\s*(.+)$') {
         [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim(), 'Process')
     }
 }
-& 'PYTHON_PATH_PLACEHOLDER' -m scripts.auto_trader --interval-minutes 5 2>&1 | Tee-Object -FilePath 'LOG_FILE_PLACEHOLDER' -Append
+& 'PYTHON_PATH_PLACEHOLDER' -u -m scripts.auto_trader --interval-minutes 5 2>&1 | Tee-Object -FilePath 'LOG_FILE_PLACEHOLDER' -Append
 Read-Host 'Auto-trader exited. Press Enter to close this window'
 '@
 $psCmd = $psCmd.Replace('PROJECT_ROOT_PLACEHOLDER', $ProjectRoot)

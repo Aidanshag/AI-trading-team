@@ -1385,33 +1385,17 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
             summary["skipped_recent_thesis"] += 1
             continue
 
-        # PRE-SCAN: detect direction conflicts between 5m and 15m. If the
-        # two timeframes disagree on direction, BOTH are skipped — this is
-        # a noisy market and our triggers are not reliable here. This
-        # eliminates the circular-trade pattern where 5m said long, 15m
-        # said short, both placed, both stopped.
-        try:
-            bars_5 = fetch_bars(client, symbol, minutes=5, lookback=120)
-            bars_15 = fetch_bars(client, symbol, minutes=15, lookback=120)
-            sig_5 = sig_15 = None
-            if bars_5 is not None and len(bars_5) >= 30:
-                for sf, p, _, _ in STRATEGY_ROSTER:
-                    s = find_latest_signal(bars_5, sf, **p)
-                    if s and s.get("stop") is not None:
-                        sig_5 = s; break
-            if bars_15 is not None and len(bars_15) >= 30:
-                for sf, p, _, _ in STRATEGY_ROSTER:
-                    s = find_latest_signal(bars_15, sf, **p)
-                    if s and s.get("stop") is not None:
-                        sig_15 = s; break
-            if (sig_5 and sig_15
-                    and sig_5["side"] != sig_15["side"]):
-                print(f"  {symbol:5s}  SKIP - direction conflict (5m={sig_5['side']}, 15m={sig_15['side']})")
-                summary["skipped_direction_conflict"] = (
-                    summary.get("skipped_direction_conflict", 0) + 1)
-                continue
-        except Exception:
-            pass  # if pre-scan fails, fall through to normal flow
+        # NOTE: The 5m-vs-15m "direction conflict" pre-scan was removed
+        # 2026-05-01 because it was using the FIRST matching strategy from a
+        # roster of 18 on each timeframe and skipping the whole symbol if
+        # those two coin-flips disagreed. Different strategies on different
+        # timeframes disagree by design (mean-reversion vs trend), so this
+        # filter rejected ~60% of the focus universe on every scan with no
+        # empirical justification. Audit on 2026-05-01: zero trades placed
+        # since the safety floor went in (4-30 + 5-1) was driven primarily
+        # by this gate. The gate cascade below (EV, RR, min_reward, min_stop,
+        # fee, plus the hook-layer 23 checks) provides safety without this
+        # blanket pre-filter.
 
         # Try multiple timeframes (5m primary, 15m secondary).
         # IMPORTANT: only ONE entry per symbol per scan (any timeframe).
@@ -1569,19 +1553,24 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                           f"BLOCKED by {verdict['rule']}: {verdict['reason'][:80]}")
                     break  # next symbol; don't try more strategies on this one
 
-                # Cleared the gate — record the thesis and place
-                db.record_decision(
-                    agent="auto_trader", kind="thesis", symbol=symbol,
-                    summary=f"{label} {signal['side']} @ {signal['price']:.4f} "
-                            f"stop={signal['stop']:.4f} target={signal['target']}",
-                    rationale=(f"strategy={label} side={signal['side']} "
-                               f"entry={signal['price']} stop={signal['stop']} "
-                               f"target={signal['target']} conviction={conviction} "
-                               f"tf={tf_minutes}m rr_planned="
-                               f"{abs((signal['target'] or signal['price']) - signal['price'])/max(abs(signal['price']-signal['stop']),0.0001):.2f} "
-                               f"horizon=intraday reason={signal['reason']}"),
-                    model="auto_trader",
-                )
+                # Cleared the gate -- record the thesis and place. Dry-run
+                # skips the thesis write so it doesn't pollute the live
+                # cooldown via _recent_thesis_in_db (caught 2026-05-01: a
+                # dry-run diagnostic locked NG out of live trading for 45
+                # min the same session).
+                if not dry_run:
+                    db.record_decision(
+                        agent="auto_trader", kind="thesis", symbol=symbol,
+                        summary=f"{label} {signal['side']} @ {signal['price']:.4f} "
+                                f"stop={signal['stop']:.4f} target={signal['target']}",
+                        rationale=(f"strategy={label} side={signal['side']} "
+                                   f"entry={signal['price']} stop={signal['stop']} "
+                                   f"target={signal['target']} conviction={conviction} "
+                                   f"tf={tf_minutes}m rr_planned="
+                                   f"{abs((signal['target'] or signal['price']) - signal['price'])/max(abs(signal['price']-signal['stop']),0.0001):.2f} "
+                                   f"horizon=intraday reason={signal['reason']}"),
+                        model="auto_trader",
+                    )
 
                 if dry_run:
                     print(f"  {symbol} [{tf_minutes}m] {label} | "

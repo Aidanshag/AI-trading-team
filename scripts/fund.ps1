@@ -45,6 +45,17 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = "C:\Users\Owner\OneDrive\Personal AI\AI Trading"
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 
+# Force UTF-8 for Python file reads (matches start-autotrader-daily.ps1 fix
+# from 2026-05-01). Without this, scripts that read_text() YAML configs crash
+# on cp1252 default when the file contains em-dashes or arrows.
+$env:PYTHONUTF8 = "1"
+
+# Unbuffered Python stdout -- without this, `fund start` output sits in a 4KB
+# block buffer and the trader appears dead even when scanning. Caught
+# 2026-05-01 when the running trader produced no log output for 6+ minutes
+# while CPU usage showed it was alive but mid-network-call.
+$env:PYTHONUNBUFFERED = "1"
+
 if (-not (Test-Path $Python)) {
     Write-Host "ERROR: Python venv not found at $Python" -ForegroundColor Red
     exit 1
@@ -83,7 +94,7 @@ switch ($Verb.ToLower()) {
         Write-Host "Starting auto-trader (5-min scans, 45-min cooldown)..." -ForegroundColor Green
         Write-Host "Press Ctrl+C to stop. Open positions stay safe at Topstep." -ForegroundColor DarkGray
         Write-Host ""
-        & $Python -m scripts.auto_trader --interval-minutes 5
+        & $Python -u -m scripts.auto_trader --interval-minutes 5
     }
     "start-debug" {
         # 2026-04-29: zero cooldown removed after DLL breach. Use --dry-run
