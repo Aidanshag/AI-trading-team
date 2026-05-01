@@ -21,6 +21,8 @@ class EventKind(str, Enum):
     IDLE_TICK          = "idle_tick"         # off-hours tick (markets closed) — gated by idle_work_enabled
     BOOK_MONITOR_TICK  = "book_monitor_tick" # 5-min position-watcher wake (only when positions > 0)
     WEEKLY_REVIEW      = "weekly_review"     # Sunday 18:00 CT scheduled review
+    STRESS_TEST_DUE    = "stress_test_due"   # 06:00 CT daily — run portfolio stress scenarios
+    DAILY_METRICS_DUE  = "daily_metrics_due" # 17:00 CT daily — Compliance metrics sweep
 
     # Market events
     NEWS          = "news"
