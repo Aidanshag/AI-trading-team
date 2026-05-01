@@ -26,18 +26,17 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
 
 ## P1 — high (Phase 2 work)
 
-- [P1] [effort: 30min] [risk: low] [status: open]
-  **Real-time loss alerter (Discord webhook)**
-  Why: today's incident bled for 5 hours unnoticed. A push notification at -$200 day P&L would have caught it.
-  Files: new `scripts/loss_alerter.py`, hook into `runtime/orchestrator.py:tick_workflow`
-  Acceptance: when day P&L crosses -$200, a POST to `DISCORD_WEBHOOK_URL` (env var) fires once per session
-  Note: needs user to set `DISCORD_WEBHOOK_URL` in .env. Skip until that's done.
+- [P1] [effort: 30min] [risk: low] [status: merged 2026-04-30]
+  **Real-time loss alerter (Discord webhook)** — DONE
+  Implemented `scripts/loss_alerter.py` with thresholds at -$100/-$200/-$400/canTrade=false.
+  Wired into `auto_trader.scan_once` after each snapshot. `--test` flag fires synthetic alert.
+  Activates when user adds `DISCORD_WEBHOOK_URL` to .env.
 
-- [P1] [effort: 45min] [risk: low] [status: open]
-  **Per-strategy auto-demote on negative-EV streak**
-  Why: a strategy with 5 consecutive losers and negative observed EV should auto-suspend for the rest of the session, even under supervised mode
-  Files: `tools/strategy_performance.py`, `scripts/auto_trader.py`
-  Acceptance: helper `_strategy_recent_streak(label)` returns `(wins, losses)`; auto_trader skips strategies with >=5 consecutive losers in last hour
+- [P1] [effort: 45min] [risk: low] [status: merged 2026-04-30]
+  **Per-strategy auto-demote on negative-EV streak** — DONE
+  Implemented `_strategy_recent_streak` and `_strategy_is_demoted` helpers.
+  When a strategy hits 5 consecutive stop-outs in 4h, auto-suspends for the rest of UTC day
+  via `risk_events.rule='strategy_demoted_today'`.
 
 - [P1] [effort: 60min] [risk: medium] [status: open]
   **Setup confluence requirement**

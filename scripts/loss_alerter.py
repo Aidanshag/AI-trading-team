@@ -151,15 +151,47 @@ def check_and_alert(*, balance: float, day_pl: float,
 
 
 def main() -> int:
-    """CLI entry — pull latest snapshot and check thresholds.
-    Useful for testing: `python -m scripts.loss_alerter`.
-    Real-time use: call from auto_trader.scan_once after each snapshot.
+    """CLI entry.
+
+    Usage:
+        python -m scripts.loss_alerter            # check current state
+        python -m scripts.loss_alerter --test     # fire a test alert
     """
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--test", action="store_true",
+                   help="Fire a synthetic test alert to verify webhook works")
+    args = p.parse_args()
+
     from dotenv import load_dotenv
     load_dotenv()
+
+    if args.test:
+        # Synthetic alert — bypass dedup, force send
+        discord_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+        tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+        if not discord_url and not (tg_token and tg_chat):
+            print("No webhook configured. Set DISCORD_WEBHOOK_URL or "
+                  "TELEGRAM_BOT_TOKEN+TELEGRAM_CHAT_ID in .env first.")
+            return 2
+        msg = ("TEST ALERT — Trading Fund\n"
+               "If you can read this, the loss alerter is working.\n"
+               f"Time: {datetime.now(tz=timezone.utc).isoformat(timespec='seconds')}")
+        ok = True
+        if discord_url:
+            r = _post_discord(discord_url, msg)
+            print(f"  Discord: {'OK' if r else 'FAILED'}")
+            ok = ok and r
+        if tg_token and tg_chat:
+            r = _post_telegram(tg_token, tg_chat, msg)
+            print(f"  Telegram: {'OK' if r else 'FAILED'}")
+            ok = ok and r
+        return 0 if ok else 3
+
     snap = get_db().latest_account_snapshot()
     if not snap:
-        print("No snapshot — nothing to evaluate.")
+        print("No snapshot - nothing to evaluate.")
         return 1
     result = check_and_alert(
         balance=float(snap["balance_usd"]),

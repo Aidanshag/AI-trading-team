@@ -221,7 +221,30 @@ def _tick_size_for(symbol: str) -> float:
 # Quality thresholds — prevent the noise-trading that caused 35 circular
 # round-trips today. Tightened 2026-04-29 per user directive.
 MIN_STOP_TICKS = 5      # default — stops closer than 5 ticks get eaten by noise
-MIN_REWARD_USD = 30.0   # don't trade for less than $30 even if RR looks good
+MIN_REWARD_USD = 30.0   # default — don't trade for less than $30 even if RR looks good
+
+# Sector-aware MIN_REWARD_USD: full-size contracts have larger fees (~$5
+# round-trip vs ~$1.50 for micros) so they need bigger rewards to be
+# economically interesting. Index full-size also has bigger ticks; even
+# small moves are real money. 2026-04-30 enrichment.
+MIN_REWARD_USD_BY_SYMBOL = {
+    # Full-size index — $5 fees, $5-$12.50 per tick
+    "ES": 50.0, "NQ": 50.0, "RTY": 50.0, "YM": 50.0, "NKD": 50.0,
+    # Full-size energies/metals — $5 fees, can move fast
+    "CL": 50.0, "NG": 50.0, "RB": 50.0, "HO": 50.0,
+    "GC": 50.0, "SI": 50.0, "HG": 50.0, "PL": 50.0,
+    # Full-size grains/livestock — $5 fees
+    "ZC": 40.0, "ZS": 40.0, "ZW": 40.0, "ZL": 40.0, "ZM": 40.0,
+    "LE": 40.0, "HE": 40.0,
+    # Full-size FX — $5 fees, larger ticks
+    "6E": 40.0, "6B": 40.0, "6J": 40.0, "6A": 40.0, "6C": 40.0, "6S": 40.0,
+    # Rates — smaller fees ($3) but tight ticks; default is fine
+    # Micros stay at default $30 (fees ~$1.50, smaller ticks)
+}
+
+
+def _min_reward_usd_for(symbol: str) -> float:
+    return MIN_REWARD_USD_BY_SYMBOL.get(symbol, MIN_REWARD_USD)
 
 # Sector-aware MIN_STOP_TICKS: index futures have larger tick values × tighter
 # normal noise → need more ticks for the stop to survive intraday chop.
@@ -1474,10 +1497,11 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 if signal.get("target") and signal.get("price"):
                     reward_usd = (abs(signal["target"] - signal["price"])
                                   / tick * tick_value)
-                    if reward_usd < MIN_REWARD_USD:
+                    min_reward = _min_reward_usd_for(symbol)
+                    if reward_usd < min_reward:
                         print(f"  {symbol} [{tf_minutes}m] {label} | "
                               f"SKIP - reward ${reward_usd:.2f} "
-                              f"< min ${MIN_REWARD_USD}")
+                              f"< symbol min ${min_reward}")
                         summary["skipped_reward_too_small"] = (
                             summary.get("skipped_reward_too_small", 0) + 1)
                         continue
