@@ -1350,18 +1350,28 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
         try:
             broker_positions = client.get_positions(account_id)
             broker_orders = client.get_working_orders(account_id)
+            # Build position-direction map per contract (1=long, 2=short)
             with_position = set()
+            pos_dir_by_contract: dict[str, str] = {}
             for p in broker_positions:
-                if int(p.get("size") or 0) != 0:
-                    with_position.add(p.get("contractId"))
+                sz = int(p.get("size") or 0)
+                if sz == 0:
+                    continue
+                cid = p.get("contractId")
+                with_position.add(cid)
+                pos_type = int(p.get("type") or 0)
+                if pos_type == 1:
+                    pos_dir_by_contract[cid] = "long"
+                elif pos_type == 2:
+                    pos_dir_by_contract[cid] = "short"
             cancelled = 0
             stale_cancelled = 0
+            misdirected_cancelled = 0
             from datetime import datetime as _dt, timedelta as _td, timezone as _tz
             stale_cutoff = _dt.now(tz=_tz.utc) - _td(minutes=10)
             for o in broker_orders:
                 contract = o.get("contractId")
                 tag = str(o.get("customTag") or "")
-                # Only cancel auto_trader / recovery orders (never user-placed)
                 if not (tag.startswith("auto_") or tag.startswith("recovery_")):
                     continue
                 oid = o.get("id") or o.get("orderId")
@@ -1379,22 +1389,62 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                             is_stale_entry = True
                     except Exception:
                         pass
-                if not (is_orphan or is_stale_entry):
+                # (c) misdirected protective leg: a working _stop or _target
+                # tagged for an entry whose intended-side does NOT match the
+                # current position direction. This catches the OCO race where
+                # one leg fills (closing the position), then the other leg
+                # fires before the next scan and opens an UNWANTED opposite
+                # position. Caught 2026-05-01: 6E short target hit, then
+                # the still-working buy stop fired, opening an unintended
+                # long. The stop-loss-attached-to-short was now
+                # protecting nothing -- and worse, was a position-builder.
+                is_misdirected = False
+                if tag.endswith("_stop") or tag.endswith("_target"):
+                    base_tag = tag
+                    for suffix in ("_stop", "_target"):
+                        if base_tag.endswith(suffix):
+                            base_tag = base_tag[: -len(suffix)]
+                            break
+                    try:
+                        row = db.connect().execute(
+                            "SELECT side FROM orders WHERE client_order_id = ? LIMIT 1",
+                            (base_tag,),
+                        ).fetchone()
+                    except Exception:
+                        row = None
+                    if row:
+                        entry_side = (row[0] or "").lower()
+                        expected_pos = "long" if entry_side == "buy" else "short"
+                        actual_pos = pos_dir_by_contract.get(contract)
+                        if actual_pos != expected_pos:
+                            is_misdirected = True
+                if not (is_orphan or is_stale_entry or is_misdirected):
                     continue
                 try:
                     client.cancel_order(account_id, oid)
-                    if is_stale_entry:
+                    if is_misdirected:
+                        misdirected_cancelled += 1
+                        db.record_risk_event(
+                            severity="breach", rule="bracket_oco_misdirected_leg",
+                            agent="auto_trader",
+                            detail={"contract": contract, "tag": tag,
+                                    "expected_pos": expected_pos if row else None,
+                                    "actual_pos": pos_dir_by_contract.get(contract)},
+                        )
+                    elif is_stale_entry:
                         stale_cancelled += 1
                     else:
                         cancelled += 1
                 except Exception:
                     pass
-            if cancelled or stale_cancelled:
+            if cancelled or stale_cancelled or misdirected_cancelled:
                 msg = []
                 if cancelled:
                     msg.append(f"{cancelled} orphan(s)")
                 if stale_cancelled:
                     msg.append(f"{stale_cancelled} stale entry/entries")
+                if misdirected_cancelled:
+                    msg.append(f"{misdirected_cancelled} misdirected protective leg(s)")
                 print(f"  [cleanup: cancelled {' + '.join(msg)}]")
         except Exception as e:
             print(f"  [cleanup failed: {e}]")
