@@ -98,6 +98,76 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
 
 ---
 
+## Strategy ideas to implement (user-supplied)
+
+This section is the user's idea inbox for new price-action / mathematical
+strategies. Drop notes, descriptions, screenshots, links, or rough sketches
+here. The autonomous-improvement loop (cloud routine
+`trig_011w6DUmXbojsfkjKtCaJfBa`) will pick items from this section, code
+them up against the existing strategy protocol in
+`tools/backtest/strategies.py`, register them in `STRATEGY_REGISTRY` and
+`STRATEGY_ROSTER`, add literature priors to `tools/strategy_performance.py`,
+write tests, and submit a PR.
+
+**Strategic focus:** price-action / microstructure / mathematical. FVG is
+the lead strategy. Classical TA additions go straight to P3 unless the
+user explicitly asks for one.
+
+**Format for entries:**
+
+```
+- [strategy_name] [status: idea|proposed|implemented]
+  Description: what is the pattern, in plain English
+  Source: where this came from (friend, book, paper, link, intuition)
+  Trigger conditions: candle/structure rules
+  Entry/Stop/Target: rough idea
+  Symbols of interest: which markets it should run on
+  Notes: any extra context
+```
+
+**Examples (currently empty — drop ideas below):**
+
+<!-- USER: ADD IDEAS HERE -->
+
+## Research backlog for next Quant Researcher wake (2026-05-05)
+
+- [extended_data_validation] [status: idea]
+  Description: Re-run walk_forward_phase2.py on 90+ days of intraday data once available to confirm the 7 cells deployed today don't deteriorate
+  Symbols of interest: 6E, MCL, NG, GC, MES, ZN
+  Notes: yfinance limits to 60d for 5m bars. Need a different data source for longer history (firstrate_csv source already wired)
+
+- [param_sweep_gap_fill_ZN] [status: idea]
+  Description: gap_fill ZN at default params shows OOS E=+1.10R t=+11.95. Earlier sweep showed min_gap_atr=1.25 hits +2.74R OOS but small n. Sweep min_gap_atr ∈ {0.5, 0.6, 0.75, 1.0, 1.25} × rr_target ∈ {1.0, 1.5, 2.0, 2.5} on more data. Find optimal cell.
+  Trigger conditions: rerun walk_forward_extensions.py with extended params
+
+- [confluence_strategies] [status: idea]
+  Description: Do confluence-of-signals filters add edge? E.g., "only fire gap_fill ZN Asian when also RSI < 30 (oversold)" or "only fire pivot_reversal 6E RTH short when DXY rallying"
+  Trigger conditions: design + walk-forward each combination
+
+- [time_of_day_micro_buckets] [status: idea]
+  Description: Current sessions are 4 buckets (Asian/London/RTH/PostClose). Try finer 2-hour buckets (e.g., 02:00-04:00 vs 04:00-06:00 inside Asian) to find tighter edge windows
+  Notes: Risk of overfitting; require n>=30 per bucket and walk-forward
+
+- [order_flow_microstructure] [status: idea]
+  Description: Investigate whether ProjectX provides bid/ask spread or depth data. If yes, add features: imbalance, micro-price drift, sweep detection
+  Source: ProjectX API docs
+
+- [anti_strategy_research] [status: idea]
+  Description: narrow_range_break has aggregate -0.09R t=-3.93. The INVERSE direction would have aggregate +0.09R. Test "fade NRB" as an explicit strategy with proper walk-forward
+  Notes: only useful if t>2 OOS; avoid building on known-losing strategies
+
+## Old example template (kept for format reference)
+
+- [example_template] [status: idea]
+  Description: (your description)
+  Source: (your source)
+  Trigger conditions: (your rules)
+  Entry/Stop/Target: (rough sketch)
+  Symbols of interest: (which markets)
+  Notes: (anything else)
+
+---
+
 ## How items get added
 
 - Failed sessions / new bugs → P0 or P1 with a `lesson_ref:` link to the journal/lesson file

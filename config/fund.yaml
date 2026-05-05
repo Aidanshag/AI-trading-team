@@ -51,16 +51,19 @@ autonomy_guardrails:
 # incident. When autonomous_mode is FALSE, these are ignored — supervised
 # trading uses the looser values from risk_limits.yaml directly.
 autonomous_restrictions:
-  # WINDOW — RTH only. Today's loss happened entirely 23:30-03:00 ET.
-  rth_only:        true
-  rth_start_et:    "07:30"      # 30 min after 07:00 ET cash futures action
-  rth_end_et:      "15:30"      # extended 2026-05-01 (Option A): +1h post-lunch trend tail; still 30m before 16:00 ET equity close to avoid gamma flush
+  # WINDOW — 2026-05-04: user reopened to 24/5 to surface live trade flow for
+  # diagnostics. Hard floors (DLL, TDD, defensive ladder, daily target lock,
+  # snapshot freshness, kill switch, halt timestamp) remain the safety floor.
+  # Re-engage rth_only:true if overnight bleed reappears.
+  rth_only:        false
+  rth_start_et:    "07:30"      # retained for reference; ignored while rth_only=false
+  rth_end_et:      "15:30"      # retained for reference; ignored while rth_only=false
 
   # DAILY CAPS (override values from risk_limits.yaml.account):
   internal_dll_target_usd:    250    # halved from $500 supervised
   daily_fee_budget_usd:        15    # halved from $30 supervised
   max_concurrent_positions:     2    # vs 5 supervised
-  max_trades_per_day:           4    # vs 8 supervised
+  max_trades_per_day:           8    # raised 2026-05-04 for overnight diagnostic mode (was 4); revert if downside materializes
 
   # CONVICTION + R:R: skip "low" conviction; lift R:R floor.
   min_conviction:              med   # only med/high fire under autonomous

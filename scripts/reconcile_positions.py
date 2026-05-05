@@ -5,6 +5,17 @@ in `positions`. For each DB row not matching a broker position, mark
 closed. Surfaces every drift as a `risk_event` so we know our state
 store ever fell out of sync.
 
+PHANTOM POSITION DETECTION (added 2026-05-04):
+A "phantom" is a broker-side position with no matching DB row AND no
+recent matching entry order. The 2026-05-04 incident: a sell-stop leg
+of a long bracket fired into a new short when price crossed the stop
+level before the entry buy-limit ever filled. The unintended short had
+no risk management attached and ran free until manual closure.
+
+Phantoms are now market-flattened immediately rather than silently
+absorbed into our DB. Discriminator: if no entry order on the matching
+side was submitted in the last 10 minutes, treat as phantom.
+
 Usage:
   python -m scripts.reconcile_positions [--quiet]
 
@@ -14,7 +25,9 @@ verify_position_stops so the stop-check operates on accurate state).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import time
 from typing import Any
 
 from state.db import get_db, utcnow_iso
@@ -66,6 +79,123 @@ def _root(contract_id: str) -> str:
     return contract_id
 
 
+def _has_recent_matching_entry(symbol: str, position_side: str,
+                                window_minutes: int = 10) -> bool:
+    """True if an ENTRY order (not _stop or _target leg) for this symbol on
+    the side that would OPEN this position was submitted in the last N min.
+
+    Mapping: long position → buy entry order; short position → sell entry.
+    """
+    db = get_db()
+    order_side = "buy" if position_side == "long" else "sell"
+    conn = db.connect()
+    rows = conn.execute(
+        """SELECT id FROM orders
+           WHERE symbol = ?
+             AND side = ?
+             AND ts_submitted > datetime('now', ?)
+             AND client_order_id NOT LIKE '%\\_stop' ESCAPE '\\'
+             AND client_order_id NOT LIKE '%\\_target' ESCAPE '\\'
+             AND client_order_id NOT LIKE 'phantom\\_flatten\\_%' ESCAPE '\\'
+           LIMIT 1""",
+        (symbol, order_side, f"-{int(window_minutes)} minutes"),
+    ).fetchall()
+    return bool(rows)
+
+
+def _has_recent_flatten_attempt(symbol: str, window_seconds: int = 60) -> bool:
+    """True if a phantom_flatten order for this symbol was submitted recently.
+    Prevents double-flattening when reconcile fires twice before the first
+    flatten settles."""
+    db = get_db()
+    conn = db.connect()
+    rows = conn.execute(
+        """SELECT id FROM orders
+           WHERE symbol = ?
+             AND client_order_id LIKE 'phantom\\_flatten\\_%' ESCAPE '\\'
+             AND ts_submitted > datetime('now', ?)
+           LIMIT 1""",
+        (symbol, f"-{int(window_seconds)} seconds"),
+    ).fetchall()
+    return bool(rows)
+
+
+def _flatten_phantom_position(position: dict[str, Any]) -> tuple[bool, str]:
+    """Market-close a phantom broker position. Returns (success, info_str).
+
+    Records the flatten order in the orders table so subsequent reconcile
+    cycles know not to re-flatten."""
+    from tools.topstep import get_account_id
+    db = get_db()
+    client = get_client()
+    account_id = get_account_id()
+    opposite = "sell" if position["side"] == "long" else "buy"
+    cid = f"phantom_flatten_{int(time.time())}_{position['symbol']}"
+    contract_id = position.get("contract_id")
+    if not contract_id:
+        # Fall back to symbol resolution; reconciler usually has contract_id.
+        return False, "no_contract_id_for_phantom"
+    try:
+        result = client.place_order(
+            account_id=account_id,
+            contract_id=str(contract_id),
+            side=opposite,
+            qty=int(position["contracts"]),
+            order_type="market",
+            time_in_force="ioc",
+            client_order_id=cid,
+        )
+        broker_oid = None
+        if isinstance(result, dict):
+            broker_oid = (result.get("orderId") or result.get("id")
+                          or result.get("brokerOrderId"))
+        # Record so subsequent reconciles don't re-fire
+        try:
+            with db.tx() as c:
+                c.execute(
+                    """INSERT INTO orders
+                        (client_order_id, agent, ts_proposed, ts_submitted, symbol,
+                         side, order_type, qty, status, risk_verdict, broker_order_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (cid, "reconciler_phantom_flatten", utcnow_iso(), utcnow_iso(),
+                     position["symbol"], opposite, "market",
+                     int(position["contracts"]), "submitted", "allow",
+                     str(broker_oid) if broker_oid else None),
+                )
+        except Exception:
+            pass
+        return True, f"flatten order submitted, broker_id={broker_oid}"
+    except Exception as e:
+        return False, f"flatten failed: {str(e)[:200]}"
+
+
+def _alert_phantom(position: dict[str, Any], success: bool, info: str) -> None:
+    """Send Discord alert (no-op if DISCORD_WEBHOOK_URL not set)."""
+    webhook = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+    if not webhook:
+        return
+    icon = ":warning:" if success else ":x:"
+    verb = "flattened" if success else "FLATTEN FAILED FOR"
+    msg = (
+        f"{icon} Phantom position {verb}: "
+        f"{position['side']} {position['contracts']} {position['symbol']} "
+        f"@ {position['avg_price']}\n"
+        f"Cause: misdirected stop-leg or OCO race (no recent matching entry).\n"
+        f"Info: {info}"
+    )
+    try:
+        import json
+        import urllib.request
+        body = json.dumps({"content": msg}).encode()
+        req = urllib.request.Request(
+            webhook, data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=5).read()
+    except Exception:
+        pass  # alert is best-effort
+
+
 def reconcile(verbose: bool = True) -> dict[str, Any]:
     db = get_db()
     try:
@@ -82,7 +212,7 @@ def reconcile(verbose: bool = True) -> dict[str, Any]:
     by_db = {(r["symbol"], r["side"]): r for r in db_rows}
     by_brk = {(p["symbol"], p["side"]): p for p in broker}
 
-    # 1. Broker has it, DB doesn't → INSERT
+    # 1. Broker has it, DB doesn't → INSERT (legitimate) or FLATTEN (phantom)
     for key, p in by_brk.items():
         if key in by_db:
             # Both sides exist — verify size + avg price
@@ -100,19 +230,53 @@ def reconcile(verbose: bool = True) -> dict[str, Any]:
                         (p["contracts"], p["avg_price"], p["symbol"], p["side"]),
                     )
             continue
-        drifts.append({
-            "kind": "broker_only",
-            "symbol": p["symbol"], "side": p["side"],
-            "contracts": p["contracts"], "avg_price": p["avg_price"],
-        })
-        with db.tx() as c:
-            c.execute(
-                """INSERT OR IGNORE INTO positions
-                    (symbol, contract_month, side, contracts, avg_price, opened_at)
-                   VALUES (?,?,?,?,?,?)""",
-                (p["symbol"], None, p["side"], p["contracts"], p["avg_price"],
-                 utcnow_iso()),
+
+        # PHANTOM CHECK — is this a broker-only position with no matching
+        # recent entry order? If so, it's a misdirected stop-leg fire (or
+        # similar OCO race), and it has NO risk management attached.
+        # Flatten immediately rather than silently adopting it.
+        legitimate = _has_recent_matching_entry(p["symbol"], p["side"])
+        recent_flatten = _has_recent_flatten_attempt(p["symbol"])
+
+        if not legitimate and not recent_flatten:
+            # PHANTOM — flatten now, emit breach event, alert
+            success, info = _flatten_phantom_position(p)
+            drifts.append({
+                "kind": "phantom_flattened" if success else "phantom_flatten_failed",
+                "symbol": p["symbol"], "side": p["side"],
+                "contracts": p["contracts"], "avg_price": p["avg_price"],
+                "info": info,
+            })
+            db.record_risk_event(
+                severity="breach",
+                rule="phantom_position_flattened" if success else "phantom_position_flatten_failed",
+                agent="reconciler",
+                detail={
+                    "symbol": p["symbol"], "side": p["side"],
+                    "contracts": p["contracts"], "avg_price": p["avg_price"],
+                    "discriminator": "no_recent_matching_entry_order",
+                    "result": info,
+                },
             )
+            _alert_phantom(p, success, info)
+            # Do NOT insert into DB — let the next reconcile confirm the
+            # broker is flat. If the flatten failed, the next pass will retry.
+        else:
+            # LEGITIMATE bracket fill (recent entry on matching side exists)
+            # OR we just attempted to flatten this symbol (don't re-fire).
+            drifts.append({
+                "kind": "broker_only" if legitimate else "broker_only_recent_flatten",
+                "symbol": p["symbol"], "side": p["side"],
+                "contracts": p["contracts"], "avg_price": p["avg_price"],
+            })
+            with db.tx() as c:
+                c.execute(
+                    """INSERT OR IGNORE INTO positions
+                        (symbol, contract_month, side, contracts, avg_price, opened_at)
+                       VALUES (?,?,?,?,?,?)""",
+                    (p["symbol"], None, p["side"], p["contracts"], p["avg_price"],
+                     utcnow_iso()),
+                )
 
     # 2. DB has it, broker doesn't → DELETE (closed at broker, never recorded)
     closures: list[dict[str, Any]] = []

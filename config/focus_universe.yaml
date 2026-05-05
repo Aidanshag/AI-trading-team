@@ -9,49 +9,65 @@
 
 focus_period_active: true
 focus_period_started:  "2026-04-29T01:00:00Z"
-focus_period_expires:  "2026-05-02T22:00:00Z"   # End of Globex Friday CT
+focus_period_expires:  "2026-05-09T22:00:00Z"   # extended 2026-05-04 (price-action expansion)
 rationale: |
-  3-day focus window per user directive (2026-04-29). Concentrate
-  attention on one high-liquidity / cleanest-setup instrument per sector.
-  Goals:
-   - Accumulate per-instrument trade data faster (auto-tuning convergence)
-   - Sharpen analyst expertise on specific products (NG storage cycle,
-     ZN ladder behavior, GC mean-reversion patterns)
-   - Reduce API spend (Edge Hunter scans ~6 instruments not 22)
-   - Cleaner post-mortems with consistent context
+  Focus universe — expanded 2026-05-04 to support price-action / FVG
+  strategy data collection on a 24/5 trading window. Added MNQ (Nasdaq
+  micro — high gamma, FVG-rich) and MCL (micro crude — true 24h liquidity,
+  FVG-rich during Asian/Europe sessions). Goals:
+   - More shots on goal under 24/5 gates (was 5 symbols → now 7)
+   - Diversify equity-index exposure (MES + MNQ — correlated but different
+     beta; sharper moves on MNQ produce more FVG/OB setups)
+   - Capture overnight crude flow when equities are quiet
+   - Accumulate per-instrument trade data faster for auto-tuning
+   - Stay disciplined: still one-trade-per-symbol cooldown + 4-trade
+     autonomous daily cap; expanding symbols ≠ expanding trade count
 
-# One symbol per sector (recommended starter set; user may edit).
+# Symbols allowed under the focus restriction.
 # Sectors with empty lists are disabled this week.
 allowed_symbols:
-  index_macro:  [MES]            # E-mini S&P micro — cheaper testing, deep liquidity
-  energies:     [NG]             # Natural gas — user-specified; high vol, clear EIA Thursday catalyst
-  metals:       [GC]             # Gold — cleanest mean-reversion patterns, stable spreads
+  index_macro:  [MES, MNQ]       # MES (S&P micro) + MNQ (Nasdaq micro — added 2026-05-04 for FVG/OB density)
+  energies:     [NG, MCL]        # NG (nat gas — EIA catalyst) + MCL (micro crude — added 2026-05-04 for 24h liquidity)
+  metals:       [GC]             # Gold — cleanest mean-reversion + structure; FVG-friendly
   rates:        [ZN]             # 10-year T-note — most liquid Treasury futures
   fx_futures:   [6E]             # EUR/USD — most liquid FX, tightest spreads
   grains:       []               # DISABLED — off-season; no WASDE/Crop Progress this week
   livestock:    []               # DISABLED — limited hours, low priority
-  crypto:       []               # DISABLED — Micro Ether testing later
+  crypto:       []               # DISABLED — Micro Ether testing later (gap risk needs separate model)
   softs:        []               # Already off (ICE-listed, not on Topstep)
 
 # Per-symbol focus notes for analysts (what to watch for this week)
 focus_notes:
   NG:
     primary_driver: "EIA Natural Gas Storage Report — Thursday 10:30 ET (typically the week's main catalyst)"
-    setups_to_watch: [vol_regime_trend, bollinger_squeeze_break, support_resistance_bounce]
+    setups_to_watch: [gap_fill, vol_regime_trend, bollinger_squeeze_break, support_resistance_bounce]
     avoid: [opening_range_breakout]   # too thin overnight per ZN lesson
+    notes: "gap_fill validated 2026-05-04 (60d walk-forward, OOS E=+0.83R, t=+1.53)"
   GC:
     primary_driver: "DXY moves + real-yield (TIPS) — gold fades USD strength, rallies on real-yield drops"
-    setups_to_watch: [bollinger_mean_reversion, vwap_reversion, support_resistance_bounce]
+    setups_to_watch: [gap_fill, bollinger_mean_reversion, support_resistance_bounce]
     avoid: []
   ZN:
     primary_driver: "Treasury auctions, Fed-speak, and CFTC positioning extremes (currently 90th+ pct long)"
-    setups_to_watch: [vol_regime_trend, range_mean_reversion]
-    avoid: [opening_range_breakout]   # learned from 2026-04-29 ZN loss
+    setups_to_watch: [gap_fill, vol_regime_trend, range_mean_reversion]   # gap_fill is the FUND'S HEADLINE EDGE on this symbol
+    avoid: [opening_range_breakout, narrow_range_break]   # ORB: 2026-04-29 ZN loss; NRB: walk-forward t=-7.4 on Asian
+    notes: "gap_fill is the validated headline edge: ZN Asian/PostClose 60d walk-forward OOS hit=70%, E=+1.10R, t=+11.95. Primary deployment target."
   6E:
     primary_driver: "ECB-Fed rate differential, US data prints, DXY"
-    setups_to_watch: [keltner_breakout, support_resistance_bounce, vwap_reversion]
+    setups_to_watch: [gap_fill, keltner_breakout, support_resistance_bounce]
     avoid: []
+    notes: "gap_fill validated 2026-05-04 (60d walk-forward OOS hit=82%, E=+2.65R, t=+3.63 — small n=17 but strong signal)"
   MES:
     primary_driver: "Earnings + macro data; tight intraday ranges this week"
-    setups_to_watch: [pullback_in_trend, narrow_range_break, inside_bar_break]
+    setups_to_watch: [fair_value_gap, order_block, pullback_in_trend, narrow_range_break, inside_bar_break]
     avoid: [opening_range_breakout]   # earnings week chop
+  MNQ:
+    primary_driver: "Tech-heavy index; reacts to mega-cap earnings + AI/semis flow + 10Y yield. Sharper intraday moves than MES — FVGs form aggressively."
+    setups_to_watch: [fair_value_gap, order_block, liquidity_sweep, vol_regime_trend]
+    avoid: [opening_range_breakout]   # ORB blacklisted on tech indices (high gap risk)
+    notes: "Highest gamma of equity micros. Tick=$0.50. Pair trades with MES correlation OK (don't double up size); FVG min_gap_atr may need to be higher on MNQ vs MES due to baseline volatility."
+  MCL:
+    primary_driver: "OPEC commentary + DOE inventories (Wed 10:30 ET) + dollar moves. True 24h liquidity — Asian/Europe sessions create overnight FVGs while equities sleep."
+    setups_to_watch: [fair_value_gap, order_block, liquidity_sweep, support_resistance_bounce]
+    avoid: [opening_range_breakout]   # crude has erratic 9:00 ET pit-open behavior
+    notes: "Tick=$1.00 — clean economics for our $250 per-trade cap. Watch for headline-driven gaps that punch through structure (geopolitical, OPEC); FVGs formed during news are unreliable."

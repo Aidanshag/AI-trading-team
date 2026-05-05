@@ -6,15 +6,21 @@ from pathlib import Path
 import pytest
 
 
-def test_priors_have_all_18_strategies():
+def test_priors_have_all_strategies():
     from tools.strategy_performance import LITERATURE_PRIORS
     expected = {
+        # Tier 1: price-action (added 2026-05-04, demoted same day pending validation)
+        "fair_value_gap", "order_block", "liquidity_sweep",
+        # Headline edge (validated 2026-05-04 walk-forward)
+        "gap_fill",
+        # Tier 2: classical TA (backstop)
         "donchian_breakout", "bollinger_mean_reversion", "volatility_breakout",
         "pullback_in_trend", "range_mean_reversion", "bollinger_squeeze_break",
         "keltner_breakout", "vol_regime_trend", "vol_spike_fade",
         "opening_range_breakout", "narrow_range_break", "inside_bar_break",
-        "rsi2_extreme_reversion", "vwap_reversion", "volume_spike_reversal",
-        "support_resistance_bounce", "gap_fill", "pivot_reversal",
+        "rsi2_extreme_reversion", "volume_spike_reversal",
+        "support_resistance_bounce", "pivot_reversal",
+        # vwap_reversion REMOVED 2026-05-04 — backtest+walk-forward confirmed broken
     }
     assert set(LITERATURE_PRIORS) == expected
     for name, p in LITERATURE_PRIORS.items():

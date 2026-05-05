@@ -27,6 +27,13 @@ from typing import Any
 # These are the starting expectations; actual data updates them via Bayesian
 # shrinkage as it accumulates.
 LITERATURE_PRIORS: dict[str, dict[str, float]] = {
+    # ── PRICE-ACTION (fund's primary focus, 2026-05-04) ──
+    # Higher priors than classical TA — pattern-based microstructure
+    # edge that works 24/5. FVG is the designated lead strategy.
+    "fair_value_gap":            {"hit": 0.580, "win_r": 1.6, "loss_r": 1.0, "freq": "med"},
+    "order_block":               {"hit": 0.560, "win_r": 1.8, "loss_r": 1.0, "freq": "low"},
+    "liquidity_sweep":           {"hit": 0.550, "win_r": 1.5, "loss_r": 1.0, "freq": "med"},
+    # ── CLASSICAL TA (backstop tier) ──
     # Trend / breakout
     "donchian_breakout":         {"hit": 0.375, "win_r": 2.0, "loss_r": 1.0, "freq": "low"},
     "volatility_breakout":       {"hit": 0.350, "win_r": 2.5, "loss_r": 1.0, "freq": "low"},
@@ -37,7 +44,8 @@ LITERATURE_PRIORS: dict[str, dict[str, float]] = {
     "bollinger_mean_reversion":  {"hit": 0.600, "win_r": 0.7, "loss_r": 1.0, "freq": "med"},
     "range_mean_reversion":      {"hit": 0.600, "win_r": 0.8, "loss_r": 1.0, "freq": "med"},
     "rsi2_extreme_reversion":    {"hit": 0.650, "win_r": 0.5, "loss_r": 1.0, "freq": "high"},
-    "vwap_reversion":            {"hit": 0.600, "win_r": 0.8, "loss_r": 1.0, "freq": "high"},
+    # vwap_reversion REMOVED 2026-05-04 — confirmed broken in 60d walk-forward
+    # (see scripts/walk_forward_gapfill.py and the 2026-05-04 deep analysis).
     # Pullback / continuation
     "pullback_in_trend":         {"hit": 0.550, "win_r": 1.5, "loss_r": 1.0, "freq": "med"},
     # Cadence / structure
@@ -49,7 +57,12 @@ LITERATURE_PRIORS: dict[str, dict[str, float]] = {
     "volume_spike_reversal":     {"hit": 0.550, "win_r": 1.5, "loss_r": 1.0, "freq": "low"},
     # Levels / patterns
     "support_resistance_bounce": {"hit": 0.550, "win_r": 1.5, "loss_r": 1.0, "freq": "med"},
-    "gap_fill":                  {"hit": 0.650, "win_r": 0.8, "loss_r": 1.0, "freq": "low"},
+    # gap_fill priors UPGRADED 2026-05-04 after walk-forward validation:
+    # ZN: train hit=65.7% E=+0.87R t=+15.21 | OOS hit=69.9% E=+1.20R t=+10.88
+    # 6E: train E=+1.50R | OOS E=+2.65R — edge holds out-of-sample
+    # NG: train E=+0.64R | OOS E=+0.83R — edge holds (borderline)
+    # gap_fill is symbol-gated to {ZN, NG, 6E} via STRATEGY_SYMBOL_ALLOWLIST.
+    "gap_fill":                  {"hit": 0.670, "win_r": 1.5, "loss_r": 1.0, "freq": "med"},
     "pivot_reversal":            {"hit": 0.500, "win_r": 1.5, "loss_r": 1.0, "freq": "med"},
 }
 

@@ -702,51 +702,10 @@ def rsi2_extreme_reversion(
 # =====================================================================
 
 
-def vwap_reversion(
-    bars: pd.DataFrame,
-    deviation_atr_mult: float = 2.0,
-    rr_target: float = 2.0,
-) -> Iterator[Signal]:
-    """Mean-revert when price is > N×ATR away from session VWAP.
-    Long when price is far below VWAP; short when far above. Defined
-    risk: stop = current price ± 1×ATR; target = VWAP.
-
-    Use case: intraday mean-reversion around the volume-weighted price.
-    Best on liquid futures (ES, NQ, CL, GC) during regular session.
-    """
-    h, l, c = bars["High"], bars["Low"], bars["Close"]
-    typical = (h + l + c) / 3
-    # Cumulative VWAP — assumes a session reset would be applied externally
-    vwap = (typical * bars.get("Volume", typical * 0 + 1)).cumsum() / \
-           bars.get("Volume", typical * 0 + 1).cumsum()
-    atr = _atr(bars, 14)
-
-    for i in range(20, len(bars)):
-        date = bars.index[i]
-        price = float(c.iloc[i])
-        v = float(vwap.iloc[i])
-        a = atr.iloc[i]
-        if pd.isna(v) or pd.isna(a) or a == 0:
-            continue
-        deviation = (price - v) / a
-        if deviation < -deviation_atr_mult:
-            # Far below VWAP: long
-            stop = price - 1.0 * a
-            target = v
-            if (target - price) / max(price - stop, 1e-9) >= rr_target:
-                yield Signal.entry(
-                    date=date, side="long", price=price, stop=stop, target=target,
-                    reason=f"vwap_rev_long dev={deviation:.2f}σ",
-                )
-        elif deviation > deviation_atr_mult:
-            # Far above VWAP: short
-            stop = price + 1.0 * a
-            target = v
-            if (price - target) / max(stop - price, 1e-9) >= rr_target:
-                yield Signal.entry(
-                    date=date, side="short", price=price, stop=stop, target=target,
-                    reason=f"vwap_rev_short dev={deviation:.2f}σ",
-                )
+# vwap_reversion REMOVED 2026-05-04 — backtest + walk-forward both
+# confirmed it has NO edge. Hit rate 1-10% on equity indices, t-stat as
+# bad as -24.25 on MNQ RTH OOS. Was a stop-loss factory across all
+# symbols and sessions. See vault/research/backtests/2026-05-04_*.md.
 
 
 def volume_spike_reversal(
@@ -942,7 +901,312 @@ def pivot_reversal(
             )
 
 
+# =============================================================
+# PRICE-ACTION STRATEGIES (fund's primary focus, added 2026-05-04)
+# =============================================================
+# These are pure microstructure strategies derived from candle geometry
+# alone — no oscillators, no volume confirmation, no macro context. They
+# work natively 24/5 because they only require price bars to evaluate.
+#
+# Hierarchy (per project_strategy_focus_fvg.md memory):
+#   1. fair_value_gap   — primary lead strategy
+#   2. order_block      — secondary support
+#   3. liquidity_sweep  — secondary support
+#
+# These are the ICT (Inner Circle Trader) / Smart Money Concept family.
+# Edge claim: institutional order flow leaves predictable imbalances and
+# stop-hunt patterns; retail can fade or follow them.
+
+def fair_value_gap(
+    bars: pd.DataFrame,
+    min_gap_atr: float = 0.20,
+    max_age_bars: int = 30,
+    rr_target: float = 2.0,
+) -> Iterator[Signal]:
+    """Fair Value Gap (FVG) mitigation entry — fund's PRIMARY strategy.
+
+    A bullish FVG forms across 3 consecutive bars (i-2, i-1, i) when the
+    high of bar i-2 is BELOW the low of bar i — leaving an unfilled price
+    range (the "imbalance") that bar i-1 leapt across. The middle bar
+    must close in the direction of the gap.
+
+    Bullish FVG zone:  [bars[i-2].High, bars[i].Low]
+    Bearish FVG zone:  [bars[i].High, bars[i-2].Low]
+
+    Entry rule (mitigation): on a later bar, when price retraces back
+    INTO the gap zone (the wick touches inside the gap) but the close
+    holds beyond the far edge of the gap, enter in the direction of the
+    original gap. Stop beyond the far edge of the gap. Target: rr_target
+    times the risk distance.
+
+    Filters:
+    - min_gap_atr: gap must be >= min_gap_atr × ATR (filters microscopic
+      gaps that are noise).
+    - max_age_bars: FVGs decay after max_age_bars; institutional edge
+      fades as the market moves on.
+    - one signal per FVG: the FVG is "consumed" once mitigated.
+    """
+    h, l, c, o = bars["High"], bars["Low"], bars["Close"], bars["Open"]
+    atr = _atr(bars, 14)
+
+    # active_fvgs: list of dicts {kind, gap_low, gap_high, formed_at_idx, atr_at_form}
+    # gap_low/high are absolute prices defining the imbalance zone.
+    active_fvgs: list[dict] = []
+
+    for i in range(2, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        bar_h, bar_l, bar_c = float(h.iloc[i]), float(l.iloc[i]), float(c.iloc[i])
+
+        # ── 1. Detect new FVGs forming at THIS 3-bar window ──
+        h2, l2 = float(h.iloc[i - 2]), float(l.iloc[i - 2])
+        o1, c1 = float(o.iloc[i - 1]), float(c.iloc[i - 1])
+
+        # Bullish FVG: high[i-2] < low[i] AND middle bar closed up
+        if l2 < bar_l and h2 < bar_l and c1 > o1:
+            gap_low, gap_high = h2, bar_l
+            if gap_high - gap_low >= min_gap_atr * a:
+                active_fvgs.append({
+                    "kind": "bull",
+                    "gap_low": gap_low,
+                    "gap_high": gap_high,
+                    "formed_at": i,
+                })
+
+        # Bearish FVG: low[i-2] > high[i] AND middle bar closed down
+        if h2 > bar_h and l2 > bar_h and c1 < o1:
+            gap_low, gap_high = bar_h, l2
+            if gap_high - gap_low >= min_gap_atr * a:
+                active_fvgs.append({
+                    "kind": "bear",
+                    "gap_low": gap_low,
+                    "gap_high": gap_high,
+                    "formed_at": i,
+                })
+
+        # ── 2. Decay old FVGs ──
+        active_fvgs = [
+            f for f in active_fvgs
+            if (i - f["formed_at"]) <= max_age_bars
+        ]
+
+        # ── 3. Check current bar for mitigation of any active FVG ──
+        consumed: list[int] = []
+        for idx, fvg in enumerate(active_fvgs):
+            # Skip the FVG that JUST formed at this bar (mitigation needs a later bar)
+            if fvg["formed_at"] == i:
+                continue
+
+            if fvg["kind"] == "bull":
+                # Bullish mitigation: low pierced INTO the gap, close held above gap_low
+                if bar_l <= fvg["gap_high"] and bar_c > fvg["gap_low"]:
+                    entry = bar_c
+                    stop = fvg["gap_low"] - 0.25 * a
+                    if entry - stop <= 0:
+                        consumed.append(idx)
+                        continue
+                    target = entry + rr_target * (entry - stop)
+                    yield Signal.entry(
+                        date=date, side="long", price=entry,
+                        stop=stop, target=target,
+                        reason=f"fvg_bull_mitigation gap=[{fvg['gap_low']:.2f},{fvg['gap_high']:.2f}] age={i-fvg['formed_at']}",
+                    )
+                    consumed.append(idx)
+
+            else:  # bear
+                # Bearish mitigation: high pierced INTO the gap, close held below gap_high
+                if bar_h >= fvg["gap_low"] and bar_c < fvg["gap_high"]:
+                    entry = bar_c
+                    stop = fvg["gap_high"] + 0.25 * a
+                    if stop - entry <= 0:
+                        consumed.append(idx)
+                        continue
+                    target = entry - rr_target * (stop - entry)
+                    yield Signal.entry(
+                        date=date, side="short", price=entry,
+                        stop=stop, target=target,
+                        reason=f"fvg_bear_mitigation gap=[{fvg['gap_low']:.2f},{fvg['gap_high']:.2f}] age={i-fvg['formed_at']}",
+                    )
+                    consumed.append(idx)
+
+        # Remove consumed FVGs (one mitigation per gap)
+        for idx in sorted(consumed, reverse=True):
+            del active_fvgs[idx]
+
+
+def order_block(
+    bars: pd.DataFrame,
+    displacement_atr: float = 1.5,
+    max_age_bars: int = 50,
+    rr_target: float = 2.0,
+) -> Iterator[Signal]:
+    """Order Block (OB) — institutional reversal zone.
+
+    A bullish order block is the LAST bearish (red) candle before a
+    strong upward displacement (a bar whose body >= displacement_atr × ATR
+    closing strongly higher). Theory: institutions accumulated on that red
+    candle; price returning to that zone should bounce.
+
+    Bullish OB zone: [last red candle's Low, last red candle's High]
+    Bearish OB zone: [last green candle's Low, last green candle's High]
+
+    Entry: when price returns into the OB zone, enter in the direction of
+    the original displacement. Stop beyond the OB extreme. Target: rr_target
+    times risk.
+    """
+    h, l, c, o = bars["High"], bars["Low"], bars["Close"], bars["Open"]
+    atr = _atr(bars, 14)
+
+    active_obs: list[dict] = []
+
+    for i in range(1, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        bar_h, bar_l, bar_c, bar_o = (float(h.iloc[i]), float(l.iloc[i]),
+                                       float(c.iloc[i]), float(o.iloc[i]))
+        body = bar_c - bar_o
+
+        # ── 1. Detect strong displacement bars and locate the most recent
+        #       opposite-color candle as the order block ──
+        if abs(body) >= displacement_atr * a:
+            # Walk back to find the last opposite-color candle
+            kind = "bull" if body > 0 else "bear"
+            for j in range(i - 1, max(i - 10, -1), -1):
+                prev_o, prev_c = float(o.iloc[j]), float(c.iloc[j])
+                if kind == "bull" and prev_c < prev_o:
+                    active_obs.append({
+                        "kind": "bull",
+                        "ob_low": float(l.iloc[j]),
+                        "ob_high": float(h.iloc[j]),
+                        "formed_at": i,
+                    })
+                    break
+                if kind == "bear" and prev_c > prev_o:
+                    active_obs.append({
+                        "kind": "bear",
+                        "ob_low": float(l.iloc[j]),
+                        "ob_high": float(h.iloc[j]),
+                        "formed_at": i,
+                    })
+                    break
+
+        # ── 2. Decay old OBs ──
+        active_obs = [
+            ob for ob in active_obs
+            if (i - ob["formed_at"]) <= max_age_bars
+        ]
+
+        # ── 3. Check current bar for return into any active OB ──
+        consumed: list[int] = []
+        for idx, ob in enumerate(active_obs):
+            if ob["formed_at"] == i:
+                continue
+
+            if ob["kind"] == "bull":
+                # Long entry: price dipped into OB zone, closed above OB low
+                if bar_l <= ob["ob_high"] and bar_c > ob["ob_low"]:
+                    entry = bar_c
+                    stop = ob["ob_low"] - 0.25 * a
+                    if entry - stop <= 0:
+                        consumed.append(idx)
+                        continue
+                    target = entry + rr_target * (entry - stop)
+                    yield Signal.entry(
+                        date=date, side="long", price=entry,
+                        stop=stop, target=target,
+                        reason=f"order_block_bull zone=[{ob['ob_low']:.2f},{ob['ob_high']:.2f}] age={i-ob['formed_at']}",
+                    )
+                    consumed.append(idx)
+            else:
+                # Short entry: price rallied into OB zone, closed below OB high
+                if bar_h >= ob["ob_low"] and bar_c < ob["ob_high"]:
+                    entry = bar_c
+                    stop = ob["ob_high"] + 0.25 * a
+                    if stop - entry <= 0:
+                        consumed.append(idx)
+                        continue
+                    target = entry - rr_target * (stop - entry)
+                    yield Signal.entry(
+                        date=date, side="short", price=entry,
+                        stop=stop, target=target,
+                        reason=f"order_block_bear zone=[{ob['ob_low']:.2f},{ob['ob_high']:.2f}] age={i-ob['formed_at']}",
+                    )
+                    consumed.append(idx)
+
+        for idx in sorted(consumed, reverse=True):
+            del active_obs[idx]
+
+
+def liquidity_sweep(
+    bars: pd.DataFrame,
+    swing_lookback: int = 10,
+    rr_target: float = 2.0,
+) -> Iterator[Signal]:
+    """Liquidity sweep — fade a stop-hunt that pierces a recent swing
+    extreme but reverses on the same bar.
+
+    Pattern:
+    - Bull sweep (LONG signal): bar's Low breaks BELOW the prior
+      swing_lookback-bar low, but the bar closes ABOVE that prior low.
+      Stops below the swing got hunted; price rejected back up.
+    - Bear sweep (SHORT signal): bar's High breaks ABOVE the prior
+      swing_lookback-bar high, but the bar closes BELOW that prior high.
+
+    Entry: bar's close. Stop just beyond the bar's swept extreme.
+    Target: rr_target × risk.
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    atr = _atr(bars, 14)
+
+    for i in range(swing_lookback + 1, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        bar_h, bar_l, bar_c = float(h.iloc[i]), float(l.iloc[i]), float(c.iloc[i])
+        prior_high = float(h.iloc[i - swing_lookback:i].max())
+        prior_low = float(l.iloc[i - swing_lookback:i].min())
+
+        # Bull sweep: pierced below prior low, closed back above it
+        if bar_l < prior_low and bar_c > prior_low:
+            entry = bar_c
+            stop = bar_l - 0.25 * a
+            if entry - stop <= 0:
+                continue
+            target = entry + rr_target * (entry - stop)
+            yield Signal.entry(
+                date=date, side="long", price=entry,
+                stop=stop, target=target,
+                reason=f"liquidity_sweep_bull pierced_low={prior_low:.2f} closed_back={bar_c:.2f}",
+            )
+
+        # Bear sweep: pierced above prior high, closed back below it
+        elif bar_h > prior_high and bar_c < prior_high:
+            entry = bar_c
+            stop = bar_h + 0.25 * a
+            if stop - entry <= 0:
+                continue
+            target = entry - rr_target * (stop - entry)
+            yield Signal.entry(
+                date=date, side="short", price=entry,
+                stop=stop, target=target,
+                reason=f"liquidity_sweep_bear pierced_high={prior_high:.2f} closed_back={bar_c:.2f}",
+            )
+
+
 STRATEGY_REGISTRY = {
+    # ── PRICE-ACTION (fund's primary focus, added 2026-05-04) ──
+    # FVG is the lead strategy. Order blocks + liquidity sweeps are
+    # secondary supports. These take precedence over classical TA below.
+    "fair_value_gap": fair_value_gap,
+    "order_block": order_block,
+    "liquidity_sweep": liquidity_sweep,
+    # ── CLASSICAL TA (backstop tier — only fire when no price-action
+    #    setup is active for a symbol) ──
     # Original 5
     "donchian_breakout": donchian_breakout,
     "bollinger_mean_reversion": bollinger_mean_reversion,
@@ -961,7 +1225,7 @@ STRATEGY_REGISTRY = {
     # Mean-reversion overlay
     "rsi2_extreme_reversion": rsi2_extreme_reversion,
     # NEW (2026-04-28): more intraday flexibility for HFT-style trading
-    "vwap_reversion": vwap_reversion,
+    # vwap_reversion REMOVED 2026-05-04 — broken strategy (see comment above)
     "volume_spike_reversal": volume_spike_reversal,
     "support_resistance_bounce": support_resistance_bounce,
     "gap_fill": gap_fill,

@@ -59,6 +59,22 @@ The auto_trader has its OWN parallel checks (it doesn't go through the SDK PreTo
 - Internal-DLL hard kill
 - Consecutive-loser pause + agent-cascade auto-halt
 
+## Strategic focus — gap_fill on ZN/NG/6E (validated 2026-05-04)
+
+The fund's **validated headline edge** is `gap_fill` on Treasury futures (ZN), nat gas (NG), and euro FX (6E). 60-day walk-forward backtest (45d train / 15d held-out OOS) on 5m intraday bars:
+
+- **ZN gap_fill (Asian + PostClose)**: train E=+0.87R t=+15.21 | **OOS E=+1.10R t=+11.95** (n=256 OOS) — fund's primary edge
+- **6E gap_fill**: train E=+1.50R | **OOS E=+2.65R t=+3.63** (small n but strong)
+- **NG gap_fill**: train E=+0.64R | OOS E=+0.83R t=+1.53 (borderline holds)
+
+Gating is enforced via `scripts/auto_trader.py:STRATEGY_SYMBOL_ALLOWLIST` — `gap_fill` ONLY fires on `{ZN, NG, 6E}`. On MES/MNQ/MCL/GC the strategy didn't validate OOS and is blocked.
+
+**Do not promote any other strategy to high conviction without walk-forward validation showing OOS t>2.0 on at least n=100 trades.** Earlier session-state experiments (FVG/order_block/liquidity_sweep at default params) showed coin-flip expectancy and have been demoted to "low" conviction pending parameter tuning.
+
+**Removed entirely 2026-05-04**: `vwap_reversion` — confirmed broken across all symbols (hit rate 1-10%, t-stat as bad as −24 on MNQ RTH OOS). Code deleted from `tools/backtest/strategies.py`.
+
+The strategic intent is still price-action / mathematical — gap_fill IS a price-action mean-reversion strategy, just one that happens to be more rigorously validated than the ICT-flavored FVG/OB/LS at our parameter set. If walk-forward parameter sweeps later validate FVG/OB on a per-symbol/session basis, re-promote them.
+
 ## Two parallel trading paths (important)
 
 - **Agent chain** (CIO → Analyst → PM → Risk Manager → Execution Trader): orders go through `mcp__topstep__topstep_place_order`, gated by `hooks/risk_gate.py`
