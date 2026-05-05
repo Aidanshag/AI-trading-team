@@ -24,7 +24,7 @@ hard_rules:
   # 24/5 trading enabled per user 2026-04-28. No active halt timestamp.
   # Auto-halt at session close is also disabled in fund.yaml for 24/5 mode.
   # Re-arm to a future timestamp here if you want to pause overnight.
-  trading_halt_until: "2024-01-01T00:00:00Z"
+  trading_halt_until: "2026-05-01T19:17:02Z"
 
 # ============================================================
 # ACCOUNT-LEVEL LIMITS
@@ -408,9 +408,16 @@ fee_decision:
 # The defensive ladder catches losses. This catches "winning, then bleeding
 # it back." Topstep's 50% consistency rule punishes asymmetric days.
 combine_pacing:
+  # 2026-05-05: RESTORED to 400 after the overnight giveback incident.
+  # The "diagnostic disable" let +$1190.80 give back to +$354 (-$837)
+  # because three new entries fired AFTER the daily target was hit.
+  # Per-trade GAIN_TIER_HARD_CAP_USD does NOT substitute for the daily
+  # lock — it caps a single position, not the day's accumulated P&L.
+  # Do not disable this without an explicit replacement that is at least
+  # as strong at the day-level.
   daily_soft_target_usd:  200    # +$200: log advisory; sizing tightens
   daily_hard_target_usd:  400    # +$400: BLOCK new entries; manage book only
-  partial_giveback_pct:   0.40   # if peak +$300 then back to +$180 → lockdown
+  partial_giveback_pct:   0.40   # if peak +$X then back to peak*0.6 → lockdown
 
   # ── CONSISTENCY TARGET (Topstep 50% rule, encoded as a daily ceiling) ──
   # The consistency rule says no single day's P&L can exceed 50% of total
@@ -446,8 +453,11 @@ anti_tilt:
 # triggers that were actually random walk noise.
 regime_gates:
   # When time is in this window (Eastern), no new entries are placed.
+  # 2026-05-04: disabled by user directive to open after-hours trading for
+  # diagnostic visibility. Re-enable if overnight thin-tape bleed reappears.
+  # Hard floors (DLL/TDD/defensive ladder) still active as backstop.
   thin_tape:
-    enabled: true
+    enabled: false
     start_et: "21:00"
     end_et:   "04:00"
     action:   "block_all_entries"
@@ -459,7 +469,7 @@ regime_gates:
     - rsi2_extreme_reversion
     - bollinger_mean_reversion
     - range_mean_reversion
-    - vwap_reversion
+    # vwap_reversion REMOVED 2026-05-04 — strategy deleted (broken edge)
     - vol_spike_fade
     - support_resistance_bounce
     - volume_spike_reversal

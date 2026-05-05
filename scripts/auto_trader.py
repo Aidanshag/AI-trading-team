@@ -65,9 +65,52 @@ from hooks.risk_gate import (
 # ── Strategy roster (ordered by what we trust) ───────────────
 # Each tuple: (callable, default kwargs, conviction floor, label)
 # We try strategies in this order; first trigger wins per symbol per scan.
+# =============================================================
+# STRATEGY ROSTER — fund's strategic focus is PRICE-ACTION trading
+# =============================================================
+# Order matters: scanned top-to-bottom, first trigger wins per symbol/timeframe.
+#
+# TIER 1 — PRICE ACTION (primary, added 2026-05-04 per user directive):
+#   Fair Value Gap (FVG) is the designated LEAD strategy. Order blocks
+#   and liquidity sweeps are supporting price-action setups. All three
+#   are pure-price microstructure plays that work 24/5 — they don't
+#   need volume confirmation, regime filters, or macro context.
+#   Conviction = "high" so they pass the autonomous min_conviction floor
+#   even when other rosters are gated.
+#
+# TIER 2 — CLASSICAL TA (backstop, scanned only if Tier 1 doesn't trigger):
+#   Bollinger / RSI / Donchian / breakout / mean-reversion family. These
+#   were the original lineup pre-2026-05-04. Demoted but retained because
+#   they still produce edges in specific regimes (RTH, range days).
+#
+# Do NOT reorder Tier 1 below Tier 2 without explicit user approval —
+# the price-action focus is a strategic mandate, not just a default.
 STRATEGY_ROSTER: list[tuple[Any, dict, str, str]] = [
-    # Highest priority: classic mean-reversion + breakout combos with
-    # strong literature priors (Connors RSI2, Donchian, NR7, Bollinger squeeze)
+    # ── TIER 1: PRICE ACTION ─────────────────────────────────
+    # 2026-05-04 backtest verdict: at default params these strategies
+    # produce ~33% hit rate at 2:1 R:R = -0.02R expectancy across 30d
+    # of intraday data on 7 symbols (5,593 trades). That's coin-flip,
+    # not edge. Conviction lowered to "low" so they do NOT fire under
+    # autonomous min_conviction=med — they remain in the roster (still
+    # scanned + logged for diagnostic visibility) but blocked from
+    # placing orders until walk-forward parameter sweep + per-time/symbol
+    # analysis identifies edge windows. Re-elevate to "high"/"med" only
+    # after positive expectancy is demonstrated on a held-out test set.
+    (strats.fair_value_gap,    {}, "low", "fair_value_gap"),
+    (strats.order_block,       {}, "low", "order_block"),
+    # 2026-05-05 Phase 2: bumped to "med" — validated on 6E London long + MES RTH long
+    (strats.liquidity_sweep,   {}, "med", "liquidity_sweep"),
+    # ── HEADLINE EDGE: gap_fill (validated 2026-05-04 walk-forward) ──
+    # Walk-forward 60d split (45 train / 15 OOS) on ZN/NG/6E:
+    #   ZN: train n=585 E=+0.87R t=+15.21 | OOS n=256 E=+1.10R t=+11.95
+    #   6E: train n= 37 E=+1.50R t= +2.44 | OOS n= 17 E=+2.65R t= +3.63
+    #   NG: train n= 72 E=+0.64R t= +2.86 | OOS n= 38 E=+0.83R t= +1.53
+    # OOS hit rate (69.9%) > train hit rate (65.7%) — strong sign of real
+    # edge, not curve-fit. Allowlist gating to ZN/NG/6E enforced via
+    # STRATEGY_SYMBOL_ALLOWLIST below. high conviction so it passes the
+    # autonomous min_conviction=med floor.
+    (strats.gap_fill, {}, "high", "gap_fill"),
+    # ── TIER 2: CLASSICAL TA (backstop) ──────────────────────
     (strats.rsi2_extreme_reversion, {}, "med", "rsi2_extreme_reversion"),
     (strats.bollinger_squeeze_break, {}, "med", "bollinger_squeeze_break"),
     (strats.narrow_range_break, {}, "med", "narrow_range_break"),
@@ -76,19 +119,207 @@ STRATEGY_ROSTER: list[tuple[Any, dict, str, str]] = [
     (strats.keltner_breakout, {}, "low", "keltner_breakout"),
     (strats.bollinger_mean_reversion, {}, "low", "bollinger_mean_reversion"),
     (strats.range_mean_reversion, {}, "low", "range_mean_reversion"),
-    (strats.inside_bar_break, {}, "low", "inside_bar_break"),
+    # 2026-05-05 Phase 2: bumped from "low" to "med" — passed walk-forward
+    # validation in specific cells (see STRATEGY_CELL_ALLOWLIST).
+    (strats.inside_bar_break, {}, "med", "inside_bar_break"),
     (strats.vol_spike_fade, {}, "low", "vol_spike_fade"),
     (strats.pullback_in_trend, {}, "low", "pullback_in_trend"),
     (strats.volatility_breakout, {}, "low", "volatility_breakout"),
     (strats.support_resistance_bounce, {}, "low", "support_resistance_bounce"),
-    (strats.vwap_reversion, {}, "low", "vwap_reversion"),
+    # vwap_reversion REMOVED 2026-05-04 — backtest+walk-forward both
+    # confirmed broken: ~2-10% hit rate, t-stat as low as -24 on MNQ RTH.
+    # Was a stop-loss factory across all symbols/sessions.
     (strats.volume_spike_reversal, {}, "low", "volume_spike_reversal"),
-    (strats.gap_fill, {}, "low", "gap_fill"),
-    (strats.pivot_reversal, {}, "low", "pivot_reversal"),
+    # 2026-05-05 Phase 2: bumped to "med" — validated on 6E London long + RTH short
+    (strats.pivot_reversal, {}, "med", "pivot_reversal"),
     # ORB excluded — strategy_blacklist already vetoes ZN+ORB and NG+ORB
     # but we keep it last so it can fire on MES/GC/6E if no other does
     (strats.opening_range_breakout, {}, "low", "opening_range_breakout"),
 ]
+
+
+# Per-strategy symbol allowlist. A strategy listed here ONLY fires on the
+# named symbols. Strategies NOT in this dict have no symbol restriction.
+#
+# 2026-05-04: gap_fill walked-forward edge confirmed only on ZN/NG/6E.
+# MES/MNQ/MCL/GC failed validation. Restrict to the validated set.
+#
+# 2026-05-04: narrow_range_break aggregate has NEGATIVE expectancy
+# (-0.09R, t=-3.93 across 60d × 7 symbols). The only validated cell is
+# GC Asian SHORT (n=160, +0.35R, t=+2.85; OOS confirmed). Gating to GC
+# only as a first cut — the full session+direction filter is in
+# STRATEGY_CELL_ALLOWLIST below.
+#
+# DEFAULT-DENY (2026-05-05 user directive): a strategy not listed below
+# is BLOCKED from live trading. Unvalidated strategies still scan + log
+# as shadow trades (see scripts/shadow_logger.py) so they continue to
+# accumulate data toward future validation, but they don't place orders.
+STRATEGY_SYMBOL_ALLOWLIST: dict[str, set[str]] = {
+    # ── Validated headline edge (CLAUDE.md walk-forward 2026-05-04) ──
+    # 2026-05-05 Tier 3 added 7 cousin symbols (Treasury curve + 4 FX);
+    # all hold OOS at 5m. Live trading on these requires expanding
+    # config/focus_universe.yaml — currently they will pass this allowlist
+    # but get blocked by the focus-universe gate. ZB/ZF/ZT/6B/6J/6A/6C are
+    # validated; user decides whether to add them to focus.
+    "gap_fill": {"ZN", "NG", "6E",
+                 # Treasury curve cousins (5m) — Tier 3 walk-forward 2026-05-05
+                 "ZB", "ZF", "ZT",  # OOS E=+0.98/+1.16/+1.41R, t=+10.5/+7.95/+11.76
+                 # FX cousins (5m) — Tier 3 walk-forward 2026-05-05
+                 "6B", "6J", "6A", "6C"},  # OOS E=+0.70/+2.34/+2.19/+0.49R
+    # ── Phase 2 walk-forward 2026-05-05 (24 validated cells across 837 tested) ──
+    "narrow_range_break":      {"GC", "MCL", "NG"},
+    "pivot_reversal":          {"6E"},
+    "liquidity_sweep":         {"6E", "MES", "MNQ"},
+    "inside_bar_break":        {"NG", "GC", "MES"},
+    "keltner_breakout":        {"GC", "ZN", "MES", "MCL"},
+    "bollinger_squeeze_break": {"6E", "MCL", "MNQ"},
+    "vol_regime_trend":        {"NG"},
+    "opening_range_breakout":  {"MES"},
+    "vol_spike_fade":          {"MNQ"},
+    "fair_value_gap":          {"GC", "NG", "MNQ", "6E"},
+}
+
+
+# Per-strategy CELL allowlist (symbol × session × side). A strategy listed
+# here only fires when the candidate signal matches one of the validated
+# cells. Strategies NOT in this dict are unconstrained on session/side.
+#
+# Sessions (ET): Asian=20:00-04:00, London=04:00-09:30, RTH=09:30-16:00,
+# PostClose=16:00-20:00.
+#
+# 2026-05-05 Phase 2 walk-forward additions: 7 new validated cells with
+# OOS n>=20 and OOS t>=2.0. See vault/research/backtests/2026-05-05_0148_phase2.md.
+STRATEGY_CELL_ALLOWLIST: dict[str, list[dict]] = {
+    # gap_fill is validated at the symbol level (no session/side restriction)
+    # by the 60-day walk-forward. The Phase 2 sweep also identified
+    # NG Asian short as a particularly strong sub-cell.
+    "narrow_range_break": [
+        {"symbol": "GC",  "session": "Asian",  "side": "short"},  # OOS E=+0.57R t=+2.28 n=33
+        {"symbol": "MCL", "session": "Asian",  "side": "long"},   # OOS E=+0.69R t=+2.55 n=33
+        {"symbol": "NG",  "session": "London", "side": "long"},   # OOS E=+0.37R t=+1.52 n=37
+    ],
+    "pivot_reversal": [
+        {"symbol": "6E", "session": "London", "side": "long"},   # OOS E=+0.70R t=+2.19 n=23
+        {"symbol": "6E", "session": "RTH",    "side": "short"},  # OOS E=+0.71R t=+2.15 n=21
+    ],
+    "liquidity_sweep": [
+        {"symbol": "6E",  "session": "London", "side": "long"},  # OOS E=+0.59R t=+2.21 n=32
+        {"symbol": "MES", "session": "RTH",    "side": "long"},  # OOS E=+0.57R t=+2.06 n=30
+        {"symbol": "MNQ", "session": "RTH",    "side": "long"},  # OOS E=+0.48R t=+1.81 n=32
+        # Tier 2 walk-forward 2026-05-05 added:
+        {"symbol": "MNQ", "session": "London", "side": "long"},  # OOS E=+0.64R t=+1.95 n=22
+        {"symbol": "6E",  "session": "Asian",  "side": "short"}, # OOS E=+0.59R t=+1.57 n=17
+    ],
+    "inside_bar_break": [
+        {"symbol": "NG",  "session": "London",    "side": "short"},  # OOS E=+0.42R t=+2.15 n=46
+        {"symbol": "GC",  "session": "PostClose", "side": "long"},   # OOS E=+0.87R t=+2.37 n=14
+        {"symbol": "GC",  "session": "Asian",     "side": "short"},  # OOS E=+0.36R t=+1.76 n=48
+        {"symbol": "MES", "session": "PostClose", "side": "long"},   # OOS E=+0.71R t=+1.74 n=8
+    ],
+    "keltner_breakout": [
+        {"symbol": "GC",  "session": "Asian",  "side": "short"},  # OOS E=+1.17R t=+3.58 n=18
+        {"symbol": "ZN",  "session": "London", "side": "long"},   # OOS E=+0.88R t=+1.59 n=8
+        {"symbol": "MES", "session": "London", "side": "long"},   # OOS E=+0.75R t=+1.68 n=12
+        {"symbol": "MCL", "session": "Asian",  "side": "long"},   # OOS E=+0.65R t=+1.90 n=20
+    ],
+    "bollinger_squeeze_break": [
+        {"symbol": "6E",  "session": "Asian", "side": "short"},  # OOS E=+1.14R t=+2.07 n=7
+        {"symbol": "MCL", "session": "Asian", "side": "long"},   # OOS E=+0.80R t=+2.04 n=15
+        {"symbol": "MNQ", "session": "Asian", "side": "short"},  # OOS E=+0.71R t=+1.73 n=14
+    ],
+    "vol_regime_trend": [
+        {"symbol": "NG", "session": "Asian", "side": "long"},  # OOS E=+1.10R t=+2.40 n=10
+    ],
+    "opening_range_breakout": [
+        {"symbol": "MES", "session": "London", "side": "long"},  # OOS E=+1.00R t=+1.94 n=16
+    ],
+    "vol_spike_fade": [
+        {"symbol": "MNQ", "session": "RTH", "side": "long"},  # OOS E=+0.59R t=+1.55 n=11
+    ],
+    "fair_value_gap": [
+        {"symbol": "GC",  "session": "Asian", "side": "short"},  # OOS E=+0.50R t=+1.91 n=34
+        # Tier 2 walk-forward 2026-05-05 added:
+        {"symbol": "NG",  "session": "RTH",   "side": "short"},  # OOS E=+0.55R t=+1.80 n=24
+        {"symbol": "MNQ", "session": "Asian", "side": "long"},   # OOS E=+0.55R t=+2.00 n=31
+        {"symbol": "6E",  "session": "Asian", "side": "short"},  # OOS E=+0.50R t=+2.13 n=42
+        {"symbol": "GC",  "session": "RTH",   "side": "short"},  # OOS E=+0.45R t=+1.71 n=33
+    ],
+}
+
+
+def _session_bucket_et(et_hour_float: float) -> str:
+    """Map an ET hour-of-day (e.g., 14.25 = 14:15 ET) to session name."""
+    if 9.5 <= et_hour_float < 16:
+        return "RTH"
+    if 4 <= et_hour_float < 9.5:
+        return "London"
+    if 16 <= et_hour_float < 20:
+        return "PostClose"
+    return "Asian"
+
+
+def _record_shadow_for_unvalidated(db, label: str, symbol: str,
+                                    signal: dict, conviction: str,
+                                    reason: str) -> None:
+    """When an unvalidated (strategy, symbol) or unvalidated cell triggers,
+    log a shadow trade so we can resolve it later and accumulate evidence
+    toward future validation. No order placed.
+
+    Dedupe: skip if an unresolved shadow trade for the same
+    (strategy, symbol, side) was logged within the last 30 minutes —
+    avoids flooding the table on persistent triggers.
+    """
+    try:
+        side = "long" if str(signal.get("side", "")).lower() in ("long", "buy") else "short"
+        entry = float(signal.get("price") or 0)
+        stop = float(signal.get("stop") or 0)
+        target = float(signal.get("target") or 0) if signal.get("target") else entry
+        if entry <= 0 or stop <= 0:
+            return
+
+        # Dedupe within 30 minutes
+        cutoff = (datetime.now(tz=timezone.utc)
+                  - timedelta(minutes=30)).isoformat(timespec="seconds")
+        row = db.connect().execute(
+            "SELECT 1 FROM shadow_trades "
+            "WHERE strategy=? AND symbol=? AND side=? "
+            "AND outcome IS NULL AND ts_signal >= ? LIMIT 1",
+            (label, symbol, side, cutoff),
+        ).fetchone()
+        if row:
+            return
+
+        rr = (abs(target - entry) / max(abs(entry - stop), 0.0001)) if target else 0.0
+        db.record_shadow_trade(
+            agent="auto_trader", symbol=symbol, strategy=label, side=side,
+            entry_price=entry, stop_price=stop, target_price=target,
+            rr_planned=rr, conviction=conviction, horizon="intraday",
+            shadow_reason=reason,
+            notes=f"signal_reason={signal.get('reason','')[:80]}",
+        )
+    except Exception:
+        # Never let shadow logging break a scan
+        pass
+
+
+def _signal_passes_cell_allowlist(label: str, symbol: str, signal: dict) -> bool:
+    """True if the strategy has no cell restriction OR the signal matches
+    one of the allowed cells. Called inside scan_once after a signal is
+    generated, before any order placement."""
+    cells = STRATEGY_CELL_ALLOWLIST.get(label)
+    if cells is None:
+        return True  # no restriction
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now_et = datetime.now(tz=ZoneInfo("America/New_York"))
+    session_now = _session_bucket_et(now_et.hour + now_et.minute / 60.0)
+    side = str(signal.get("side", "")).lower()
+    for c in cells:
+        if (c["symbol"] == symbol
+                and c["session"] == session_now
+                and c["side"] == side):
+            return True
+    return False
 
 
 CONVICTION_RR_FLOOR = {"high": 1.5, "med": 2.0, "low": 2.5, "validation": 1.5}
@@ -599,6 +830,167 @@ def _count_open_positions(client, account_id) -> int:
     return sum(1 for p in positions if int(p.get("size") or 0) != 0)
 
 
+# Position-level gain-tier auto-close thresholds (added 2026-05-04).
+# When an open position's unrealized P&L exceeds these thresholds, the
+# auto_trader market-closes it. Prevents both:
+#   (a) "left $1190 on the table" runaway gains where target order didn't fire
+#   (b) gain-then-reverse — a position at +$400 reversing to negative
+# Defaults: $400 hard cap (matches daily_hard_target_usd), $150 high-water
+# threshold with $50 floor (locks in $50 if peak > $150).
+GAIN_TIER_HARD_CAP_USD = 400.0
+GAIN_TIER_HIGH_WATER_USD = 150.0
+GAIN_TIER_FLOOR_USD = 50.0
+
+# LOSS-SIDE HARD CAP: software belt-and-suspenders for the broker stop.
+# 2026-05-05: NG short rode 7h losing $702 with bracket stop at $120 — the
+# broker stop never fired (root cause TBD; possibly server-side cancellation
+# at session boundary). With this cap, the trader market-closes the position
+# at ~-$200 unrealized regardless of whether the bracket stop is alive.
+# Set at 1.67× the typical per-trade $120 stop budget — generous enough to
+# survive normal noise, tight enough to catch broker-stop-failure cases.
+LOSS_TIER_HARD_CAP_USD = 200.0
+
+# Per-symbol high-water tracking (process-local; resets on trader restart).
+# Maps "SYMBOL_SIDE" → peak unrealized P&L seen this session.
+_position_high_water: dict[str, float] = {}
+
+
+def _close_high_gain_positions(client, account_id) -> list[dict]:
+    """Iterate broker positions; market-close any whose unrealized P&L
+    exceeds the gain-tier thresholds. Returns list of closures performed."""
+    closed: list[dict] = []
+    try:
+        positions = client.get_positions(account_id)
+    except Exception as e:
+        print(f"  [gain_tier: get_positions failed: {e}]")
+        return closed
+
+    syms_cfg = _load_yaml("symbols.yaml") or {}
+    symbols = syms_cfg.get("symbols", {}) or {}
+
+    for p in positions:
+        size = int(p.get("size") or 0)
+        if size == 0:
+            continue
+        contract_id = str(p.get("contractId") or p.get("contract") or "")
+        if not contract_id:
+            continue
+
+        # Resolve symbol root + tick economics
+        from hooks.risk_gate import _normalize_root
+        symbol = None
+        for tok in contract_id.split("."):
+            if tok in ("CON", "F", "US", ""):
+                continue
+            if len(tok) <= 3 and tok and tok[0].isalpha() and tok[1:].isdigit():
+                continue
+            symbol = _normalize_root(tok)
+            break
+        if not symbol:
+            continue
+        sym_cfg = symbols.get(symbol) or {}
+        tick_size = float(sym_cfg.get("tick_size", 0.01))
+        tick_value = float(sym_cfg.get("tick_value", 1.0))
+        if tick_size <= 0 or tick_value <= 0:
+            continue
+
+        type_code = int(p.get("type") or 0)
+        side = "long" if type_code == 1 else "short" if type_code == 2 else (
+            "long" if size > 0 else "short")
+        size = abs(size)
+        avg_price = float(p.get("averagePrice") or p.get("avgPrice") or 0)
+        if avg_price <= 0:
+            continue
+
+        # Get latest price via 1-min bars (cheaper than full quote).
+        bars = fetch_bars(client, symbol, minutes=1, lookback=5)
+        if bars is None or len(bars) == 0:
+            continue
+        last_close = float(bars["Close"].iloc[-1])
+
+        # Compute unrealized P&L per position
+        if side == "long":
+            move = last_close - avg_price
+        else:
+            move = avg_price - last_close
+        ticks = move / tick_size
+        unrealized = ticks * tick_value * size
+
+        # Track high-water mark
+        key = f"{symbol}_{side}"
+        prev_peak = _position_high_water.get(key, 0.0)
+        if unrealized > prev_peak:
+            _position_high_water[key] = unrealized
+            prev_peak = unrealized
+
+        should_close = False
+        reason = ""
+
+        if unrealized >= GAIN_TIER_HARD_CAP_USD:
+            should_close = True
+            reason = (f"hard_cap: unrealized ${unrealized:.2f} "
+                      f">= ${GAIN_TIER_HARD_CAP_USD:.2f}")
+        elif unrealized <= -LOSS_TIER_HARD_CAP_USD:
+            # Loss-side belt-and-suspenders for broker stop failure.
+            # See LOSS_TIER_HARD_CAP_USD comment.
+            should_close = True
+            reason = (f"loss_hard_cap: unrealized ${unrealized:.2f} "
+                      f"<= -${LOSS_TIER_HARD_CAP_USD:.2f} — broker stop "
+                      f"may have failed; force-flat")
+        elif (prev_peak >= GAIN_TIER_HIGH_WATER_USD
+              and unrealized < GAIN_TIER_FLOOR_USD):
+            should_close = True
+            reason = (f"high_water_giveback: peak ${prev_peak:.2f} "
+                      f">= ${GAIN_TIER_HIGH_WATER_USD:.2f} but current "
+                      f"${unrealized:.2f} < floor ${GAIN_TIER_FLOOR_USD:.2f}")
+
+        if not should_close:
+            continue
+
+        # Market-close
+        opposite = "sell" if side == "long" else "buy"
+        cid = f"gain_tier_close_{int(time.time())}_{symbol}"
+        try:
+            result = client.place_order(
+                account_id=account_id, contract_id=contract_id,
+                side=opposite, qty=int(size),
+                order_type="market", time_in_force="ioc",
+                client_order_id=cid,
+            )
+            broker_oid = None
+            if isinstance(result, dict):
+                broker_oid = (result.get("orderId") or result.get("id")
+                              or result.get("brokerOrderId"))
+            print(f"  [GAIN_TIER_CLOSE] {symbol} {side} {size}ct "
+                  f"unrealized=${unrealized:.2f}  reason={reason}")
+            db.record_risk_event(
+                severity="info", rule="gain_tier_auto_close",
+                agent="auto_trader",
+                detail={"symbol": symbol, "side": side, "size": size,
+                        "unrealized_usd": unrealized, "peak_usd": prev_peak,
+                        "reason": reason, "broker_order_id": broker_oid},
+            )
+            closed.append({
+                "symbol": symbol, "side": side, "size": size,
+                "unrealized_usd": unrealized, "reason": reason,
+            })
+            # Reset high-water for this position so future re-entries start fresh
+            _position_high_water.pop(key, None)
+        except Exception as e:
+            print(f"  [gain_tier_close FAILED on {symbol}: {e}]")
+            db.record_risk_event(
+                severity="warn", rule="gain_tier_close_failed",
+                agent="auto_trader",
+                detail={"symbol": symbol, "side": side,
+                        "unrealized_usd": unrealized, "error": str(e)[:300]},
+            )
+
+    return closed
+
+
+import time  # used by gain_tier function
+
+
 def _refresh_calendar_if_stale() -> None:
     """Self-heal: rebuild vault/economic_calendar/today.json if missing or
     >6h old. Runs at the top of each scan so the high-impact blackout
@@ -970,6 +1362,84 @@ def _recent_thesis_in_db(symbol: str, minutes: int = 30) -> bool:
     return row is not None
 
 
+def _compute_unrealized_pl(client, positions: list[dict]) -> float:
+    """Sum unrealized P&L across open positions using latest 1-min bar close
+    as the mark. Mirrors Orchestrator.capture_account_snapshot's logic.
+
+    Returns 0.0 if positions is empty or all marks fail. A failed mark on
+    one leg is treated as 0 for that leg, never raises — partial unrealized
+    is better than blank (and blank is what caused the 2026-05-05 NG ride).
+    """
+    if not positions:
+        return 0.0
+    db = get_db()
+    try:
+        from hooks.risk_gate import _normalize_root
+    except Exception:
+        _normalize_root = lambda x: x
+    symbols_cfg = _load_yaml("symbols.yaml").get("symbols", {})
+    now = datetime.now(tz=timezone.utc)
+    total = 0.0
+    for p in positions:
+        size = int(p.get("size") or p.get("netQuantity") or 0)
+        if size == 0:
+            continue
+        contract_id = p.get("contractId") or p.get("contract") or ""
+        if not contract_id:
+            continue
+        avg_price = float(p.get("avgPrice") or p.get("averagePrice") or 0)
+        if avg_price <= 0:
+            continue
+        type_code = int(p.get("type") or 0)
+        if type_code == 1:
+            sign = 1
+        elif type_code == 2:
+            sign = -1
+        else:
+            sign = 1 if size > 0 else -1
+        size = abs(size)
+        root = None
+        for tok in str(contract_id).split("."):
+            if tok in ("CON", "F", "US", "") or (
+                len(tok) <= 3 and tok and tok[0].isalpha() and tok[1:].isdigit()
+            ):
+                continue
+            root = _normalize_root(tok)
+            break
+        meta = symbols_cfg.get(root or "", {}) if root else {}
+        tick_size = float(meta.get("tick_size") or 0)
+        tick_value = float(meta.get("tick_value") or 0)
+        if tick_size <= 0 or tick_value <= 0:
+            db.record_risk_event(
+                severity="warn", rule="unrealized_pl_skipped",
+                agent="auto_trader",
+                detail={"contract_id": contract_id, "root": root,
+                        "reason": "missing tick_size/tick_value in symbols.yaml"},
+            )
+            continue
+        try:
+            bars = client.get_bars(
+                contract_id=contract_id,
+                start_time=(now - timedelta(minutes=10)).isoformat(),
+                end_time=now.isoformat(),
+                unit=2, unit_number=1, limit=10, live=False,
+            )
+            mark = float(bars[-1].get("c") or bars[-1].get("close") or 0) if bars else 0
+        except Exception as e:
+            db.record_risk_event(
+                severity="warn", rule="unrealized_pl_skipped",
+                agent="auto_trader",
+                detail={"contract_id": contract_id,
+                        "reason": f"bars fetch failed: {e}"[:200]},
+            )
+            mark = 0
+        if mark <= 0:
+            continue
+        points = mark - avg_price
+        total += sign * size * (points / tick_size) * tick_value
+    return total
+
+
 def _capture_account_snapshot(client, account_id) -> dict | None:
     """Pull live broker state and write an account_snapshots row before the
     scan runs. Mirrors `Orchestrator.capture_account_snapshot` but lives here
@@ -1013,13 +1483,15 @@ def _capture_account_snapshot(client, account_id) -> dict | None:
         trailing_dd = max(0.0, peak - balance)
         env = str(risk_cfg.get("account", {}).get("environment", "combine"))
 
-        # Note: unrealized P&L computation skipped here (orchestrator does it
-        # via per-position bar fetches). auto_trader runs more frequently and
-        # extra bar fetches per scan would be wasteful. realized + canTrade
-        # + trailing_dd give DLL/TDD/ladder enough to enforce.
+        # Unrealized P&L — must compute or DLL/TDD/ladder projections are
+        # blind to bleeding open positions. 2026-05-05 incident: NG short
+        # rode unhedged for 7h losing $702 while every snap recorded
+        # unrealized=0, so no defensive ladder ever projected the loss.
+        unrealized_total = _compute_unrealized_pl(client, positions)
+
         db.record_account_snapshot(
             balance_usd=balance, environment=env,
-            unrealized_pl_usd=0.0,
+            unrealized_pl_usd=unrealized_total,
             realized_pl_day_usd=realized_day,
             trailing_dd_usd=trailing_dd,
             open_contracts_total=open_contracts,
@@ -1042,6 +1514,63 @@ def _capture_account_snapshot(client, account_id) -> dict | None:
         return None
 
 
+def _audit_risk_config_drift(db) -> None:
+    """Log a risk_event when critical gates are disabled in risk_limits.yaml.
+
+    Fires at most once per UTC day per disabled gate. The point is visibility:
+    if someone (human or agent) edits the config to disable a profit-protect
+    or loss-protect gate, the EOD report shows it loud.
+    """
+    try:
+        limits = _load_yaml("risk_limits.yaml")
+        pacing = limits.get("combine_pacing", {}) or {}
+        account = limits.get("account", {}) or {}
+
+        disabled = []
+        if float(pacing.get("daily_hard_target_usd", 0) or 0) <= 0:
+            disabled.append(("combine_pacing.daily_hard_target_usd",
+                             "profit-lock disabled — no per-day cap on entries"))
+        if float(pacing.get("partial_giveback_pct", 0) or 0) <= 0:
+            disabled.append(("combine_pacing.partial_giveback_pct",
+                             "giveback floor disabled — peak-to-close protection off"))
+        if float(account.get("daily_loss_limit_usd", 0) or 0) <= 0:
+            disabled.append(("account.daily_loss_limit_usd",
+                             "DLL disabled — no per-day loss cap"))
+        if float(account.get("trailing_drawdown_usd", 0) or 0) <= 0:
+            disabled.append(("account.trailing_drawdown_usd",
+                             "TDD disabled — no trailing-drawdown cap"))
+
+        if not disabled:
+            return
+
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        for path, msg in disabled:
+            row = db.connect().execute(
+                "SELECT 1 FROM risk_events "
+                "WHERE rule='risk_config_drift' AND ts LIKE ? "
+                "AND detail LIKE ? LIMIT 1",
+                (f"{today}%", f"%{path}%"),
+            ).fetchone()
+            if row:
+                continue
+            db.record_risk_event(
+                severity="warn", rule="risk_config_drift",
+                agent="auto_trader",
+                detail={"path": path, "message": msg,
+                        "note": "Critical safety gate disabled in risk_limits.yaml"},
+            )
+            print(f"  [config_drift_warning: {path} — {msg}]")
+    except Exception as e:
+        # Never let the audit break the scan
+        try:
+            db.record_risk_event(
+                severity="warn", rule="risk_config_drift_audit_failed",
+                agent="auto_trader", detail={"error": str(e)[:200]},
+            )
+        except Exception:
+            pass
+
+
 def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
     """One scan pass over the focus universe. Returns a summary dict."""
     db = get_db()
@@ -1057,6 +1586,13 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
     # log + continue (better partial enforcement than zero enforcement).
     # Self-heal economic calendar (rebuild if missing or >6h old)
     _refresh_calendar_if_stale()
+
+    # Surface critical-gate disables. 2026-05-05: a "diagnostic mode" edit
+    # zeroed daily_hard_target_usd at 21:23 ET. Two minutes later the
+    # trader picked up the new config on restart and entered three more
+    # trades that gave back $837. This check fires once per UTC day per
+    # disabled gate so the EOD report can't miss it.
+    _audit_risk_config_drift(db)
 
     snap_result = _capture_account_snapshot(client, account_id)
 
@@ -1336,6 +1872,19 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
         except Exception as e:
             print(f"  [reconcile failed: {e}]")
 
+    # GAIN-TIER AUTO-CLOSE (added 2026-05-04): for any open broker position
+    # whose unrealized P&L exceeds GAIN_TIER_HARD_CAP_USD ($400) OR whose
+    # peak unrealized exceeded GAIN_TIER_HIGH_WATER_USD ($150) before
+    # reverting below GAIN_TIER_FLOOR_USD ($50), market-close the position.
+    # This protects against (a) target order not firing on big winners and
+    # (b) gain-then-reverse from positive to negative. Catches phantom
+    # positions that the OCO race created with no protective target.
+    if not dry_run:
+        try:
+            _close_high_gain_positions(client, account_id)
+        except Exception as e:
+            print(f"  [gain_tier_auto_close failed: {e}]")
+
     # ORPHAN CLEANUP: cancel two classes of stale orders:
     #   (a) Orphans — working orders on contracts where the position is gone
     #       (entry filled, stop hit, leaving target on the books — or vice
@@ -1446,6 +1995,43 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 if misdirected_cancelled:
                     msg.append(f"{misdirected_cancelled} misdirected protective leg(s)")
                 print(f"  [cleanup: cancelled {' + '.join(msg)}]")
+
+            # PROTECTIVE-STOP VERIFICATION (added 2026-05-05): for every
+            # open position on the broker, confirm a working order tagged
+            # _stop exists for that contract. If not, the bracket stop has
+            # been cancelled (server-side at session boundary, or by our
+            # own orphan/misdirected cleanup) and the position is naked.
+            # The LOSS_TIER_HARD_CAP_USD floor in _close_high_gain_positions
+            # is the actual rescue; this block surfaces the condition so we
+            # can see how often it happens and chase the root cause.
+            for contract_id, side in pos_dir_by_contract.items():
+                has_stop = any(
+                    str(o.get("contractId")) == contract_id
+                    and str(o.get("customTag") or "").endswith("_stop")
+                    for o in broker_orders
+                )
+                if has_stop:
+                    continue
+                # Avoid spamming: only log once per (contract, UTC day).
+                today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+                already = db.connect().execute(
+                    "SELECT 1 FROM risk_events "
+                    "WHERE rule='protective_stop_missing' AND ts LIKE ? "
+                    "AND detail LIKE ? LIMIT 1",
+                    (f"{today}%", f"%{contract_id}%"),
+                ).fetchone()
+                if already:
+                    continue
+                db.record_risk_event(
+                    severity="breach", rule="protective_stop_missing",
+                    agent="auto_trader",
+                    detail={"contract": contract_id, "side": side,
+                            "note": ("Open position has no working _stop "
+                                     "order — LOSS_TIER_HARD_CAP will "
+                                     "force-flat at -$200 unrealized.")},
+                )
+                print(f"  [WARN: {contract_id} {side} has NO working stop — "
+                      f"loss-cap is the only protection]")
         except Exception as e:
             print(f"  [cleanup failed: {e}]")
 
@@ -1537,6 +2123,12 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
 
             # Try every strategy, first trigger wins
             for strat_fn, params, conviction, label in STRATEGY_ROSTER:
+                # NOTE: The DEFAULT-DENY validation gate runs AFTER signal
+                # generation (~line 2120) so unvalidated strategies still
+                # produce signals → those become shadow trades for ongoing
+                # validation accumulation. See `STRATEGY_SYMBOL_ALLOWLIST`
+                # comment block for the policy.
+                pass
                 # AUTO-DEMOTE: if this strategy already had 5 consecutive
                 # losers today, skip it for the rest of the session.
                 # Bellafiore "Playbook" rule, applied per-strategy not per-book.
@@ -1573,6 +2165,27 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                     continue
                 if signal["stop"] is None:
                     continue  # need a stop to trade
+
+                # DEFAULT-DENY VALIDATION GATE (2026-05-05): if this
+                # (strategy, symbol) is not in STRATEGY_SYMBOL_ALLOWLIST,
+                # OR the (symbol, session, side) cell is not validated,
+                # log a shadow trade instead of placing. Unvalidated
+                # strategies accumulate data toward future validation
+                # without spending real capital.
+                allowed_for = STRATEGY_SYMBOL_ALLOWLIST.get(label)
+                symbol_ok = allowed_for is not None and symbol in allowed_for
+                cell_ok = _signal_passes_cell_allowlist(label, symbol, signal)
+                if not (symbol_ok and cell_ok):
+                    reason = ("symbol_not_validated" if not symbol_ok
+                              else "cell_not_validated")
+                    _record_shadow_for_unvalidated(
+                        db, label, symbol, signal, conviction, reason)
+                    continue
+
+                # CELL ALLOWLIST: strategies in STRATEGY_CELL_ALLOWLIST only
+                # fire when (symbol, session, side) matches a validated cell.
+                if not _signal_passes_cell_allowlist(label, symbol, signal):
+                    continue
 
                 # R:R floor: start from conviction floor (2.0 for med),
                 # autonomous tightens via override (2.5), urgency relaxes
