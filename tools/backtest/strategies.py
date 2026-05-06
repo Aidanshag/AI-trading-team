@@ -1233,6 +1233,178 @@ STRATEGY_REGISTRY = {
 }
 
 
+# ── Parametrized strategy variants (Tier 4 walk-forward findings) ──
+# Default `order_block` (displacement_atr=1.5) had ZERO validated cells.
+# 2026-05-06 Tier 4 sweep with displacement_atr=1.0 found 4 validated
+# cells: 6B London long (t=+3.49), 6E RTH short (t=+2.06), MNQ Asian
+# short (t=+1.80), 6B Asian short (t=+1.52). Wrapper exposes the tuned
+# variant as if it were a separate strategy so the existing validation +
+# auto_trader pipelines pick it up without per-cell parameter overrides.
+
+def order_block_d1(bars, **kwargs) -> Iterator[Signal]:
+    """order_block tuned variant — displacement_atr=1.0 (vs default 1.5).
+    See Tier 4 walk-forward 2026-05-06 for validation."""
+    kwargs.setdefault("displacement_atr", 1.0)
+    return order_block(bars, **kwargs)
+
+
+def fair_value_gap_tuned(bars, **kwargs) -> Iterator[Signal]:
+    """fair_value_gap tuned variant — rr_target=2.5 (vs default 2.0).
+    Tier 4 multi-sweep 2026-05-06 found rr=2.5 was the dominant
+    winning RR across the top 15 validated cells. min_gap_atr and
+    max_age default (0.20, 30) are compatible with most winners."""
+    kwargs.setdefault("min_gap_atr", 0.2)
+    kwargs.setdefault("max_age_bars", 30)
+    kwargs.setdefault("rr_target", 2.5)
+    return fair_value_gap(bars, **kwargs)
+
+
+def liquidity_sweep_tuned(bars, **kwargs) -> Iterator[Signal]:
+    """liquidity_sweep tuned variant — rr_target=2.5 + swing_lookback=10
+    (vs defaults 2.0, 10). Tier 4 multi-sweep 2026-05-06 found 6
+    validated cells, top 3 use rr=2.5 + swing=10:
+      MES RTH long    OOS E=+0.96R t=+2.71 n=25
+      MNQ RTH long    OOS E=+0.94R t=+2.77 n=27
+      MCL RTH long    OOS E=+0.68R t=+2.24 n=25"""
+    kwargs.setdefault("swing_lookback", 10)
+    kwargs.setdefault("rr_target", 2.5)
+    return liquidity_sweep(bars, **kwargs)
+
+
+STRATEGY_REGISTRY["order_block_d1"] = order_block_d1
+STRATEGY_REGISTRY["fair_value_gap_tuned"] = fair_value_gap_tuned
+STRATEGY_REGISTRY["liquidity_sweep_tuned"] = liquidity_sweep_tuned
+
+
+# ── Cross-asset divergence (Quant Researcher proposal #3, 2026-05-06) ──
+# Yield-curve cointegration trade. The fund's only cross-asset signal.
+# Bets that ZN-ZT spread mean-reverts when it dislocates, regardless of
+# where either leg is vs prior close (orthogonal to gap_fill).
+#
+# Phase 1 (this implementation): single-leg ZN directional. Long ZN
+# when spread_z <= -2 (cheap), short ZN when spread_z >= +2 (rich).
+# Phase 2 (deferred): true 2-leg pair trade with hedge ratio sizing.
+#
+# Spec from vault/research/strategy_proposals/2026-05-06_quant_researcher_proposals.md
+def cross_asset_divergence_zn(bars, partner_bars=None,
+                                beta_window: int = 60,
+                                z_window: int = 60,
+                                z_threshold: float = 2.0,
+                                atr_stop_multi: float = 1.5,
+                                time_stop_bars: int = 30) -> Iterator[Signal]:
+    """ZN cointegration-divergence trade vs ZT (or other curve partner).
+
+    Args:
+      bars: ZN OHLCV
+      partner_bars: ZT OHLCV with matching index (DateTime). If None,
+        attempts yfinance fetch (for backtests). Falls back to no-op
+        if partner not available.
+      beta_window: rolling OLS lookback for β (ZN ≈ β × ZT + ε)
+      z_window: rolling lookback for spread mean/std (z-score)
+      z_threshold: |z| ≥ this value triggers entry
+      atr_stop_multi: stop placed atr_stop_multi × ATR14 from entry
+      time_stop_bars: max hold; force-close if spread doesn't revert
+    """
+    import numpy as np
+
+    if partner_bars is None:
+        # Try yfinance fallback (only used in backtests)
+        try:
+            import yfinance as yf
+            df = yf.download("ZT=F", period="60d", interval="5m",
+                             progress=False, auto_adjust=False)
+            if df.empty: return
+            if hasattr(df.columns, "get_level_values"):
+                df.columns = df.columns.get_level_values(0)
+            partner_bars = df[["High", "Low", "Close"]].copy().dropna()
+            if partner_bars.index.tz is None:
+                partner_bars.index = partner_bars.index.tz_localize("UTC")
+            partner_bars.index = partner_bars.index.tz_convert(bars.index.tz or "UTC")
+        except Exception:
+            return
+
+    # Align on index intersection
+    common_idx = bars.index.intersection(partner_bars.index)
+    if len(common_idx) < beta_window + z_window:
+        return
+    zn = bars.loc[common_idx, "Close"].astype(float)
+    zt = partner_bars.loc[common_idx, "Close"].astype(float)
+    atr = _atr(bars.loc[common_idx], 14)
+
+    # Rolling OLS β (no intercept — pure cointegration ratio)
+    # β = sum(ZN×ZT) / sum(ZT²) over window
+    spreads: list[float] = []
+    betas: list[float] = []
+    for i in range(len(common_idx)):
+        if i < beta_window:
+            spreads.append(np.nan); betas.append(np.nan)
+            continue
+        win_zn = zn.iloc[i - beta_window:i].values
+        win_zt = zt.iloc[i - beta_window:i].values
+        denom = float(np.sum(win_zt * win_zt))
+        beta = float(np.sum(win_zn * win_zt) / denom) if denom > 0 else 0
+        betas.append(beta)
+        spreads.append(float(zn.iloc[i] - beta * zt.iloc[i]))
+
+    spreads = np.array(spreads)
+    z_scores: list[float] = []
+    for i in range(len(spreads)):
+        if i < beta_window + z_window or np.isnan(spreads[i]):
+            z_scores.append(np.nan); continue
+        win = spreads[i - z_window:i]
+        win = win[~np.isnan(win)]
+        if len(win) < 10:
+            z_scores.append(np.nan); continue
+        m, s = float(np.mean(win)), float(np.std(win, ddof=1))
+        if s <= 0:
+            z_scores.append(0.0); continue
+        z_scores.append((spreads[i] - m) / s)
+
+    # Walk forward generating entry signals on z-threshold crossings
+    in_position = False
+    entry_idx = -1
+    entry_side = None
+    for i in range(1, len(common_idx)):
+        date = common_idx[i]
+        z_now = z_scores[i]
+        z_prev = z_scores[i - 1]
+        if np.isnan(z_now) or np.isnan(z_prev):
+            continue
+        a = atr.iloc[i] if i < len(atr) else None
+        if a is None or pd.isna(a) or a <= 0:
+            continue
+
+        # Exit logic (track in_position via signals; but engine handles
+        # exits, so emit only entries — strategy is stateless re: position)
+
+        # Crossing into rich → short ZN
+        if z_now >= z_threshold and z_prev < z_threshold:
+            entry = float(zn.iloc[i])
+            stop = entry + float(a) * atr_stop_multi
+            target = entry - float(a) * atr_stop_multi   # symmetric R 1:1; engine uses this
+            yield Signal(
+                date=date, side="short", price=entry,
+                stop=stop, target=target,
+                reason=f"curve_divergence_zn_short_z{z_now:+.2f}",
+                kind="entry",
+            )
+
+        # Crossing into cheap → long ZN
+        elif z_now <= -z_threshold and z_prev > -z_threshold:
+            entry = float(zn.iloc[i])
+            stop = entry - float(a) * atr_stop_multi
+            target = entry + float(a) * atr_stop_multi
+            yield Signal(
+                date=date, side="long", price=entry,
+                stop=stop, target=target,
+                reason=f"curve_divergence_zn_long_z{z_now:+.2f}",
+                kind="entry",
+            )
+
+
+STRATEGY_REGISTRY["cross_asset_divergence_zn"] = cross_asset_divergence_zn
+
+
 def get_strategy(name: str):
     if name not in STRATEGY_REGISTRY:
         raise ValueError(

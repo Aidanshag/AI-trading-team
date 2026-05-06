@@ -1,0 +1,353 @@
+[
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.2,
+      "max_age_bars": 30,
+      "rr_target": 2.5
+    },
+    "symbol": "MNQ",
+    "session": "Asian",
+    "side": "long",
+    "oos": {
+      "n": 26,
+      "hit": 0.538,
+      "e": 0.885,
+      "t": 2.53
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.3,
+      "max_age_bars": 15,
+      "rr_target": 2.5
+    },
+    "symbol": "6E",
+    "session": "Asian",
+    "side": "short",
+    "oos": {
+      "n": 37,
+      "hit": 0.568,
+      "e": 0.986,
+      "t": 3.41
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.2,
+      "max_age_bars": 30,
+      "rr_target": 2.5
+    },
+    "symbol": "GC",
+    "session": "Asian",
+    "side": "short",
+    "oos": {
+      "n": 28,
+      "hit": 0.5,
+      "e": 0.75,
+      "t": 2.23
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.1,
+      "max_age_bars": 15,
+      "rr_target": 2.0
+    },
+    "symbol": "GC",
+    "session": "RTH",
+    "side": "short",
+    "oos": {
+      "n": 38,
+      "hit": 0.474,
+      "e": 0.421,
+      "t": 1.71
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.1,
+      "max_age_bars": 15,
+      "rr_target": 2.5
+    },
+    "symbol": "6A",
+    "session": "London",
+    "side": "long",
+    "oos": {
+      "n": 49,
+      "hit": 0.429,
+      "e": 0.5,
+      "t": 2.0
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.3,
+      "max_age_bars": 15,
+      "rr_target": 2.0
+    },
+    "symbol": "6C",
+    "session": "London",
+    "side": "short",
+    "oos": {
+      "n": 29,
+      "hit": 0.552,
+      "e": 0.655,
+      "t": 2.32
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.3,
+      "max_age_bars": 15,
+      "rr_target": 2.5
+    },
+    "symbol": "MES",
+    "session": "London",
+    "side": "long",
+    "oos": {
+      "n": 25,
+      "hit": 0.48,
+      "e": 0.68,
+      "t": 1.91
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.3,
+      "max_age_bars": 60,
+      "rr_target": 1.5
+    },
+    "symbol": "NG",
+    "session": "RTH",
+    "side": "short",
+    "oos": {
+      "n": 25,
+      "hit": 0.68,
+      "e": 0.675,
+      "t": 2.86
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.3,
+      "max_age_bars": 60,
+      "rr_target": 2.5
+    },
+    "symbol": "6C",
+    "session": "RTH",
+    "side": "short",
+    "oos": {
+      "n": 30,
+      "hit": 0.433,
+      "e": 0.517,
+      "t": 1.6
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.1,
+      "max_age_bars": 30,
+      "rr_target": 2.5
+    },
+    "symbol": "MNQ",
+    "session": "London",
+    "side": "short",
+    "oos": {
+      "n": 25,
+      "hit": 0.48,
+      "e": 0.68,
+      "t": 1.91
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.1,
+      "max_age_bars": 60,
+      "rr_target": 2.0
+    },
+    "symbol": "6B",
+    "session": "RTH",
+    "side": "short",
+    "oos": {
+      "n": 43,
+      "hit": 0.465,
+      "e": 0.395,
+      "t": 1.71
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.1,
+      "max_age_bars": 60,
+      "rr_target": 2.5
+    },
+    "symbol": "MNQ",
+    "session": "Asian",
+    "side": "short",
+    "oos": {
+      "n": 30,
+      "hit": 0.433,
+      "e": 0.517,
+      "t": 1.6
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.2,
+      "max_age_bars": 30,
+      "rr_target": 2.5
+    },
+    "symbol": "MES",
+    "session": "London",
+    "side": "short",
+    "oos": {
+      "n": 25,
+      "hit": 0.44,
+      "e": 0.54,
+      "t": 1.52
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.3,
+      "max_age_bars": 60,
+      "rr_target": 2.0
+    },
+    "symbol": "MNQ",
+    "session": "RTH",
+    "side": "long",
+    "oos": {
+      "n": 31,
+      "hit": 0.484,
+      "e": 0.452,
+      "t": 1.65
+    }
+  },
+  {
+    "strategy": "fair_value_gap",
+    "params": {
+      "min_gap_atr": 0.3,
+      "max_age_bars": 15,
+      "rr_target": 2.0
+    },
+    "symbol": "6A",
+    "session": "London",
+    "side": "short",
+    "oos": {
+      "n": 26,
+      "hit": 0.5,
+      "e": 0.5,
+      "t": 1.67
+    }
+  },
+  {
+    "strategy": "liquidity_sweep",
+    "params": {
+      "swing_lookback": 5,
+      "rr_target": 2.0
+    },
+    "symbol": "MES",
+    "session": "Asian",
+    "side": "short",
+    "oos": {
+      "n": 38,
+      "hit": 0.474,
+      "e": 0.421,
+      "t": 1.71
+    }
+  },
+  {
+    "strategy": "liquidity_sweep",
+    "params": {
+      "swing_lookback": 10,
+      "rr_target": 2.5
+    },
+    "symbol": "MES",
+    "session": "RTH",
+    "side": "long",
+    "oos": {
+      "n": 25,
+      "hit": 0.56,
+      "e": 0.96,
+      "t": 2.71
+    }
+  },
+  {
+    "strategy": "liquidity_sweep",
+    "params": {
+      "swing_lookback": 10,
+      "rr_target": 2.5
+    },
+    "symbol": "MNQ",
+    "session": "RTH",
+    "side": "long",
+    "oos": {
+      "n": 27,
+      "hit": 0.556,
+      "e": 0.944,
+      "t": 2.77
+    }
+  },
+  {
+    "strategy": "liquidity_sweep",
+    "params": {
+      "swing_lookback": 20,
+      "rr_target": 2.5
+    },
+    "symbol": "6E",
+    "session": "London",
+    "side": "long",
+    "oos": {
+      "n": 27,
+      "hit": 0.519,
+      "e": 0.815,
+      "t": 2.38
+    }
+  },
+  {
+    "strategy": "liquidity_sweep",
+    "params": {
+      "swing_lookback": 10,
+      "rr_target": 1.5
+    },
+    "symbol": "GC",
+    "session": "RTH",
+    "side": "short",
+    "oos": {
+      "n": 38,
+      "hit": 0.526,
+      "e": 0.316,
+      "t": 1.54
+    }
+  },
+  {
+    "strategy": "liquidity_sweep",
+    "params": {
+      "swing_lookback": 15,
+      "rr_target": 2.0
+    },
+    "symbol": "MCL",
+    "session": "RTH",
+    "side": "long",
+    "oos": {
+      "n": 25,
+      "hit": 0.56,
+      "e": 0.68,
+      "t": 2.24
+    }
+  }
+]

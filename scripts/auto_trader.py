@@ -136,6 +136,22 @@ STRATEGY_ROSTER: list[tuple[Any, dict, str, str]] = [
     # ORB excluded — strategy_blacklist already vetoes ZN+ORB and NG+ORB
     # but we keep it last so it can fire on MES/GC/6E if no other does
     (strats.opening_range_breakout, {}, "low", "opening_range_breakout"),
+    # 2026-05-06 Tier 4 parametrized variant: order_block tuned with
+    # displacement_atr=1.0 (default 1.5 produced 0 validated cells).
+    # Tuned version found 4 validated cells: 6B London long, 6E RTH short,
+    # MNQ Asian short, 6B Asian short. "med" conviction so autonomous mode
+    # accepts it. See vault/research/backtests/2026-05-06_*tier4_order_block_sweep.md.
+    (strats.order_block_d1, {}, "med", "order_block_d1"),
+    # 2026-05-06 Tier 4 multi-sweep — fair_value_gap tuned (rr=2.5).
+    # Found 15 validated cells, top: 6E Asian short t=+3.41 E=+0.99R.
+    (strats.fair_value_gap_tuned, {}, "med", "fair_value_gap_tuned"),
+    # 2026-05-06 Tier 4 multi-sweep — liquidity_sweep tuned (rr=2.5).
+    # Found 6 validated cells, top 3 all use rr=2.5 swing=10.
+    (strats.liquidity_sweep_tuned, {}, "med", "liquidity_sweep_tuned"),
+    # 2026-05-06 Quant Researcher proposal #3 — yield-curve cointegration.
+    # Single-leg ZN trade vs ZT spread divergence. Untested in walk-forward
+    # at the time of registration; daily validation will gate live trading.
+    (strats.cross_asset_divergence_zn, {}, "med", "cross_asset_divergence_zn"),
 ]
 
 

@@ -43,3 +43,30 @@
 - ✅ PROMOTE inside_bar_break × MES × RTH × long  (OOS E=+0.43R, t=+1.67, n=32)
 - ❌ DEMOTE inside_bar_break × GC × Asian × short  (reason: 3_consecutive_fails, last OOS E=+0.23R)
 - ❌ DEMOTE inside_bar_break × 6A × Asian × short  (reason: 3_consecutive_fails, last OOS E=+0.24R)
+
+## 2026-05-06
+
+- ❌ DEMOTE fair_value_gap × GC × RTH × short  (reason: 3_consecutive_fails, last OOS E=+0.37R)
+
+## 2026-05-06
+
+- ✅ PROMOTE keltner_breakout × 6B × Asian × short  (OOS E=+0.55R, t=+1.95, n=29)
+- ✅ PROMOTE vol_spike_fade × ZF × Asian × short  (OOS E=+0.40R, t=+1.58, n=25)
+- ✅ PROMOTE vol_spike_fade × 6C × Asian × short  (OOS E=+0.48R, t=+2.00, n=27)
+- ✅ PROMOTE gap_fill × ZB × London × long  (OOS E=+0.57R, t=+2.11, n=26)
+- ✅ PROMOTE gap_fill × ZB × PostClose × long  (OOS E=+1.04R, t=+3.41, n=28)
+- ✅ PROMOTE gap_fill × ZT × London × long  (OOS E=+0.67R, t=+2.49, n=29)
+- ✅ PROMOTE gap_fill × ZT × London × short  (OOS E=+2.24R, t=+2.97, n=29)
+- ✅ PROMOTE gap_fill × ZF × PostClose × short  (OOS E=+1.29R, t=+3.17, n=26)
+- ✅ PROMOTE pivot_reversal × 6E × London × long  (OOS E=+0.71R, t=+2.50, n=28)
+- ✅ PROMOTE fair_value_gap × NG × RTH × short  (OOS E=+0.50R, t=+1.67, n=26)
+- ✅ PROMOTE liquidity_sweep × MES × RTH × long  (OOS E=+0.71R, t=+2.50, n=28)
+- ✅ PROMOTE order_block_d1 × 6E × RTH × short  (OOS E=+0.61R, t=+2.06, n=26)
+- ✅ PROMOTE order_block_d1 × 6B × London × long  (OOS E=+0.73R, t=+2.47, n=26)
+- ✅ PROMOTE fair_value_gap_tuned × GC × Asian × short  (OOS E=+0.75R, t=+2.23, n=28)
+- ✅ PROMOTE fair_value_gap_tuned × MNQ × Asian × long  (OOS E=+0.89R, t=+2.53, n=26)
+- ✅ PROMOTE fair_value_gap_tuned × MES × London × short  (OOS E=+0.54R, t=+1.52, n=25)
+- ✅ PROMOTE fair_value_gap_tuned × 6E × Asian × short  (OOS E=+0.57R, t=+2.06, n=40)
+- ✅ PROMOTE liquidity_sweep_tuned × MNQ × RTH × long  (OOS E=+0.94R, t=+2.77, n=27)
+- ✅ PROMOTE liquidity_sweep_tuned × MES × RTH × long  (OOS E=+0.96R, t=+2.71, n=25)
+- ✅ PROMOTE liquidity_sweep_tuned × 6E × London × long  (OOS E=+0.58R, t=+1.83, n=31)

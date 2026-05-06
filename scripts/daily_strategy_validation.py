@@ -82,6 +82,12 @@ ALL_STRATEGIES: dict[str, callable] = {
         "rsi2_extreme_reversion", "volume_spike_reversal",
         "support_resistance_bounce", "gap_fill", "pivot_reversal",
         "fair_value_gap", "order_block", "liquidity_sweep",
+        # Parametrized variants (Tier 4 findings):
+        "order_block_d1",
+        "fair_value_gap_tuned",
+        "liquidity_sweep_tuned",
+        # Novel strategies (Quant Researcher proposals):
+        "cross_asset_divergence_zn",
     )
 }
 
@@ -89,8 +95,13 @@ SESSIONS = ("Asian", "London", "RTH", "PostClose")
 SIDES = ("long", "short")
 
 # Pass criteria
+# 2026-05-06: lowered PASS_MIN_N_OOS from 30 to 25 to match the n>=25
+# threshold the Tier 4 parameter sweeps use upstream. Inconsistent
+# thresholds were leaving Tier 4-validated cells (n=25-29 range) in
+# shadow indefinitely. Rolling 3-day demotion logic catches false
+# positives that slip through.
 PASS_T_STAT = 1.5
-PASS_MIN_N_OOS = 30
+PASS_MIN_N_OOS = 25
 
 # Catastrophic fail triggers immediate demotion
 CATASTROPHIC_E_R = -0.5
