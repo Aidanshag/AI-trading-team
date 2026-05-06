@@ -330,6 +330,24 @@ def main() -> int:
     except Exception as e:
         _warn(f"lessons promoter skipped: {type(e).__name__}: {e}")
 
+    # Step 13: memory backup — copy ~/.claude memory files into the
+    # project's vault so they get pushed to git + OneDrive. Without
+    # this, memory lives only in user profile and is lost on machine loss.
+    print(f"\n[step 13] memory backup to vault")
+    try:
+        import subprocess
+        proc = subprocess.run(
+            ["python", "scripts/backup_memory.py"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if proc.returncode == 0:
+            tail = (proc.stdout.strip() or "ok").splitlines()[-1]
+            _ok(f"memory backup: {tail}")
+        else:
+            _warn(f"memory backup returned {proc.returncode}")
+    except Exception as e:
+        _warn(f"memory backup skipped: {type(e).__name__}: {e}")
+
     print()
     if all(checks):
         print(f"{GREEN}=== All preflight checks passed. Cleared to start session. ==={END}\n")

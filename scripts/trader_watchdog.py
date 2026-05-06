@@ -41,8 +41,10 @@ PID_FILE = PROJECT_ROOT / "logs" / "auto_trader.pid"
 WATCHDOG_LOG = PROJECT_ROOT / "logs" / "watchdog.log"
 
 # Heartbeat threshold: trader writes a snapshot every scan (5 min cadence).
-# Allow one missed scan + buffer = 12 minutes. Beyond that, treat as dead.
-MAX_AGE_SEC = 12 * 60
+# 2026-05-06: tightened from 12 min to 8 min after a 41-min undetected
+# gap. With per-scan cadence of ~5 min, 8 min still allows one missed
+# scan + buffer but catches hangs faster.
+MAX_AGE_SEC = 8 * 60
 
 
 def _log(msg: str) -> None:
@@ -261,15 +263,79 @@ def status() -> int:
     return 0 if state == "ALIVE" else 1
 
 
+def daemon_loop(interval_sec: int = 60) -> int:
+    """Long-running mode: check every `interval_sec` and revive when dead.
+
+    Provides redundancy to the Windows scheduled task. Useful when the
+    scheduled task is unreliable (battery, sleep, missed firings) — this
+    daemon is a continuously-running Python process that doesn't depend
+    on Task Scheduler.
+
+    Run via:
+      python -m scripts.trader_watchdog --daemon
+
+    Or with a custom interval:
+      python -m scripts.trader_watchdog --daemon --interval 30
+    """
+    import time
+    _log(f"daemon mode started (interval={interval_sec}s, max_age={MAX_AGE_SEC}s)")
+    last_status_log = 0
+    revive_count = 0
+    while True:
+        try:
+            age = _latest_snapshot_age_sec()
+            now = time.time()
+            if age is None:
+                if now - last_status_log > 600:
+                    _log("daemon: no snapshots yet")
+                    last_status_log = now
+            elif age > MAX_AGE_SEC:
+                _log(f"daemon: snapshot age {age:.0f}s > {MAX_AGE_SEC}s — REVIVING")
+                if _revive():
+                    revive_count += 1
+                    _log(f"daemon: revival #{revive_count} completed")
+                    _discord_alert(
+                        f":rotating_light: Daemon-mode trader revival #{revive_count}\n"
+                        f"Reason: snapshot {age:.0f}s old\n"
+                        f"Time: {datetime.now(timezone.utc).isoformat()}"
+                    )
+                    # Give the new instance time to write its first snapshot
+                    time.sleep(120)
+                else:
+                    _log("daemon: revival FAILED")
+                    _discord_alert(
+                        ":x: Daemon-mode trader revival FAILED — manual intervention needed."
+                    )
+                    time.sleep(300)  # Back off before retrying
+            else:
+                # Healthy — log status hourly
+                if now - last_status_log > 3600:
+                    _log(f"daemon: ALIVE (snapshot age {age:.0f}s)")
+                    last_status_log = now
+        except KeyboardInterrupt:
+            _log("daemon: stopping (Ctrl+C)")
+            return 0
+        except Exception as e:
+            _log(f"daemon: check error: {type(e).__name__}: {e}")
+        time.sleep(interval_sec)
+
+
 def main() -> int:
     p = argparse.ArgumentParser(prog="trader_watchdog")
     p.add_argument("--force", action="store_true",
                    help="Force a restart regardless of liveness")
     p.add_argument("--status", action="store_true",
                    help="Print status only; take no action")
+    p.add_argument("--daemon", action="store_true",
+                   help="Run continuously, checking every --interval seconds. "
+                        "Redundant alive-check independent of Task Scheduler.")
+    p.add_argument("--interval", type=int, default=60,
+                   help="Daemon check interval in seconds (default 60)")
     args = p.parse_args()
     if args.status:
         return status()
+    if args.daemon:
+        return daemon_loop(interval_sec=args.interval)
     return check_and_restart(force=args.force)
 
 
