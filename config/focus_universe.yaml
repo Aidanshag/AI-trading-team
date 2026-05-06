@@ -33,7 +33,7 @@ allowed_symbols:
   index_macro:  [MES, MNQ]       # MES (S&P micro) + MNQ (Nasdaq micro — added 2026-05-04 for FVG/OB density)
   energies:     [NG, MCL]        # NG (nat gas — EIA catalyst) + MCL (micro crude — added 2026-05-04 for 24h liquidity)
   metals:       [GC]             # Gold — cleanest mean-reversion + structure; FVG-friendly
-  rates:        [ZN, ZB, ZT]     # ZN (10y) + ZB (30y) + ZT (2y) — added 2026-05-05 after Tier 3 walk-forward validated gap_fill across the curve
+  rates:        [ZN, ZB, ZT, ZF] # ZN (10y) + ZB (30y) + ZT (2y) + ZF (5y) — full curve. Added 2026-05-06: ZF was in user filter but missing from focus universe, blocking 3 validated ZF cells from scanning. Tier 3: ZF gap_fill OOS E=+1.16R t=+7.95 n=239.
   fx_futures:   [6E]             # EUR/USD — most liquid FX, tightest spreads
   grains:       []               # DISABLED — off-season; no WASDE/Crop Progress this week
   livestock:    []               # DISABLED — limited hours, low priority
