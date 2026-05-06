@@ -32,3 +32,7 @@
 ## 2026-05-06
 
 - ✅ PROMOTE narrow_range_break × GC × Asian × long  (OOS E=+0.46R, t=+1.88, n=43)
+
+## 2026-05-06
+
+- ✅ PROMOTE pivot_reversal × MES × Asian × short  (OOS E=+0.50R, t=+1.80, n=30)

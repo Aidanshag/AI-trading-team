@@ -365,6 +365,26 @@ def main() -> int:
         for k, c in state.get("cells", {}).items()
         if c.get("status") == "live"
     ]
+
+    # User-pinned filter: if state has `live_strategies_filter`, restrict
+    # the active live_allowlist to ONLY cells whose (strategy, symbol)
+    # appears in the filter. This lets the user concentrate the trader
+    # on a high-conviction subset (e.g., gap_fill treasury only) without
+    # having to delete cells from the rolling-history record. Set the
+    # filter directly in state/strategy_validation.json or via the
+    # `--filter-strategy <name> --filter-symbols A,B,C` CLI args.
+    flt = state.get("live_strategies_filter")
+    if flt:
+        before = len(live_cells)
+        allow_pairs = set()
+        for entry in flt:
+            strat = entry.get("strategy")
+            for sym in entry.get("symbols") or []:
+                allow_pairs.add((strat, sym))
+        live_cells = [c for c in live_cells
+                       if (c["strategy"], c["symbol"]) in allow_pairs]
+        print(f"  user filter applied: {before} → {len(live_cells)} live cells")
+
     state["live_allowlist"] = live_cells
     state["live_allowlist_generated_at"] = ts.isoformat(timespec="seconds")
 
