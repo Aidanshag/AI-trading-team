@@ -28,3 +28,7 @@
 - ✅ PROMOTE fair_value_gap × 6E × Asian × short  (OOS E=+0.50R, t=+2.13, n=42)
 - ✅ PROMOTE liquidity_sweep × MNQ × RTH × long  (OOS E=+0.69R, t=+2.57, n=32)
 - ✅ PROMOTE liquidity_sweep × 6E × London × long  (OOS E=+0.54R, t=+2.16, n=37)
+
+## 2026-05-06
+
+- ✅ PROMOTE narrow_range_break × GC × Asian × long  (OOS E=+0.46R, t=+1.88, n=43)
