@@ -257,6 +257,44 @@ def main() -> int:
     checks.append(check_tests())
     checks.append(check_risk_gate_wired())
     checks.append(check_agent_cli())
+
+    # Step 9: refresh strategy validation state (rolling daily walk-forward).
+    # Updates state/strategy_validation.json which the auto_trader reads
+    # at scan time to know which cells are live vs shadow. Failure is
+    # ADVISORY — falls back to the static allowlist so trading isn't blocked.
+    print(f"\n[step 9] daily strategy validation refresh")
+    try:
+        import subprocess
+        proc = subprocess.run(
+            ["python", "scripts/daily_strategy_validation.py"],
+            capture_output=True, text=True, timeout=600,
+        )
+        if proc.returncode == 0:
+            # Pull last 5 lines of summary
+            tail = "\n    ".join(proc.stdout.strip().splitlines()[-5:])
+            _ok(f"validation refreshed:\n    {tail}")
+        else:
+            _warn(f"validation script returned {proc.returncode}; "
+                  f"falling back to static allowlist")
+    except Exception as e:
+        _warn(f"validation skipped: {type(e).__name__}: {e}")
+
+    # Step 10: resolve any shadow trades from prior session
+    print(f"\n[step 10] shadow trade resolver")
+    try:
+        import subprocess
+        proc = subprocess.run(
+            ["python", "scripts/shadow_trade_resolver.py"],
+            capture_output=True, text=True, timeout=300,
+        )
+        if proc.returncode == 0:
+            tail = "\n    ".join(proc.stdout.strip().splitlines()[-5:])
+            _ok(f"shadows resolved:\n    {tail}")
+        else:
+            _warn(f"shadow resolver returned {proc.returncode}")
+    except Exception as e:
+        _warn(f"shadow resolver skipped: {type(e).__name__}: {e}")
+
     print()
     if all(checks):
         print(f"{GREEN}=== All preflight checks passed. Cleared to start session. ==={END}\n")

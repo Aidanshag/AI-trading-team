@@ -419,6 +419,18 @@ combine_pacing:
   daily_hard_target_usd:  400    # +$400: BLOCK new entries; manage book only
   partial_giveback_pct:   0.40   # if peak +$X then back to peak*0.6 → lockdown
 
+  # ── HARD-TARGET ACTION (added 2026-05-05 per user directive) ──
+  # When realized day P&L hits daily_hard_target_usd, what to do beyond
+  # blocking new entries:
+  #   "block_new"          → existing book stays open with its stops (current)
+  #   "cancel_working"     → cancel any unfilled limit / stop entries too
+  #   "force_flat"         → cancel + market-close all open positions
+  # Default "cancel_working" — catches the failure mode where a limit
+  # entry fills AFTER the lock-block (working order placed before lock,
+  # filled after) and prevents the +$400 from giving back via a
+  # post-lock entry. force_flat is opt-in (most aggressive lock-in).
+  daily_target_action:    "cancel_working"
+
   # ── CONSISTENCY TARGET (Topstep 50% rule, encoded as a daily ceiling) ──
   # The consistency rule says no single day's P&L can exceed 50% of total
   # profit-to-date at submission. Operationally that means each day should

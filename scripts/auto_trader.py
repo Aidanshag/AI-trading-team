@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 import time
@@ -256,6 +257,70 @@ def _session_bucket_et(et_hour_float: float) -> str:
     if 16 <= et_hour_float < 20:
         return "PostClose"
     return "Asian"
+
+
+def _load_daily_validation_state() -> dict | None:
+    """Read state/strategy_validation.json (produced daily by
+    scripts/daily_strategy_validation.py). Returns parsed dict or None.
+
+    The file is the source of truth for which cells are 'live' vs 'shadow'.
+    The hardcoded STRATEGY_SYMBOL_ALLOWLIST / STRATEGY_CELL_ALLOWLIST in
+    this file are the static fallback for first-run before the daily
+    validator has run. Once the validator has produced state, that
+    becomes the runtime authority — this lets the system promote
+    strategies that earn edge and demote strategies that lose it
+    without code changes.
+    """
+    path = Path("state/strategy_validation.json")
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+_validation_state_cache: dict | None = None
+_validation_state_mtime: float = 0
+
+
+def _get_dynamic_allowlists() -> tuple[dict[str, set[str]], dict[str, list[dict]]] | None:
+    """Build (symbol_allowlist, cell_allowlist) from the daily validation
+    state file. Returns None if no state available (use static fallback).
+
+    Caches by file mtime so repeated calls within a scan are cheap.
+    """
+    global _validation_state_cache, _validation_state_mtime
+    path = Path("state/strategy_validation.json")
+    if not path.exists():
+        return None
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    if _validation_state_cache is None or mtime != _validation_state_mtime:
+        st = _load_daily_validation_state()
+        if st is None:
+            return None
+        _validation_state_cache = st
+        _validation_state_mtime = mtime
+
+    cells = (_validation_state_cache or {}).get("live_allowlist") or []
+    if not cells:
+        return None
+
+    sym_allow: dict[str, set[str]] = {}
+    cell_allow: dict[str, list[dict]] = {}
+    for c in cells:
+        strat = c.get("strategy"); sym = c.get("symbol")
+        sess = c.get("session"); side = c.get("side")
+        if not (strat and sym and sess and side):
+            continue
+        sym_allow.setdefault(strat, set()).add(sym)
+        cell_allow.setdefault(strat, []).append(
+            {"symbol": sym, "session": sess, "side": side}
+        )
+    return sym_allow, cell_allow
 
 
 def _record_shadow_for_unvalidated(db, label: str, symbol: str,
@@ -1514,6 +1579,100 @@ def _capture_account_snapshot(client, account_id) -> dict | None:
         return None
 
 
+def _enforce_daily_target_action(client, account_id, snap: dict, db) -> None:
+    """When realized day P&L >= daily_hard_target_usd, take the configured
+    action beyond just blocking new entries:
+
+      block_new      → no extra action (gate already blocks new orders)
+      cancel_working → cancel all unfilled entry orders so they can't
+                       fire after the lock kicks in (this addresses
+                       2026-05-05: a working limit could still tag and
+                       open a position even though the gate refused new
+                       _new_ orders).
+      force_flat     → cancel + market-close all open positions.
+
+    Fires at most once per UTC day (action is one-shot — once positions
+    are flat, leaving the auto_trader to keep running is fine; it just
+    won't enter new trades).
+    """
+    pacing = (_load_yaml("risk_limits.yaml").get("combine_pacing") or {})
+    hard = float(pacing.get("daily_hard_target_usd", 0) or 0)
+    action = str(pacing.get("daily_target_action", "block_new")).lower()
+    if hard <= 0 or action == "block_new":
+        return
+
+    realized = float(snap.get("realized_pl_day_usd") or 0.0)
+    if realized < hard:
+        return
+
+    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    already = db.connect().execute(
+        "SELECT 1 FROM risk_events "
+        "WHERE rule='daily_target_action_fired' AND ts LIKE ? LIMIT 1",
+        (f"{today}%",),
+    ).fetchone()
+    if already:
+        return
+
+    cancelled = 0
+    flattened = 0
+    try:
+        working = client.get_working_orders(account_id) or []
+        for o in working:
+            tag = str(o.get("customTag") or "")
+            # Cancel auto-trader entries (no _stop / _target suffix)
+            if tag.startswith("auto_") and not (tag.endswith("_stop")
+                                                  or tag.endswith("_target")):
+                try:
+                    client.cancel_order(account_id, o.get("id") or o.get("orderId"))
+                    cancelled += 1
+                except Exception:
+                    pass
+            # In force_flat, also cancel protective legs (we'll close at market)
+            if action == "force_flat" and tag.startswith("auto_"):
+                try:
+                    client.cancel_order(account_id, o.get("id") or o.get("orderId"))
+                    cancelled += 1
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    if action == "force_flat":
+        try:
+            positions = client.get_positions(account_id) or []
+            for p in positions:
+                size = int(p.get("size") or p.get("netQuantity") or 0)
+                if size == 0:
+                    continue
+                contract = p.get("contractId") or p.get("contract") or ""
+                type_code = int(p.get("type") or 0)
+                opposite = "sell" if type_code == 1 else "buy"
+                try:
+                    client.place_order(
+                        account_id=account_id, contract_id=contract,
+                        side=opposite, qty=abs(size),
+                        order_type="market", time_in_force="ioc",
+                        client_order_id=f"daily_target_flat_{int(time.time())}_{contract}",
+                    )
+                    flattened += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    db.record_risk_event(
+        severity="info", rule="daily_target_action_fired",
+        agent="auto_trader",
+        detail={"action": action, "realized_pl_day_usd": realized,
+                "hard_target": hard,
+                "cancelled_working": cancelled, "flattened_positions": flattened,
+                "note": "Daily target hit — extra action beyond block_new."},
+    )
+    print(f"  [DAILY-TARGET-ACTION fired: action={action}, "
+          f"cancelled={cancelled}, flattened={flattened}]")
+
+
 def _audit_risk_config_drift(db) -> None:
     """Log a risk_event when critical gates are disabled in risk_limits.yaml.
 
@@ -1595,6 +1754,16 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
     _audit_risk_config_drift(db)
 
     snap_result = _capture_account_snapshot(client, account_id)
+
+    # Daily-target action (added 2026-05-05): when realized day P&L
+    # exceeds daily_hard_target_usd, optionally cancel working orders
+    # and/or force-flat existing positions. See risk_limits.yaml:
+    # combine_pacing.daily_target_action.
+    if snap_result and not dry_run:
+        try:
+            _enforce_daily_target_action(client, account_id, snap_result, db)
+        except Exception as e:
+            print(f"  [daily_target_action failed: {e}]")
 
     # Step −0.95: LOSS ALERTS — fire push notifications on threshold crosses.
     # No-op when DISCORD_WEBHOOK_URL / TELEGRAM_* aren't set in .env.
@@ -2166,15 +2335,38 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 if signal["stop"] is None:
                     continue  # need a stop to trade
 
-                # DEFAULT-DENY VALIDATION GATE (2026-05-05): if this
-                # (strategy, symbol) is not in STRATEGY_SYMBOL_ALLOWLIST,
-                # OR the (symbol, session, side) cell is not validated,
-                # log a shadow trade instead of placing. Unvalidated
-                # strategies accumulate data toward future validation
-                # without spending real capital.
-                allowed_for = STRATEGY_SYMBOL_ALLOWLIST.get(label)
+                # DEFAULT-DENY VALIDATION GATE (2026-05-05).
+                # Source of truth: state/strategy_validation.json (rebuilt
+                # daily by scripts/daily_strategy_validation.py). If the
+                # state file is present, it overrides the static
+                # STRATEGY_SYMBOL_ALLOWLIST / STRATEGY_CELL_ALLOWLIST in
+                # this file. Falls back to static lists on first run.
+                _dyn = _get_dynamic_allowlists()
+                if _dyn is not None:
+                    sym_allow_active, cell_allow_active = _dyn
+                else:
+                    sym_allow_active = STRATEGY_SYMBOL_ALLOWLIST
+                    cell_allow_active = STRATEGY_CELL_ALLOWLIST
+
+                allowed_for = sym_allow_active.get(label)
                 symbol_ok = allowed_for is not None and symbol in allowed_for
-                cell_ok = _signal_passes_cell_allowlist(label, symbol, signal)
+
+                # Cell check uses the active source too
+                _cells_for_label = cell_allow_active.get(label)
+                if _cells_for_label is None:
+                    cell_ok = True  # no restriction
+                else:
+                    from datetime import datetime as _dt
+                    from zoneinfo import ZoneInfo as _Z
+                    _now_et = _dt.now(tz=_Z("America/New_York"))
+                    _sess_now = _session_bucket_et(_now_et.hour + _now_et.minute / 60.0)
+                    _side_signal = str(signal.get("side", "")).lower()
+                    cell_ok = any(
+                        c["symbol"] == symbol and c["session"] == _sess_now
+                        and c["side"] == _side_signal
+                        for c in _cells_for_label
+                    )
+
                 if not (symbol_ok and cell_ok):
                     reason = ("symbol_not_validated" if not symbol_ok
                               else "cell_not_validated")
