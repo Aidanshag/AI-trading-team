@@ -558,8 +558,26 @@ MIN_STOP_TICKS_BY_SECTOR = {
 }
 
 
-def _min_stop_ticks_for(symbol: str) -> int:
-    """Sector-aware stop-distance floor (in ticks)."""
+# Per-strategy stop-floor override: gap_fill places STRUCTURAL stops just
+# beyond the gap edge, not noise-buffer stops. The sector minimums above
+# (designed for momentum/break strategies) are too aggressive for
+# gap_fill — they reject valid structural-stop trades whose gap is small.
+# 2026-05-06: today's first scan rejected ZT gap_fill with 0.18-tick
+# stop using rates min=10. Below override allows gap_fill to use a
+# minimum of 3 ticks across all sectors — still safer than 1-tick noise
+# but doesn't reject the small-but-real gap signals that walk-forward
+# validated.
+PER_STRATEGY_MIN_STOP_TICKS_OVERRIDE = {
+    "gap_fill": 3,
+}
+
+
+def _min_stop_ticks_for(symbol: str, strategy: str | None = None) -> int:
+    """Sector-aware stop-distance floor (in ticks). If `strategy` is in
+    the per-strategy override map, use that instead of the sector floor.
+    """
+    if strategy and strategy in PER_STRATEGY_MIN_STOP_TICKS_OVERRIDE:
+        return PER_STRATEGY_MIN_STOP_TICKS_OVERRIDE[strategy]
     syms = _load_yaml("symbols.yaml").get("symbols", {})
     sector = (syms.get(symbol) or {}).get("sector")
     return MIN_STOP_TICKS_BY_SECTOR.get(sector, MIN_STOP_TICKS)
@@ -2401,7 +2419,7 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 # ticks because 5-tick MES = $6.25 loss eaten by 1-2 sec
                 # of intraday noise. Rates need 10+ for similar reasons.
                 # Energies/metals tolerate 5.
-                min_stop_ticks = _min_stop_ticks_for(symbol)
+                min_stop_ticks = _min_stop_ticks_for(symbol, strategy=label)
                 stop_dist_ticks = abs(signal["price"] - signal["stop"]) / tick
                 # Tolerate floating-point noise: a 5.0-tick stop computed as
                 # 4.9999... should not be rejected against a 5-tick floor.
