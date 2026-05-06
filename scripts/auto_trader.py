@@ -940,6 +940,35 @@ GAIN_TIER_HARD_CAP_USD = 400.0
 GAIN_TIER_HIGH_WATER_USD = 150.0
 GAIN_TIER_FLOOR_USD = 50.0
 
+# TRAILING PROFIT LOCK (added 2026-05-06 per user directive: "don't let
+# a gain turn into a loss by not taking profit correctly").
+#
+# Ratchet-style lock — as peak unrealized P&L grows, the floor under
+# unrealized rises. The single most important rule: once a position
+# has shown a meaningful gain (peak >= $30, which covers fees + a real
+# profit), the position cannot close negative. Sell-the-rebound is OK,
+# but giving back the entire profit is never OK.
+#
+# Tiers (peak_unrealized → minimum acceptable current_unrealized):
+#   peak >=  $30  → floor = $0   (break-even or better — protects fees)
+#   peak >=  $80  → floor = $20  (lock in $20 minimum)
+#   peak >= $150  → floor = $50  (matches existing high_water rule)
+#   peak >= $250  → floor = $100
+#   peak >= $400  → hard close at any time (existing GAIN_TIER_HARD_CAP)
+#
+# When current unrealized falls below the floor, market-close the
+# position. Bracket target order remains in place, so if target hits
+# first, position closes there. This is the software-side belt for
+# bracket-target gives-back.
+TRAILING_PROFIT_TIERS = (
+    # (peak_threshold_usd, floor_usd)
+    (400, 200),  # locks in half the peak at extreme gains
+    (250, 100),
+    (150,  50),
+    ( 80,  20),
+    ( 30,   0),  # the critical "no gain ever becomes a loss" rule
+)
+
 # LOSS-SIDE HARD CAP: software belt-and-suspenders for the broker stop.
 # 2026-05-05: NG short rode 7h losing $702 with bracket stop at $120 — the
 # broker stop never fired (root cause TBD; possibly server-side cancellation
@@ -1036,12 +1065,16 @@ def _close_high_gain_positions(client, account_id) -> list[dict]:
             reason = (f"loss_hard_cap: unrealized ${unrealized:.2f} "
                       f"<= -${LOSS_TIER_HARD_CAP_USD:.2f} — broker stop "
                       f"may have failed; force-flat")
-        elif (prev_peak >= GAIN_TIER_HIGH_WATER_USD
-              and unrealized < GAIN_TIER_FLOOR_USD):
-            should_close = True
-            reason = (f"high_water_giveback: peak ${prev_peak:.2f} "
-                      f">= ${GAIN_TIER_HIGH_WATER_USD:.2f} but current "
-                      f"${unrealized:.2f} < floor ${GAIN_TIER_FLOOR_USD:.2f}")
+        else:
+            # Trailing profit lock — never let a gain turn into a loss.
+            # See TRAILING_PROFIT_TIERS comment for tier definitions.
+            for peak_threshold, floor in TRAILING_PROFIT_TIERS:
+                if prev_peak >= peak_threshold and unrealized < floor:
+                    should_close = True
+                    reason = (f"trailing_profit_lock: peak ${prev_peak:.2f} "
+                              f">= ${peak_threshold} → require >= ${floor}; "
+                              f"current ${unrealized:.2f}")
+                    break
 
         if not should_close:
             continue
