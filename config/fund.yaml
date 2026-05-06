@@ -60,10 +60,13 @@ autonomous_restrictions:
   rth_end_et:      "15:30"      # retained for reference; ignored while rth_only=false
 
   # DAILY CAPS (override values from risk_limits.yaml.account):
-  internal_dll_target_usd:    250    # halved from $500 supervised
-  daily_fee_budget_usd:        15    # halved from $30 supervised
-  max_concurrent_positions:     2    # vs 5 supervised
-  max_trades_per_day:           8    # raised 2026-05-04 for overnight diagnostic mode (was 4); revert if downside materializes
+  # 2026-05-06 audit: previous values were calibrated for micro-contract
+  # mix. Now trading full-size treasury contracts (ZN/ZT/ZB/ZF) which
+  # have $5 round-trip fees and $156-312 stop-out economics. Adjusted:
+  internal_dll_target_usd:   500    # 2026-05-06: $250→$500 — one ZB stop ($312) was breaching internal DLL before edge could express. $500 allows ~3 normal losing-trade outcomes before halt.
+  daily_fee_budget_usd:       25    # 2026-05-06: $15→$25 — $5 RT × per_strategy_cap of 4 = $20 minimum needed; $25 leaves headroom
+  max_concurrent_positions:    1    # 2026-05-06: 2→1 — aligned with rates_curve.max_net_contracts=1, removes misleading decorative setting
+  max_trades_per_day:          8    # raised 2026-05-04 for overnight diagnostic mode (was 4); revert if downside materializes
 
   # CONVICTION + R:R: skip "low" conviction; lift R:R floor.
   min_conviction:              med   # only med/high fire under autonomous
@@ -82,8 +85,8 @@ autonomous_restrictions:
 
   # HEALTH CHECKS — auto-halt when system anomalies appear:
   require_snapshot_within_minutes: 5    # refuse to trade with stale data
-  consecutive_losers_halt:         3    # 3 losses in a row → 60-min pause
-  consecutive_loser_pause_minutes: 60
+  consecutive_losers_halt:         3    # 3 losses in a row → 30-min pause
+  consecutive_loser_pause_minutes: 30   # 2026-05-06: 60→30 — 60 min was forfeiting half a session; 30 min is enough anti-tilt cooldown to break a tilt loop without losing the day
   agent_wake_error_threshold:      5    # 5 wake_errors / 30 min → halt
   agent_wake_error_window_minutes: 30
 
