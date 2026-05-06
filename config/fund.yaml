@@ -71,7 +71,10 @@ autonomous_restrictions:
 
   # PER-STRATEGY: each strategy can place at most N trades per session.
   # Stops the "narrow_range_break fired 30 times" pattern.
-  per_strategy_per_session_cap: 1
+  # 2026-05-06: raised 1→2 to ensure trades fire on quiet sessions and
+  # accumulate live evidence on validated cells. max_trades_per_day=8
+  # remains the global ceiling.
+  per_strategy_per_session_cap: 2
 
   # HEALTH CHECKS — auto-halt when system anomalies appear:
   require_snapshot_within_minutes: 5    # refuse to trade with stale data

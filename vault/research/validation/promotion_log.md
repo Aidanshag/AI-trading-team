@@ -36,3 +36,10 @@
 ## 2026-05-06
 
 - ✅ PROMOTE pivot_reversal × MES × Asian × short  (OOS E=+0.50R, t=+1.80, n=30)
+
+## 2026-05-06
+
+- ✅ PROMOTE narrow_range_break × MNQ × London × long  (OOS E=+0.47R, t=+1.52, n=38)
+- ✅ PROMOTE inside_bar_break × MES × RTH × long  (OOS E=+0.43R, t=+1.67, n=32)
+- ❌ DEMOTE inside_bar_break × GC × Asian × short  (reason: 3_consecutive_fails, last OOS E=+0.23R)
+- ❌ DEMOTE inside_bar_break × 6A × Asian × short  (reason: 3_consecutive_fails, last OOS E=+0.24R)
