@@ -68,6 +68,29 @@ def is_excluded(path: str) -> bool:
     return False
 
 
+def is_gitignored(paths: list[str]) -> set[str]:
+    """Batch-call `git check-ignore` to find which paths are ignored.
+
+    Files ignored by .gitignore but already tracked still appear in
+    `git status` as modified. `git add` refuses them without -f. We
+    don't want -f (it would defeat the ignore intent), so we skip them.
+    """
+    if not paths:
+        return set()
+    try:
+        # --no-index: check the gitignore rules even for tracked files
+        # exit code 0 = at least one path matched; 1 = no matches; 128 = error
+        proc = subprocess.run(
+            ["git", "check-ignore", "--no-index", "--", *paths],
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+        )
+        if proc.returncode in (0, 1):
+            return set(p for p in proc.stdout.splitlines() if p)
+    except Exception:
+        pass
+    return set()
+
+
 def is_empty_markdown(path: str) -> bool:
     """True if .md file exists and is 0 bytes (Obsidian 'new note' artifact)."""
     if not path.lower().endswith(".md"):
@@ -140,6 +163,14 @@ def main() -> None:
             excluded.append(path)
         else:
             to_stage.append(path)
+
+    # Second filter: anything git considers ignored (e.g. tracked-but-now-
+    # gitignored files like .claude/scheduled_tasks.lock or logs/*.pid).
+    # `git add` would fail on those without -f; we never want -f here.
+    ignored = is_gitignored(to_stage)
+    if ignored:
+        to_stage = [p for p in to_stage if p not in ignored]
+        excluded.extend(sorted(ignored))
 
     if not to_stage:
         # Only excluded files dirty — silent

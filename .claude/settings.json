@@ -47,5 +47,19 @@
       "Bash(rm -rf*)",
       "Bash(taskkill*)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/auto_commit_session.py",
+            "timeout": 60,
+            "statusMessage": "auto-committing session"
+          }
+        ]
+      }
+    ]
   }
 }
