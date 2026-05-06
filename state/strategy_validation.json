@@ -110154,48 +110154,6 @@
   ],
   "live_allowlist": [
     {
-      "strategy": "narrow_range_break",
-      "symbol": "GC",
-      "session": "Asian",
-      "side": "long"
-    },
-    {
-      "strategy": "narrow_range_break",
-      "symbol": "GC",
-      "session": "Asian",
-      "side": "short"
-    },
-    {
-      "strategy": "narrow_range_break",
-      "symbol": "MCL",
-      "session": "Asian",
-      "side": "long"
-    },
-    {
-      "strategy": "narrow_range_break",
-      "symbol": "MNQ",
-      "session": "London",
-      "side": "long"
-    },
-    {
-      "strategy": "inside_bar_break",
-      "symbol": "NG",
-      "session": "London",
-      "side": "short"
-    },
-    {
-      "strategy": "inside_bar_break",
-      "symbol": "MES",
-      "session": "RTH",
-      "side": "long"
-    },
-    {
-      "strategy": "inside_bar_break",
-      "symbol": "6A",
-      "session": "London",
-      "side": "long"
-    },
-    {
       "strategy": "gap_fill",
       "symbol": "ZN",
       "session": "Asian",
@@ -110260,61 +110218,19 @@
       "symbol": "ZF",
       "session": "Asian",
       "side": "short"
-    },
-    {
-      "strategy": "gap_fill",
-      "symbol": "6C",
-      "session": "Asian",
-      "side": "long"
-    },
-    {
-      "strategy": "gap_fill",
-      "symbol": "6C",
-      "session": "Asian",
-      "side": "short"
-    },
-    {
-      "strategy": "pivot_reversal",
-      "symbol": "MES",
-      "session": "Asian",
-      "side": "short"
-    },
-    {
-      "strategy": "fair_value_gap",
-      "symbol": "GC",
-      "session": "Asian",
-      "side": "short"
-    },
-    {
-      "strategy": "fair_value_gap",
-      "symbol": "GC",
-      "session": "RTH",
-      "side": "short"
-    },
-    {
-      "strategy": "fair_value_gap",
-      "symbol": "MNQ",
-      "session": "Asian",
-      "side": "long"
-    },
-    {
-      "strategy": "fair_value_gap",
-      "symbol": "6E",
-      "session": "Asian",
-      "side": "short"
-    },
-    {
-      "strategy": "liquidity_sweep",
-      "symbol": "MNQ",
-      "session": "RTH",
-      "side": "long"
-    },
-    {
-      "strategy": "liquidity_sweep",
-      "symbol": "6E",
-      "session": "London",
-      "side": "long"
     }
   ],
-  "live_allowlist_generated_at": "2026-05-06T20:12:14+00:00"
+  "live_allowlist_generated_at": "2026-05-06T20:15:35+00:00",
+  "live_strategies_filter": [
+    {
+      "strategy": "gap_fill",
+      "symbols": [
+        "ZN",
+        "ZT",
+        "ZB",
+        "ZF"
+      ],
+      "rationale": "Highest-confidence cells (Tier 3 walk-forward t-stats +7.95 to +11.76, n>=240). User locked 2026-05-06."
+    }
+  ]
 }
