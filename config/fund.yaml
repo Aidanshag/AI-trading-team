@@ -64,7 +64,7 @@ autonomous_restrictions:
   # mix. Now trading full-size treasury contracts (ZN/ZT/ZB/ZF) which
   # have $5 round-trip fees and $156-312 stop-out economics. Adjusted:
   internal_dll_target_usd:   500    # 2026-05-06: $250→$500 — one ZB stop ($312) was breaching internal DLL before edge could express. $500 allows ~3 normal losing-trade outcomes before halt.
-  daily_fee_budget_usd:       25    # 2026-05-06: $15→$25 — $5 RT × per_strategy_cap of 4 = $20 minimum needed; $25 leaves headroom
+  daily_fee_budget_usd:       40    # 2026-05-06 (later): $25→$40 — aligns with max_trades_per_day=8 × $5 RT fees on full-size treasury contracts. Previous $25 was capping us at trade #5, leaving 3 max-cap trades unreachable.
   max_concurrent_positions:    1    # 2026-05-06: 2→1 — aligned with rates_curve.max_net_contracts=1, removes misleading decorative setting
   max_trades_per_day:          8    # raised 2026-05-04 for overnight diagnostic mode (was 4); revert if downside materializes
 
