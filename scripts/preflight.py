@@ -295,6 +295,41 @@ def main() -> int:
     except Exception as e:
         _warn(f"shadow resolver skipped: {type(e).__name__}: {e}")
 
+    # Step 11: live-vs-OOS tracker — compare actual realized R-multiples
+    # against OOS predictions per cell. Surfaces edge decay or sample-size
+    # luck. Output: vault/research/live_vs_oos/<date>_live_r_comparison.md.
+    print(f"\n[step 11] live R-multiple tracker")
+    try:
+        import subprocess
+        proc = subprocess.run(
+            ["python", "scripts/live_vs_oos_tracker.py"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if proc.returncode == 0:
+            tail = "\n    ".join(proc.stdout.strip().splitlines()[-3:])
+            _ok(f"live-R tracker:\n    {tail}")
+        else:
+            _warn(f"live-R tracker returned {proc.returncode}")
+    except Exception as e:
+        _warn(f"live-R tracker skipped: {type(e).__name__}: {e}")
+
+    # Step 12: lessons auto-promotion — graduate ADVISORY → PATTERN → RULE
+    # tier as live evidence accumulates. Output to vault/lessons/.
+    print(f"\n[step 12] lessons auto-promotion")
+    try:
+        import subprocess
+        proc = subprocess.run(
+            ["python", "scripts/auto_promote_lessons.py"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if proc.returncode == 0:
+            tail = "\n    ".join(proc.stdout.strip().splitlines()[-3:])
+            _ok(f"lessons:\n    {tail}")
+        else:
+            _warn(f"lessons promoter returned {proc.returncode}")
+    except Exception as e:
+        _warn(f"lessons promoter skipped: {type(e).__name__}: {e}")
+
     print()
     if all(checks):
         print(f"{GREEN}=== All preflight checks passed. Cleared to start session. ==={END}\n")
