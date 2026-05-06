@@ -9,19 +9,23 @@
 
 focus_period_active: true
 focus_period_started:  "2026-04-29T01:00:00Z"
-focus_period_expires:  "2026-05-09T22:00:00Z"   # extended 2026-05-04 (price-action expansion)
+focus_period_expires:  "2026-05-12T22:00:00Z"   # extended 2026-05-05 (treasury curve expansion)
 rationale: |
-  Focus universe — expanded 2026-05-04 to support price-action / FVG
-  strategy data collection on a 24/5 trading window. Added MNQ (Nasdaq
-  micro — high gamma, FVG-rich) and MCL (micro crude — true 24h liquidity,
-  FVG-rich during Asian/Europe sessions). Goals:
-   - More shots on goal under 24/5 gates (was 5 symbols → now 7)
-   - Diversify equity-index exposure (MES + MNQ — correlated but different
-     beta; sharper moves on MNQ produce more FVG/OB setups)
-   - Capture overnight crude flow when equities are quiet
-   - Accumulate per-instrument trade data faster for auto-tuning
-   - Stay disciplined: still one-trade-per-symbol cooldown + 4-trade
-     autonomous daily cap; expanding symbols ≠ expanding trade count
+  Focus universe — expanded 2026-05-05 to add ZB (30y) and ZT (2y) after
+  Tier 3 walk-forward (60d 5m bars) confirmed gap_fill holds OOS across
+  the entire treasury curve:
+    ZN  (10y, baseline): n=275 hit=69.8% E=+1.22R t=+11.36
+    ZT  (2y,  added):    n=333 hit=68.2% E=+1.41R t=+11.76 ← strongest
+    ZB  (30y, added):    n=382 hit=59.2% E=+0.98R t=+10.50
+  Same gap-fill mechanic as ZN, just on different durations of the
+  curve. Sector limits cap simultaneous rates exposure so concentration
+  risk stays bounded.
+
+  History:
+   - 2026-05-04: added MNQ and MCL for price-action / FVG density
+   - 2026-05-05: added ZB and ZT for validated gap_fill expansion
+  ZF (5y), 6B/6J/6A/6C (FX cousins) are validated but NOT in focus yet
+  — let shadow trades accumulate first, then promote on next review.
 
 # Symbols allowed under the focus restriction.
 # Sectors with empty lists are disabled this week.
@@ -29,7 +33,7 @@ allowed_symbols:
   index_macro:  [MES, MNQ]       # MES (S&P micro) + MNQ (Nasdaq micro — added 2026-05-04 for FVG/OB density)
   energies:     [NG, MCL]        # NG (nat gas — EIA catalyst) + MCL (micro crude — added 2026-05-04 for 24h liquidity)
   metals:       [GC]             # Gold — cleanest mean-reversion + structure; FVG-friendly
-  rates:        [ZN]             # 10-year T-note — most liquid Treasury futures
+  rates:        [ZN, ZB, ZT]     # ZN (10y) + ZB (30y) + ZT (2y) — added 2026-05-05 after Tier 3 walk-forward validated gap_fill across the curve
   fx_futures:   [6E]             # EUR/USD — most liquid FX, tightest spreads
   grains:       []               # DISABLED — off-season; no WASDE/Crop Progress this week
   livestock:    []               # DISABLED — limited hours, low priority
@@ -52,6 +56,16 @@ focus_notes:
     setups_to_watch: [gap_fill, vol_regime_trend, range_mean_reversion]   # gap_fill is the FUND'S HEADLINE EDGE on this symbol
     avoid: [opening_range_breakout, narrow_range_break]   # ORB: 2026-04-29 ZN loss; NRB: walk-forward t=-7.4 on Asian
     notes: "gap_fill is the validated headline edge: ZN Asian/PostClose 60d walk-forward OOS hit=70%, E=+1.10R, t=+11.95. Primary deployment target."
+  ZB:
+    primary_driver: "Long-end Treasury — most sensitive to Fed-policy expectations, term-premium repricing, and quarterly refunding announcements"
+    setups_to_watch: [gap_fill]   # only validated cell at this point; other strategies still shadow-only
+    avoid: [opening_range_breakout, narrow_range_break]   # same logic as ZN — coin-flip on aggregate
+    notes: "Tick=$31.25, 5-tick stop=$156. Tier 3 walk-forward 2026-05-05: gap_fill OOS hit=59%, E=+0.98R, t=+10.50, n=382 — robust signal."
+  ZT:
+    primary_driver: "Short-end Treasury — closely tied to Fed funds path, FOMC dot-plot, and money-market dislocations"
+    setups_to_watch: [gap_fill]
+    avoid: [opening_range_breakout, narrow_range_break]
+    notes: "Tick=$15.625, 5-tick stop=$78 — cleanest economics in the curve. Tier 3 walk-forward 2026-05-05: gap_fill OOS hit=68%, E=+1.41R, t=+11.76, n=333 — STRONGEST signal in the universe."
   6E:
     primary_driver: "ECB-Fed rate differential, US data prints, DXY"
     setups_to_watch: [gap_fill, keltner_breakout, support_resistance_bounce]
