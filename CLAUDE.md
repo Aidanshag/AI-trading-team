@@ -117,6 +117,6 @@ fund resume         # clear halt
 
 **Never push to master from the cloud routine if any HIGH_RISK_FILES were touched** — open a PR instead.
 
-## What success looks like
+## Code-review checklist — Pattern A and Pattern B
 
-The fund's only KPI is **NET monthly P&L** (gross trading − Topstep fees − API spend − subscriptions). Until the Combine is passed, the secondary KPI is **days-without-rule-violation**. A clean no-trade day is fine. A day with a $300 win + $100 loss is fine. A day with $1,000 of churn is failure even if NET is positive.
+Two structural failure shapes have caused real losses (4/29 and 5/5 incidents). Both are documented as PATTERN-tier in `vault/_meta/analysis/2026-05-07_lesson_meta_patterns.md`. Every code or config change — Cowork, Claude Code, `/improve-fund` cycle, or sector analyst — must check itself against 
