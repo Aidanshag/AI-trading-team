@@ -77,8 +77,78 @@ def filter_window(records: list[dict], days: int) -> list[dict]:
     return out
 
 
+# Standard Treasury auction times (US/Eastern). Notes/Bonds/TIPS auction at
+# 13:00 ET; Bills and FRN at 11:30 ET. These are the published cut-off times
+# from TreasuryDirect's "General Auction Timing" page. The fiscaldata API
+# does not return a time field — we attach it deterministically from the
+# security type so the high-impact blackout gate has a precise timestamp.
+AUCTION_TIME_ET = {
+    "Note": "13:00",
+    "Bond": "13:00",
+    "TIPS": "13:00",
+    "FRN":  "11:30",
+    "Bill": "11:30",
+}
+
+
+def _auction_time_et(security_type: str) -> str:
+    return AUCTION_TIME_ET.get(security_type, "13:00")
+
+
+# Per-term futures impact map. PRIMARY = the issued tenor's own future is
+# directly hit (largest concession-day effect). BASIS = the issuance
+# pulls a neighboring tenor along on basis trades (smaller but real).
+# Any term not listed here returns ([], []).
+_PRIMARY_BY_TERM: dict[tuple[str, str], list[str]] = {
+    ("Note", "2-Year"):  ["ZT"],
+    ("Note", "3-Year"):  [],            # no 3Y future on Topstep
+    ("Note", "5-Year"):  ["ZF"],
+    ("Note", "7-Year"):  [],            # no 7Y future on Topstep
+    ("Note", "10-Year"): ["ZN"],
+    ("Bond", "20-Year"): ["ZB"],
+    ("Bond", "30-Year"): ["ZB"],
+}
+_BASIS_BY_TERM: dict[tuple[str, str], list[str]] = {
+    ("Note", "3-Year"):  ["ZT", "ZF"],  # 3Y pulls front-end basis
+    ("Note", "7-Year"):  ["ZF", "ZN"],  # 7Y is the belly bridge
+    ("Bond", "20-Year"): ["ZN", "ZB"],  # 20Y reopen drags both
+}
+
+
+def _futures_for(security_type: str, security_term: str) -> tuple[list[str], list[str]]:
+    """Return (primary_affected, basis_affected) lists of Topstep futures
+    symbols. Looks up by (type, term) pattern — matches on substring of
+    term so "2-Year" matches "2-Year (Reopen)" too."""
+    primary: list[str] = []
+    basis: list[str] = []
+    for (t, term_pat), syms in _PRIMARY_BY_TERM.items():
+        if t == security_type and term_pat in security_term:
+            primary = list(syms)
+            break
+    for (t, term_pat), syms in _BASIS_BY_TERM.items():
+        if t == security_type and term_pat in security_term:
+            basis = list(syms)
+            break
+    return primary, basis
+
+
 def annotate_for_gap_fill(records: list[dict]) -> list[dict]:
-    """Add fields the high-impact blackout gate might want."""
+    """Add fields the high-impact blackout gate might want.
+
+    Output schema per record:
+      auction_date         (str, YYYY-MM-DD)
+      auction_time_et      (str, HH:MM)
+      auction_dt_et        (str, YYYY-MM-DDTHH:MM, for blackout gate use)
+      announcement_date    (str)
+      issue_date           (str)
+      security_type        (str)
+      security_term        (str)
+      reopening            (bool/str/None)
+      offering_amt_usd     (float|None)
+      affected_futures     (list[str])  — PRIMARY only (back-compat)
+      affected_primary     (list[str])  — same as affected_futures
+      affected_basis       (list[str])  — neighboring tenor basis impact
+    """
     out = []
     for r in records:
         # 2026-05-07: API uses `security_type` (was `security_type_desc`).
@@ -86,33 +156,22 @@ def annotate_for_gap_fill(records: list[dict]) -> list[dict]:
         term = str(r.get("security_term", ""))
         ad = str(r.get("auction_date", "")).split("T")[0]
 
-        # Map to ProjectX symbol risk:
-        #   2-year note  -> ZT
-        #   3-year note  -> (no direct mapping; affects ZT/ZF basis)
-        #   5-year note  -> ZF
-        #   7-year note  -> (affects ZF/ZN basis)
-        #   10-year note -> ZN
-        #   20-year bond -> (affects ZB)
-        #   30-year bond -> ZB
-        #   2/5/10 TIPS  -> affects real-yield component but not directly the future
-        affected = []
-        if sec == "Note":
-            if "2-Year" in term: affected.append("ZT")
-            elif "5-Year" in term: affected.append("ZF")
-            elif "10-Year" in term: affected.append("ZN")
-        elif sec == "Bond":
-            if "30-Year" in term: affected.append("ZB")
-            elif "20-Year" in term: affected.append("ZB")  # secondary effect
+        primary, basis = _futures_for(sec, term)
+        atime = _auction_time_et(sec)
 
         rec = {
             "auction_date": ad,
+            "auction_time_et": atime,
+            "auction_dt_et": f"{ad}T{atime}" if ad else "",
             "announcement_date": str(r.get("announcemt_date", "") or "").split("T")[0],
             "issue_date": str(r.get("issue_date", "")).split("T")[0],
             "security_type": sec,
             "security_term": term,
             "reopening": r.get("reopening"),
             "offering_amt_usd": _parse_amt(r.get("offering_amt")),
-            "affected_futures": affected,
+            "affected_futures": primary,   # back-compat — primary only
+            "affected_primary": primary,
+            "affected_basis": basis,
         }
         out.append(rec)
     return out
@@ -152,15 +211,16 @@ def write_outputs(records: list[dict]) -> None:
          "day itself) tend to produce sustained directional drift in the "
          "issued tenor — gap_fill fade can fail.",
          "",
-         "| Auction date | Announce | Type | Term | Issue | Amount ($B) | Reopen | Affects futures |",
-         "|---|---|---|---|---|---:|---|---|"]
+         "| Auction date | Time ET | Type | Term | Amt ($B) | Reopen | Primary | Basis |",
+         "|---|---|---|---|---:|---|---|---|"]
     for r in records:
         amt = (r.get("offering_amt_usd") or 0) / 1e9
         reopen = "Y" if r.get("reopening") in (True, "Y", "yes") else ""
-        L.append(f"| {r['auction_date']} | {r.get('announcement_date','')} "
-                 f"| {r['security_type']} | {r['security_term']} | {r['issue_date']} "
-                 f"| {amt:.1f} | {reopen} "
-                 f"| {', '.join(r['affected_futures']) or '—'} |")
+        primary = ", ".join(r.get("affected_primary") or []) or "—"
+        basis = ", ".join(r.get("affected_basis") or []) or "—"
+        L.append(f"| {r['auction_date']} | {r.get('auction_time_et','')} "
+                 f"| {r['security_type']} | {r['security_term']} "
+                 f"| {amt:.1f} | {reopen} | {primary} | {basis} |")
     md_path.write_text("\n".join(L) + "\n", encoding="utf-8")
     print(f"Wrote {json_path.relative_to(_HERE)}")
     print(f"Wrote {md_path.relative_to(_HERE)}")
