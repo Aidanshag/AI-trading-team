@@ -78,3 +78,10 @@
 - ✅ PROMOTE gap_fill × 6B × Asian × short  (OOS E=+0.55R, t=+1.56, n=25)
 - ✅ PROMOTE liquidity_sweep_tuned × 6B × Asian × short  (OOS E=+0.54R, t=+1.52, n=25)
 - ✅ PROMOTE cross_asset_divergence_zn × ZB × Asian × short  (OOS E=+0.44R, t=+2.40, n=25)
+
+## 2026-05-07
+
+- ✅ PROMOTE rsi2_extreme_reversion × MCL × RTH × long  (OOS E=+0.84R, t=+1.58, n=50)
+- ✅ PROMOTE pivot_reversal × GC × Asian × long  (OOS E=+0.41R, t=+1.51, n=32)
+- ✅ PROMOTE fair_value_gap_tuned × 6A × London × short  (OOS E=+0.54R, t=+1.52, n=25)
+- ❌ DEMOTE fair_value_gap_tuned × MES × London × short  (reason: 3_consecutive_fails, last OOS E=+0.48R)
