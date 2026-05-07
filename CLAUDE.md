@@ -119,4 +119,46 @@ fund resume         # clear halt
 
 ## Code-review checklist — Pattern A and Pattern B
 
-Two structural failure shapes have caused real losses (4/29 and 5/5 incidents). Both are documented as PATTERN-tier in `vault/_meta/analysis/2026-05-07_lesson_meta_patterns.md`. Every code or config change — Cowork, Claude Code, `/improve-fund` cycle, or sector analyst — must check itself against 
+Two structural failure shapes have caused real losses (4/29 and 5/5 incidents). Both are documented as PATTERN-tier in `vault/_meta/analysis/2026-05-07_lesson_meta_patterns.md`. Every code or config change — Cowork, Claude Code, `/improve-fund` cycle, or sector analyst — must check itself against these before merging.
+
+### Pattern A — fail-silent defaults
+
+When a gate or check reads a value that may be missing, empty, zero, or `None`, the default behavior MUST NOT be "treat as safe to proceed."
+
+Before merging any change that touches a gate, telemetry write, or default value, ask:
+1. *If this value is missing or zero, what gates depend on it?*
+2. *Do those gates currently read missing/zero as "safe to proceed"?*
+3. *If yes, either change the default to a fail-closed marker, or add an explicit assertion that fires loudly when the value isn't fresh.*
+
+Past examples this would have caught:
+- 2026-04-29: empty `account_snapshots` table → DLL/TDD/ladder/consistency-rule checks all silently no-op'd → −$1,013 drawdown.
+- 2026-05-05: `unrealized_pl_usd` hardcoded to `0.0` in `_capture_account_snapshot` → DLL/TDD/ladder projections blind to NG bleeding $702 over 7 hours.
+- 2026-05-05: `daily_hard_target_usd: 0` written by uncommitted config edit → profit-lock silently disabled until the `risk_config_drift` audit fix.
+
+Already-encoded defenses to model new code on: `_audit_risk_config_drift` (warns on zeroed gates), `degraded_heartbeat` pattern in `_capture_account_snapshot` (fail-closed snapshot when fetch fails).
+
+### Pattern B — wrong-context validation
+
+A metric calibrated under one set of conditions applied under a different set. The metric is correct *somewhere* but wrong *here*.
+
+Before merging any change that adds a strategy, threshold, calibration, or signal filter, ask:
+1. *Where will this be deployed?* (symbol set, session window, side, timeframe)
+2. *Where was the threshold calibrated?* (data source, regime, time range, granularity)
+3. *Are the deployment regime and the calibration regime the same?*
+4. *If not, recalibrate against the deployment regime, OR carry the calibration scope as an explicit constraint that gates firing.*
+
+Past examples this would have caught:
+- 2026-04-29: ZN ORB used RTH volume thresholds (1500-3000 contracts/bar baseline) in overnight thin tape (5-15 contracts/bar baseline). "3× confirmation" meant something completely different cross-regime.
+- 2026-05-05: aggregate-level walk-forward passed while cell-level (symbol × session × side) failed. Trader fired at cell-level, validation was at aggregate. → strategy validation lockdown.
+
+Already-encoded defenses: `STRATEGY_CELL_ALLOWLIST` (cell-level granularity), `live_strategies_filter` (hand-picked subset), thin-tape regime block. Open encoding gap: volume thresholds aren't yet session-aware (calibrate-then-deploy version of the principle isn't enforced for volume).
+
+### When the checklist catches something
+
+If applying either pattern surfaces a real risk in the proposed change, the change should either be modified to address it OR the analysis piece (`2026-05-07_lesson_meta_patterns.md`) updated with a note explaining why this case is OK to merge as-is. Don't silently ship around the pattern.
+
+If a third real-world incident matching either pattern emerges despite this checklist, escalate to hard-encoding the check as a CI test that fails the build.
+
+## What success looks like
+
+The fund's only KPI is **NET monthly P&L** (gross trading − Topstep fees − API spend − subscriptions). Until the Combine is passed, the secondary KPI is **days-without-rule-violation**. A clean no-trade day is fine. A day with a $300 win + $100 loss is fine. A day with $1,000 of churn is failure even if NET is positive.
