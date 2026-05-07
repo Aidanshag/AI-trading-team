@@ -40,10 +40,12 @@ import requests
 _HERE = Path(__file__).resolve().parent.parent
 os.chdir(_HERE)
 
-# Federal Reserve master events ICS feed (verify URL — Fed has historically
-# served at least an HTML calendar. If the .ics endpoint isn't available,
-# fall back to scraping the HTML calendar.)
-FED_ICS_URL = "https://www.federalreserve.gov/calendar/feed.ics"
+# Federal Reserve calendar — JSON endpoint that powers the public HTML
+# calendar. Discovered 2026-05-07 after the legacy .ics feed went 404.
+# Returns ~2500 events. UTF-8 BOM on the response, so we strip BOM
+# before json.loads.
+FED_JSON_URL = "https://www.federalreserve.gov/json/calendar.json"
+FED_ICS_URL = "https://www.federalreserve.gov/calendar/feed.ics"     # legacy, dead 2026-05
 FED_HTML_CAL = "https://www.federalreserve.gov/newsevents/calendar.htm"
 
 # Influence tiers — extended over time as we learn which speakers move
@@ -59,10 +61,68 @@ MEDIUM_INFLUENCE_KEYWORDS = (
 
 
 def fetch_ics() -> str:
+    """Legacy. The Fed's .ics feed went 404 around 2026-05; kept for
+    backwards compat. Use fetch_json() instead."""
     r = requests.get(FED_ICS_URL, timeout=30,
                      headers={"User-Agent": "ai-trading-fund/1.0"})
     r.raise_for_status()
     return r.text
+
+
+def fetch_json() -> list[dict]:
+    """Pull the Fed's public calendar JSON (the data the HTML calendar
+    page loads). Returns the events list normalized to a flat schema."""
+    r = requests.get(FED_JSON_URL, timeout=30,
+                     headers={"User-Agent": "Mozilla/5.0 (ai-trading-fund/1.0)"})
+    r.raise_for_status()
+    # Response has UTF-8 BOM
+    text = r.text.lstrip("﻿")
+    data = json.loads(text)
+    return data.get("events") or []
+
+
+def normalize_json_events(raw: list[dict]) -> list[dict]:
+    """Convert the Fed JSON event schema to our internal {DTSTART,
+    SUMMARY, DESCRIPTION, LOCATION} dicts so the existing classify /
+    filter / write code is reused.
+
+    Source schema per event:
+      title, description, time ('7:30 p.m.'), month ('YYYY-MM'),
+      days ('8' or '8-9'), type, location, live
+    """
+    out: list[dict] = []
+    for e in raw:
+        month = str(e.get("month", ""))   # 'YYYY-MM'
+        days_str = str(e.get("days", ""))  # may be '8', '8-9', '8, 9'
+        if not (month and days_str):
+            continue
+        # Take first day if multi-day
+        first_day = days_str.split(",")[0].split("-")[0].strip()
+        try:
+            d = datetime.strptime(f"{month}-{int(first_day):02d}", "%Y-%m-%d")
+        except Exception:
+            continue
+        # Parse time of day
+        time_str = str(e.get("time", "")).lower().replace(".", "").strip()
+        hour, minute = 12, 0  # default to noon if no time
+        m = re.match(r"(\d{1,2}):?(\d{0,2})\s*(am|pm)?", time_str)
+        if m:
+            hour = int(m.group(1))
+            minute = int(m.group(2) or 0)
+            if (m.group(3) or "").startswith("p") and hour < 12:
+                hour += 12
+            elif (m.group(3) or "").startswith("a") and hour == 12:
+                hour = 0
+        d = d.replace(hour=hour, minute=minute)
+        # Format DTSTART as ICS-style (US/Eastern naive — Fed time)
+        dtstart = d.strftime("%Y%m%dT%H%M%S")
+        out.append({
+            "DTSTART": dtstart,
+            "SUMMARY": str(e.get("title", "")),
+            "DESCRIPTION": str(e.get("description", "")),
+            "LOCATION": str(e.get("location", "")),
+        })
+    return out
 
 
 def parse_ics(text: str) -> list[dict]:
@@ -177,17 +237,27 @@ def main() -> int:
     p.add_argument("--print", dest="do_print", action="store_true")
     args = p.parse_args()
 
+    # Try JSON first (current as of 2026-05). Fall through to ICS if JSON
+    # fails for any reason; only error out if both fail.
+    events: list[dict] = []
     try:
-        text = fetch_ics()
+        raw = fetch_json()
+        events = normalize_json_events(raw)
+        print(f"Fetched {len(raw)} raw events from Fed JSON, "
+              f"normalized to {len(events)}.")
     except Exception as e:
-        print(f"ERROR: failed to fetch Fed ICS: {e}", file=sys.stderr)
-        print(f"Falling back: HTML page at {FED_HTML_CAL} (parser not yet "
-              f"implemented — add when needed).", file=sys.stderr)
-        return 2
+        print(f"WARN: Fed JSON path failed: {e}", file=sys.stderr)
+        try:
+            text = fetch_ics()
+            events = parse_ics(text)
+            print(f"Fallback ICS parsed {len(events)} events.")
+        except Exception as e2:
+            print(f"ERROR: both Fed JSON and ICS feeds failed: {e2}",
+                  file=sys.stderr)
+            return 2
 
-    events = parse_ics(text)
     filtered = filter_and_normalize(events, args.days)
-    print(f"Parsed {len(events)} events, kept {len(filtered)} in next {args.days} days.")
+    print(f"Kept {len(filtered)} events in next {args.days} days.")
     write_outputs(filtered)
 
     if args.do_print:

@@ -35,12 +35,17 @@ import requests
 _HERE = Path(__file__).resolve().parent.parent
 os.chdir(_HERE)
 
-# fiscaldata.treasury.gov public endpoint (no auth)
+# fiscaldata.treasury.gov public endpoint (no auth).
+# 2026-05-07: API field names verified via live probe — they renamed
+# `security_type_desc` → `security_type` and removed `maturity_date`
+# (the field is computable from issue_date + security_term, not stored).
+# Available fields: record_date, security_type, security_term, reopening,
+# cusip, offering_amt, announcemt_date (sic), auction_date, issue_date.
 FISCALDATA_URL = (
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/"
     "v1/accounting/od/upcoming_auctions"
-    "?fields=record_date,security_type_desc,security_term,auction_date,"
-    "issue_date,maturity_date,offering_amt"
+    "?fields=record_date,security_type,security_term,auction_date,"
+    "issue_date,offering_amt,announcemt_date,reopening"
     "&page[size]=100"
 )
 
@@ -76,7 +81,8 @@ def annotate_for_gap_fill(records: list[dict]) -> list[dict]:
     """Add fields the high-impact blackout gate might want."""
     out = []
     for r in records:
-        sec = str(r.get("security_type_desc", ""))
+        # 2026-05-07: API uses `security_type` (was `security_type_desc`).
+        sec = str(r.get("security_type", "") or r.get("security_type_desc", ""))
         term = str(r.get("security_term", ""))
         ad = str(r.get("auction_date", "")).split("T")[0]
 
@@ -100,10 +106,11 @@ def annotate_for_gap_fill(records: list[dict]) -> list[dict]:
 
         rec = {
             "auction_date": ad,
+            "announcement_date": str(r.get("announcemt_date", "") or "").split("T")[0],
             "issue_date": str(r.get("issue_date", "")).split("T")[0],
-            "maturity_date": str(r.get("maturity_date", "")).split("T")[0],
             "security_type": sec,
             "security_term": term,
+            "reopening": r.get("reopening"),
             "offering_amt_usd": _parse_amt(r.get("offering_amt")),
             "affected_futures": affected,
         }
@@ -145,12 +152,14 @@ def write_outputs(records: list[dict]) -> None:
          "day itself) tend to produce sustained directional drift in the "
          "issued tenor — gap_fill fade can fail.",
          "",
-         "| Auction date | Type | Term | Issue | Maturity | Amount ($B) | Affects futures |",
-         "|---|---|---|---|---|---:|---|"]
+         "| Auction date | Announce | Type | Term | Issue | Amount ($B) | Reopen | Affects futures |",
+         "|---|---|---|---|---|---:|---|---|"]
     for r in records:
         amt = (r.get("offering_amt_usd") or 0) / 1e9
-        L.append(f"| {r['auction_date']} | {r['security_type']} | {r['security_term']} "
-                 f"| {r['issue_date']} | {r['maturity_date']} | {amt:.1f} "
+        reopen = "Y" if r.get("reopening") in (True, "Y", "yes") else ""
+        L.append(f"| {r['auction_date']} | {r.get('announcement_date','')} "
+                 f"| {r['security_type']} | {r['security_term']} | {r['issue_date']} "
+                 f"| {amt:.1f} | {reopen} "
                  f"| {', '.join(r['affected_futures']) or '—'} |")
     md_path.write_text("\n".join(L) + "\n", encoding="utf-8")
     print(f"Wrote {json_path.relative_to(_HERE)}")

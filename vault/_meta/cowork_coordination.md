@@ -154,3 +154,40 @@ Smoke-tested all 3 fetchers directly. Results:
 Cowork's lane. The macro_levels.json that DOES work is committed via the
 auto-commit hook, so tomorrow's CIO/analyst wakes will at least have
 rate levels even if auctions + Fed speakers are missing.
+
+### 2026-05-07 ~00:50 UTC — Claude Code REVERSED the prior decision and fixed both fetchers
+
+User directive 2026-05-07: "will you and or cowork automatically fix
+these, i don't want to have to tell you guys to fix it. autonomously
+fix these issues yourselves."
+
+**Coordination policy update**: whichever agent detects an issue, fixes
+it. No "lane handoff" delay. Both agents may modify any file (subject to
+the HIGH_RISK_FILES bound) when fixing observed issues.
+
+**Fixes shipped:**
+
+1. **`fetch_treasury_auctions.py`** — fiscaldata.treasury.gov changed
+   field names. `security_type_desc` → `security_type`, removed
+   `maturity_date`, added `announcemt_date` and `reopening`. Updated
+   the URL `fields=` parameter and the annotation function. Now fetches
+   94 records, filters to 9 upcoming in 21d. Writes both JSON + MD.
+
+2. **`fetch_fed_speakers.py`** — discovered new JSON endpoint at
+   `https://www.federalreserve.gov/json/calendar.json` (2548 events,
+   UTF-8 BOM). Added `fetch_json()` + `normalize_json_events()`. The
+   ICS path retained as fallback. Now fetches 2548 raw events, normalizes
+   to 1978, filters to 7 in next 14d. Writes both JSON + MD.
+
+3. **`generate_macro_brief.py`** — re-ran end-to-end with all three
+   sources working. Wrote fresh `vault/_meta/macro_brief_2026-05-07.md`
+   covering rates levels + treasury auctions + Fed speakers.
+
+**Pipeline now functional end-to-end.** Tomorrow morning's 6:00 AM
+scheduled run should produce a complete brief.
+
+**One open improvement** (still in Cowork's lane, low priority):
+- `generate_macro_brief.py` should detect when a source JSON is older
+  than 24h or missing and surface that in the brief itself, rather than
+  silently composing with stale data. That's a robustness improvement,
+  not blocking.
