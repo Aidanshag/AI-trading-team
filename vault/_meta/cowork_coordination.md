@@ -110,3 +110,47 @@ The following decisions / authorizations were made between user and Claude Code
   - `scripts/walk_forward_tier4_*.py`
   - `scripts/daily_strategy_validation.py`
 - Cowork: feel free to take on any item from "Areas where Cowork is welcome to drive" above.
+
+### 2026-05-07 ~00:35 UTC — Cowork's macro pipeline smoke-test (Claude Code ran it)
+
+User relayed Cowork's request to verify the FundMacroBriefDaily pipeline.
+Smoke-tested all 3 fetchers directly. Results:
+
+**`fetch_fred_macro_levels.py` — ✅ WORKING**
+- Produces `vault/_meta/macro_levels.json` + `.md`
+- Pulled 8/9 series successfully (DGS2/30, DFII10, T10Y2Y, T10YIE, DTWEXBGS, VIXCLS, SOFR)
+- DGS10 didn't print but no error — needs a quick check
+- Live levels look right (10Y 4.42, 2Y 3.93, 30Y 4.98, VIX 17.38, etc.)
+
+**`fetch_treasury_auctions.py` — ❌ BROKEN: HTTP 400**
+- `fiscaldata.treasury.gov` API returning 400 Bad Request
+- Full URL: `https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions?fields=record_date,security_type_desc,security_term,auction_date,issue_date,maturity_date,offering_amt&page%5Bsize%5D=100`
+- Likely the `upcoming_auctions` endpoint moved or `fields=` requires URL encoding fix
+- Cowork: please debug — try the API browser at https://fiscaldata.treasury.gov/datasets/upcoming-auctions/upcoming-auctions to find the current path
+
+**`fetch_fed_speakers.py` — ❌ BROKEN: HTTP 404**
+- `federalreserve.gov/calendar/feed.ics` returning 404 Not Found
+- Feed URL is dead. Script's own message says "fallback: HTML parser not yet implemented"
+- Cowork: needs the HTML parser fallback at `https://www.federalreserve.gov/newsevents/calendar.htm`
+
+**Scheduled task — ✅ INSTALLED CORRECTLY**
+- TaskName: `FundMacroBriefDaily`
+- State: Queued / Ready
+- NextRunTime: 5/7/2026 6:00:00 AM ✓
+- LastRunTime: 5/6/2026 8:31:48 PM (smoke-test ran)
+- LastTaskResult: 0 (Python exits 0 because the brief-generator runs even when
+  fetchers fail — masks the real broken-data state)
+
+**Action items for Cowork:**
+1. Fix `fetch_treasury_auctions.py` — fiscaldata API path
+2. Fix `fetch_fed_speakers.py` — Fed ICS gone, implement HTML parser
+3. Make `generate_macro_brief.py` exit non-zero (or at least log a warning)
+   when source JSON files are missing — currently masks failures behind
+   a "successful" Task Scheduler run. Suggest: each fetcher writes a
+   `_status` field; brief generator detects missing/error status and
+   surfaces in the brief itself.
+
+**No action from Claude Code on this** — these are Cowork's scripts in
+Cowork's lane. The macro_levels.json that DOES work is committed via the
+auto-commit hook, so tomorrow's CIO/analyst wakes will at least have
+rate levels even if auctions + Fed speakers are missing.

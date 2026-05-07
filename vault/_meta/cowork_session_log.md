@@ -150,3 +150,81 @@ If Claude Code wants to know what's safe to assume Cowork built:
 - Anything under `session: auto-commit` could be either Claude Code's
   own changes or Claude Code picking up Cowork's uncommitted edits
 - This file is the disambiguator
+
+---
+
+## 2026-05-06 — Session 1 addendum (macro intelligence pipeline + scheduler)
+
+Added a daily macro intelligence pipeline that closes the
+information-asymmetry gap between the price-only auto_trader and a
+real desk that sees macro context.
+
+### Commits
+
+4. `49fc005 [cowork] macro intelligence pipeline — fetchers + brief generator`
+   - `scripts/fetch_treasury_auctions.py` — pulls fiscaldata.treasury.gov
+     upcoming auctions API. Maps each auction to the affected ProjectX
+     futures (10y note → ZN, 30y bond → ZB, 5y note → ZF, 2y note → ZT).
+     Writes `vault/economic_calendar/treasury_auctions.{json,md}`.
+   - `scripts/fetch_fed_speakers.py` — parses federalreserve.gov ICS
+     calendar. Tags speakers HIGH/MEDIUM/LOW influence (HIGH = Chair,
+     Vice Chair, NY Fed President — front-end gap_fill caution).
+     Writes `vault/economic_calendar/fed_speakers.{json,md}`.
+   - `scripts/fetch_fred_macro_levels.py` — pulls 9 FRED series via
+     CSV endpoint (no API key): DGS10, DGS2, DGS30, DFII10, T10Y2Y,
+     T10YIE, DTWEXBGS, VIXCLS, SOFR. Writes 5d/20d deltas.
+     Writes `vault/_meta/macro_levels.{json,md}`.
+   - `scripts/generate_macro_brief.py` — composes them all into
+     `vault/_meta/macro_brief_<YYYY-MM-DD>.md`. Read on first wake.
+     Includes a regime-read section that translates macro deltas into
+     concrete gap_fill caution flags (10Y rising 5d > 0.10% → directional
+     regime → size down).
+   - `vault/_meta/macro_brief_2026-05-06.md` — manually-composed worked
+     example using WebSearch (Cowork sandbox can't reach FRED/Yahoo
+     directly). Shows what the auto-generated output will look like.
+
+5. `(pending commit) [cowork] scripts: install-macro-brief-daily.ps1`
+   - PowerShell installer mirroring `install-autotrader-daily.ps1`.
+   - Registers `FundMacroBriefDaily` scheduled task: Mon-Fri 06:00 local
+     (30 min before the auto_trader's 06:30 start, so brief is fresh
+     when trader wakes).
+   - Idempotent with rollback safety (same pattern as autotrader install).
+   - Action: `python -m scripts.generate_macro_brief --refresh`.
+
+### Action item for Claude Code
+
+The macro-brief install script needs to be run once from an elevated
+PowerShell to register the scheduled task. After running once, the
+task fires daily at 06:00 weekdays and the user never has to ask for a
+brief again.
+
+```powershell
+# Run from elevated PowerShell:
+& "C:\Users\Owner\OneDrive\Personal AI\AI Trading\scripts\install-macro-brief-daily.ps1"
+
+# Then test immediately:
+Start-ScheduledTask -TaskName FundMacroBriefDaily
+
+# Verify output landed:
+Get-Content ".\vault\_meta\macro_brief_$(Get-Date -Format yyyy-MM-dd).md"
+```
+
+If the first run fails on any of the three fetchers (the most likely
+failure is `fetch_treasury_auctions.py` if fiscaldata.treasury.gov's
+field shape has shifted), the fix is local to that one fetcher — the
+brief generator is fault-tolerant and emits placeholder sections for
+missing inputs.
+
+### Note on auto_trader.py per_symbol_burn_warn dedupe
+
+Still uncommitted from this Cowork session because the bash mount
+in the Cowork sandbox has a stale, truncated copy of auto_trader.py.
+The Windows-side file has the edit (verified via Read tool). When
+Claude Code's next auto-commit fires, it will pick up the edit from
+the Windows-side file with a `session: auto-commit` message. To commit
+it under the [cowork] prefix instead, run from PowerShell:
+
+```powershell
+git add scripts/auto_trader.py
+git commit -m "[cowork] auto_trader: dedupe per_symbol_burn_warn (was firing every 5min)"
+```
