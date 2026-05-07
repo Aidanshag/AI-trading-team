@@ -1,7 +1,7 @@
 ---
 type: macro_brief
 date: 2026-05-07
-generated_at: 2026-05-07T00:38:45.869666+00:00
+generated_at: 2026-05-07T10:00:10.433851+00:00
 generated_by: scripts.generate_macro_brief
 applies_to: [CIO, Risk Manager, Quant Researcher, Edge Hunter, all analysts]
 read_on_first_wake: true
@@ -56,6 +56,6 @@ read_on_first_wake: true
 
 ## Sources / freshness
 
-- macro_levels.json — generated 2026-05-07T00:32:57.259275+00:00
-- treasury_auctions.json — generated 2026-05-07T00:36:35.965501+00:00
-- fed_speakers.json — generated 2026-05-07T00:38:45.371243+00:00
+- macro_levels.json — generated 2026-05-07T10:00:07.470225+00:00
+- treasury_auctions.json — generated 2026-05-07T10:00:09.454208+00:00
+- fed_speakers.json — generated 2026-05-07T10:00:10.358677+00:00

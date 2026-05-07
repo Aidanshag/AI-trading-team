@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-07T00:36:35.965501+00:00",
+  "generated_at": "2026-05-07T10:00:09.454208+00:00",
   "source": "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions?fields=record_date,security_type,security_term,auction_date,issue_date,offering_amt,announcemt_date,reopening&page[size]=100",
   "auctions": [
     {

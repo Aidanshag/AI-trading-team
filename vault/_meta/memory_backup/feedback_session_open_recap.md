@@ -20,7 +20,8 @@ having to ask. The recap is their accountability check.
 4. **Daily validation results** — promotions/demotions from preflight runs (read latest `vault/research/validation/<date>_daily_validation.md`)
 5. **Filter widens executed** — if I auto-widened `live_strategies_filter` per the staged plan, name the stage and the rationale
 6. **Anomalies** — any `risk_config_drift`, `protective_stop_missing`, `loss_hard_cap`, `daily_target_action_fired`, or `consecutive_losers_halt` events
-7. **Outstanding decisions for the user** — anything I held off on per the bounds (position sizing, HIGH_RISK_FILES, etc.)
+7. **Cowork activity** — read `vault/_meta/cowork_coordination.md` and run `git log --since='12 hours ago' --oneline` to detect Cowork commits. If Cowork did work in shared areas, briefly note what they changed and whether it affects current state.
+8. **Outstanding decisions for the user** — anything I held off on per the bounds (position sizing, HIGH_RISK_FILES, etc.)
 
 **Format:** Lead with a one-sentence headline (e.g., "Net +$120 overnight, 2 trades, both winners on gap_fill ZT"). Then a structured recap of the above. Keep it tight — the user can drill into specifics if they want.
 

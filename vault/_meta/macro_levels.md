@@ -1,6 +1,6 @@
 ---
 type: macro_levels
-generated_at: 2026-05-07T00:32:57.259275+00:00
+generated_at: 2026-05-07T10:00:07.470225+00:00
 ---
 
 # Macro levels — auto-fetched from FRED

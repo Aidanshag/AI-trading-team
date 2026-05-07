@@ -26,3 +26,4 @@
 - [Feedback: Open every session with a recap](feedback_session_open_recap.md) — User authorized full autonomy 2026-05-06; lead each new session with status recap (trader, trades, P&L, validations, anomalies) before answering their question
 - [Feedback: Daily data refresh policy](feedback_daily_data_refresh_policy.md) — All data sources informing trading must auto-refresh daily; full pipeline lives in preflight steps 9-13
 - [Feedback: Save every session for external readers](feedback_save_every_session.md) — All conversations + work auto-persisted to git; per-session structured summaries in vault/sessions/ for Claude Cowork & external tools
+- [Feedback: Cowork coordination](feedback_cowork_coordination.md) — Read vault/_meta/cowork_coordination.md at session start; respect Cowork's backend work; both agents commit+push to share state; HIGH_RISK_FILES + live trading state are hands-off for both autonomously
