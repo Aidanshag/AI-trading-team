@@ -73,11 +73,10 @@ autonomous_restrictions:
   rr_floor_override:           2.5   # vs 2.0 standard
 
   # PER-STRATEGY: each strategy can place at most N trades per session.
-  # 2026-05-07: TIGHTENED 4→2 for first live night with the new wider
-  # 14h time window + 30-min lookback. Bounds blast radius on this
-  # first real test of the system. Restore to 4 once we have 5+ live
-  # trades confirming OOS expectancy holds.
-  per_strategy_per_session_cap: 2
+  # 2026-05-07 evening: user raised back to 4 after feeling 2 was too
+  # restrictive. The $150 LOSS_TIER_HARD_CAP_USD + max_trades_per_day=8
+  # remain the bounded-downside controls.
+  per_strategy_per_session_cap: 4
 
   # HEALTH CHECKS — auto-halt when system anomalies appear:
   require_snapshot_within_minutes: 5    # refuse to trade with stale data

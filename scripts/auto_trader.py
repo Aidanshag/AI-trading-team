@@ -2306,12 +2306,33 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
             misdirected_cancelled = 0
             from datetime import datetime as _dt, timedelta as _td, timezone as _tz
             stale_cutoff = _dt.now(tz=_tz.utc) - _td(minutes=10)
+            # 2026-05-07: GRACE PERIOD for newly-placed orders. Without
+            # this, a freshly-placed bracket gets its protective legs
+            # cancelled by the misdirected/orphan check before the entry
+            # has even filled (race: position not yet visible to broker
+            # query → actual_pos=None → flagged as misdirected → cancelled
+            # → entry then fills NAKED). Suspected root cause of yesterday's
+            # "trade closed at unexpected price" anomalies. New rule:
+            # protective legs younger than 2 minutes are NEVER cancelled
+            # by these heuristics; only after they've had a chance to be
+            # confirmed by broker do we judge them.
+            grace_cutoff = _dt.now(tz=_tz.utc) - _td(minutes=2)
             for o in broker_orders:
                 contract = o.get("contractId")
                 tag = str(o.get("customTag") or "")
                 if not (tag.startswith("auto_") or tag.startswith("recovery_")):
                     continue
                 oid = o.get("id") or o.get("orderId")
+                # Determine order age (creationTimestamp is ISO-8601 from broker)
+                order_age_ts = None
+                try:
+                    ts_str = o.get("creationTimestamp") or ""
+                    if ts_str:
+                        order_age_ts = _dt.fromisoformat(ts_str.replace("Z", "+00:00"))
+                except Exception:
+                    pass
+                in_grace = (order_age_ts is not None
+                            and order_age_ts > grace_cutoff)
                 # (a) orphan: no position on this contract
                 is_orphan = contract not in with_position
                 # (b) stale entry: type=2 (limit), no _stop / _target suffix
@@ -2319,22 +2340,15 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                 if (int(o.get("type") or 0) == 2
                         and not tag.endswith("_stop")
                         and not tag.endswith("_target")):
-                    ts_str = o.get("creationTimestamp") or ""
-                    try:
-                        ts = _dt.fromisoformat(ts_str.replace("Z", "+00:00"))
-                        if ts < stale_cutoff:
-                            is_stale_entry = True
-                    except Exception:
-                        pass
+                    if order_age_ts and order_age_ts < stale_cutoff:
+                        is_stale_entry = True
                 # (c) misdirected protective leg: a working _stop or _target
                 # tagged for an entry whose intended-side does NOT match the
-                # current position direction. This catches the OCO race where
-                # one leg fills (closing the position), then the other leg
-                # fires before the next scan and opens an UNWANTED opposite
-                # position. Caught 2026-05-01: 6E short target hit, then
-                # the still-working buy stop fired, opening an unintended
-                # long. The stop-loss-attached-to-short was now
-                # protecting nothing -- and worse, was a position-builder.
+                # current position direction. Refined 2026-05-07: only fire
+                # when actual_pos is the OPPOSITE direction (real misdirect).
+                # If actual_pos is None (position settling), defer to the
+                # 2-min grace period — don't cancel a protective leg just
+                # because the position hasn't materialized yet.
                 is_misdirected = False
                 if tag.endswith("_stop") or tag.endswith("_target"):
                     base_tag = tag
@@ -2353,8 +2367,18 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
                         entry_side = (row[0] or "").lower()
                         expected_pos = "long" if entry_side == "buy" else "short"
                         actual_pos = pos_dir_by_contract.get(contract)
-                        if actual_pos != expected_pos:
+                        # Only flag as misdirected when there's a CONFIRMED
+                        # opposite-direction position. A null actual_pos
+                        # means "position not visible yet" — should be
+                        # gated by the grace period below, not cancelled.
+                        if actual_pos is not None and actual_pos != expected_pos:
                             is_misdirected = True
+                # GRACE: skip cancellation for orders younger than 2 min
+                # (entry may still be filling, position may still be settling).
+                # Stale-entry cleanup uses its own 10-min check so it's safe
+                # past the grace period regardless.
+                if in_grace and not is_stale_entry:
+                    continue
                 if not (is_orphan or is_stale_entry or is_misdirected):
                     continue
                 try:
