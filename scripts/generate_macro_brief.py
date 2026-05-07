@@ -234,4 +234,178 @@ def section_regime_read(macro: dict | None,
                          "in directional-regime caution territory.")
         else:
             notes.append(f"- 10Y yield steady ({d:+.3f}% / 5d) → range "
-                         "regime, which is `gap_fill`
+                         "regime, which is `gap_fill`'s preferred regime.")
+
+    fii = by_id.get("DFII10", {})
+    if fii.get("delta_5d") is not None and abs(fii["delta_5d"]) > 0.10:
+        notes.append(f"- **Real yield moving sharply** ({fii['delta_5d']:+.3f}% / 5d) → "
+                     "demand-side shift in Treasuries; gap_fill caution.")
+
+    vix = by_id.get("VIXCLS", {})
+    if vix.get("level") is not None:
+        v = vix["level"]
+        if v > 25:
+            notes.append(f"- **VIX elevated** ({v:.1f}) → equity vol "
+                         "regime; rates futures often gap-extend. Caution.")
+        elif v < 12:
+            notes.append(f"- **VIX compressed** ({v:.1f}) → benign-vol "
+                         "regime; gap_fill mechanic should work cleanly.")
+
+    # Concession-day flags — auction calendar drives these.
+    if concession:
+        today = datetime.now(tz=timezone.utc).date().isoformat()
+        from datetime import timedelta as _td
+        tomorrow = (datetime.now(tz=timezone.utc).date()
+                    + _td(days=1)).isoformat()
+        for c in concession:
+            if c["date"] == today:
+                emoji = "**TODAY**"
+                bias = "Active concession/auction window — gap_fill on the affected tenor at elevated risk RIGHT NOW."
+            elif c["date"] == tomorrow:
+                emoji = "**TOMORROW**"
+                bias = "Pre-position: gap_fill on these symbols enters elevated-risk window at the next session open."
+            else:
+                continue   # only flag today/tomorrow in the regime read; full list is in the auctions table
+            futs = ", ".join(c["futures"]) or "—"
+            notes.append(
+                f"- {emoji} `{c['label']}` for {c['auction']} (${c['amt_usd_b']:.0f}B) "
+                f"affecting {futs} — {bias}"
+            )
+
+    if not notes:
+        notes.append("- No notable regime risk flags from current levels.")
+    return L + notes + [""]
+
+
+def section_summary_box(date: str, macro: dict | None,
+                        auct: dict | None, spk: dict | None) -> list[str]:
+    """Tight 3-line headline that the agent preamble can read as a single block."""
+    parts = []
+    if macro:
+        for s in macro["series"]:
+            if s["series"] == "DGS10" and s.get("level") is not None:
+                parts.append(f"10Y={s['level']:.2f}%")
+            elif s["series"] == "DFII10" and s.get("level") is not None:
+                parts.append(f"real={s['level']:.2f}%")
+            elif s["series"] == "DTWEXBGS" and s.get("level") is not None:
+                parts.append(f"USD={s['level']:.1f}")
+            elif s["series"] == "VIXCLS" and s.get("level") is not None:
+                parts.append(f"VIX={s['level']:.1f}")
+    snap_line = " | ".join(parts) or "(no levels)"
+
+    n_auct = 0
+    if auct:
+        today = datetime.now(tz=timezone.utc).date()
+        for r in auct.get("auctions", []):
+            try:
+                ad = datetime.fromisoformat(r["auction_date"]).date()
+            except Exception:
+                continue
+            if 0 <= (ad - today).days <= 7:
+                n_auct += 1
+
+    n_high = sum(1 for e in (spk or {}).get("events", [])
+                 if e.get("influence") == "HIGH")
+
+    return [f"> **TL;DR ({date})** — {snap_line} · "
+            f"{n_auct} auction(s) next 7d · "
+            f"{n_high} HIGH-influence Fed speaker(s) upcoming.", ""]
+
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--date", default=_today_utc())
+    p.add_argument("--refresh", action="store_true",
+                   help="Run fetchers before composing the brief.")
+    args = p.parse_args()
+
+    if args.refresh:
+        print("Running fetchers...")
+        run_fetchers()
+        print()
+
+    macro_path = _HERE / "vault" / "_meta" / "macro_levels.json"
+    auct_path  = _HERE / "vault" / "economic_calendar" / "treasury_auctions.json"
+    spk_path   = _HERE / "vault" / "economic_calendar" / "fed_speakers.json"
+
+    macro = _load_json(macro_path)
+    auct  = _load_json(auct_path)
+    spk   = _load_json(spk_path)
+
+    # Source-freshness check: warn if any source is missing or stale.
+    # 2026-05-07: improvement Claude Code flagged in coordination doc.
+    # Stale = >24h old or missing entirely. The brief still composes
+    # against whatever data exists, but flags loudly so the agent chain
+    # knows the regime read is built on potentially stale inputs.
+    stale_warnings: list[str] = []
+    for label, path, payload in [
+        ("FRED macro levels", macro_path, macro),
+        ("Treasury auctions", auct_path, auct),
+        ("Fed speakers", spk_path, spk),
+    ]:
+        if payload is None or not path.exists():
+            stale_warnings.append(f"- **MISSING**: {label} (`{path.name}`) "
+                                  "— fetcher hasn't run or output not written.")
+            continue
+        try:
+            gen = payload.get("generated_at", "")
+            gen_dt = datetime.fromisoformat(str(gen).replace("Z", "+00:00"))
+            age_h = (datetime.now(tz=timezone.utc) - gen_dt).total_seconds() / 3600
+            if age_h > 24:
+                stale_warnings.append(f"- **STALE** ({age_h:.0f}h): {label} "
+                                      f"generated {gen[:19]} — data may not "
+                                      f"reflect current state.")
+        except Exception:
+            stale_warnings.append(f"- **UNDATED**: {label} has no parseable "
+                                  "`generated_at` — treat as stale.")
+
+    concession = derive_concession_days(auct)
+
+    out = _HERE / "vault" / "_meta" / f"macro_brief_{args.date}.md"
+
+    L = ["---", "type: macro_brief",
+         f"date: {args.date}",
+         f"generated_at: {datetime.now(timezone.utc).isoformat()}",
+         "generated_by: scripts.generate_macro_brief",
+         "applies_to: [CIO, Risk Manager, Quant Researcher, Edge Hunter, all analysts]",
+         "read_on_first_wake: true",
+         "---", "",
+         f"# Macro brief — {args.date}",
+         "",
+         "> Auto-generated daily situational awareness for the front-office. "
+         "Cross-checks against the live `gap_fill` Treasury edge: anything "
+         "that shifts gaps from flow-driven (fade works) toward "
+         "information-driven (fade fails)."]
+
+    if stale_warnings:
+        L += ["", "## ⚠ Source-data freshness warnings",
+              "",
+              "_The brief below was composed with one or more stale or "
+              "missing source files. Treat the regime read as advisory "
+              "until inputs refresh._",
+              ""] + stale_warnings + [""]
+
+    L += [""]
+    L += section_summary_box(args.date, macro, auct, spk)
+    L += section_levels(macro)
+    L += section_auctions(auct)
+    L += section_speakers(spk)
+    L += section_regime_read(macro, concession=concession)
+
+    L += ["---", "",
+          "## Sources / freshness",
+          ""]
+    if macro:
+        L.append(f"- macro_levels.json — generated {macro.get('generated_at','?')}")
+    if auct:
+        L.append(f"- treasury_auctions.json — generated {auct.get('generated_at','?')}")
+    if spk:
+        L.append(f"- fed_speakers.json — generated {spk.get('generated_at','?')}")
+
+    out.write_text("\n".join(L) + "\n", encoding="utf-8")
+    print(f"Wrote {out.relative_to(_HERE)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

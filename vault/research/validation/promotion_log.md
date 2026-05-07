@@ -70,3 +70,11 @@
 - ✅ PROMOTE liquidity_sweep_tuned × MNQ × RTH × long  (OOS E=+0.94R, t=+2.77, n=27)
 - ✅ PROMOTE liquidity_sweep_tuned × MES × RTH × long  (OOS E=+0.96R, t=+2.71, n=25)
 - ✅ PROMOTE liquidity_sweep_tuned × 6E × London × long  (OOS E=+0.58R, t=+1.83, n=31)
+
+## 2026-05-07
+
+- ✅ PROMOTE gap_fill × ZB × PostClose × short  (OOS E=+1.10R, t=+3.46, n=26)
+- ✅ PROMOTE gap_fill × ZT × PostClose × long  (OOS E=+1.51R, t=+4.12, n=26)
+- ✅ PROMOTE gap_fill × 6B × Asian × short  (OOS E=+0.55R, t=+1.56, n=25)
+- ✅ PROMOTE liquidity_sweep_tuned × 6B × Asian × short  (OOS E=+0.54R, t=+1.52, n=25)
+- ✅ PROMOTE cross_asset_divergence_zn × ZB × Asian × short  (OOS E=+0.44R, t=+2.40, n=25)

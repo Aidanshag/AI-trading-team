@@ -11,6 +11,7 @@ row here too.
 
 | Date | Slug | Author | Confidence | Status | Topic |
 |---|---|---|---|---|---|
+| 2026-05-07 | risk_event_distribution | Cowork | ADVISORY | open | What the gate stack is actually doing — fee-budget waste, OCO race symbol pattern, network-instability recurrence, hour-of-day proof that the regime gate worked. |
 | 2026-05-07 | treasury_cell_decay_read | Cowork | ADVISORY | open | Live-vs-OOS read on the 14 active Treasury gap_fill cells; which deserve elevated scrutiny next 7 days. |
 
 ## Promotion log

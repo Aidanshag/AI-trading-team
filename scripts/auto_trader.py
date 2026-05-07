@@ -1026,10 +1026,10 @@ TRAILING_PROFIT_TIERS = (
 # 2026-05-05: NG short rode 7h losing $702 with bracket stop at $120 — the
 # broker stop never fired (root cause TBD; possibly server-side cancellation
 # at session boundary). With this cap, the trader market-closes the position
-# at ~-$200 unrealized regardless of whether the bracket stop is alive.
-# Set at 1.67× the typical per-trade $120 stop budget — generous enough to
-# survive normal noise, tight enough to catch broker-stop-failure cases.
-LOSS_TIER_HARD_CAP_USD = 200.0
+# at ~-$X unrealized regardless of whether the bracket stop is alive.
+# 2026-05-07: TIGHTENED 200→150 for first live night with the new system.
+# Restore to 200 after 5+ live trades confirm execution is reliable.
+LOSS_TIER_HARD_CAP_USD = 150.0
 
 # Per-symbol high-water tracking (process-local; resets on trader restart).
 # Maps "SYMBOL_SIDE" → peak unrealized P&L seen this session.
@@ -1723,6 +1723,72 @@ def _capture_account_snapshot(client, account_id) -> dict | None:
         return None
 
 
+def _fill_back_orders(client, account_id, db) -> None:
+    """Update orders table with fill prices/timestamps from broker.
+
+    Topstep's order_search endpoint returns each order's status,
+    fillVolume, filledPrice, and updateTimestamp. Without this back-fill,
+    `orders.ts_filled` and `orders.avg_fill_price` stay NULL forever
+    even on cleanly-filled trades — making per-trade slippage analysis
+    impossible. Added 2026-05-07 to enable live R-multiple verification.
+
+    Strategy:
+      - Pull last 24h of broker order history
+      - For each broker order with a customTag matching our orders table,
+        update ts_filled / avg_fill_price / status as appropriate
+      - status mapping: 2=filled, 3=cancelled, 4=rejected, 5=expired
+    """
+    try:
+        end = datetime.now(tz=timezone.utc)
+        start = end - timedelta(hours=24)
+        broker_orders = client.get_order_history(
+            account_id,
+            start_timestamp=start.isoformat(timespec="seconds"),
+            end_timestamp=end.isoformat(timespec="seconds"),
+        ) or []
+    except Exception as e:
+        # Network blip — silently skip; next scan will retry
+        return
+
+    updated = 0
+    for o in broker_orders:
+        cid = (o.get("customTag") or "").strip()
+        if not cid or not cid.startswith("auto_"):
+            continue
+        status_code = int(o.get("status") or 0)
+        fill_vol = int(o.get("fillVolume") or 0)
+        filled_price = o.get("filledPrice")
+        update_ts = o.get("updateTimestamp")
+        # Map Topstep status codes to our status strings
+        status_str = {
+            1: "submitted", 2: "filled", 3: "cancelled",
+            4: "rejected", 5: "expired",
+        }.get(status_code, "submitted")
+
+        try:
+            with db.tx() as c:
+                if status_code == 2 and fill_vol > 0 and filled_price is not None:
+                    c.execute(
+                        "UPDATE orders SET status=?, ts_filled=?, "
+                        "avg_fill_price=? WHERE client_order_id=? "
+                        "AND (ts_filled IS NULL OR avg_fill_price IS NULL)",
+                        (status_str, str(update_ts), float(filled_price), cid),
+                    )
+                elif status_code in (3, 4, 5):
+                    c.execute(
+                        "UPDATE orders SET status=? WHERE client_order_id=? "
+                        "AND status != ?",
+                        (status_str, cid, status_str),
+                    )
+                if c.rowcount and c.rowcount > 0:
+                    updated += c.rowcount
+        except Exception:
+            continue
+
+    if updated > 0:
+        print(f"  [fill-back: updated {updated} order rows from broker history]")
+
+
 def _enforce_daily_target_action(client, account_id, snap: dict, db) -> None:
     """When realized day P&L >= daily_hard_target_usd, take the configured
     action beyond just blocking new entries:
@@ -1898,6 +1964,15 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
     _audit_risk_config_drift(db)
 
     snap_result = _capture_account_snapshot(client, account_id)
+
+    # Fill-back orders from broker history (added 2026-05-07).
+    # Updates orders.ts_filled + avg_fill_price + status. Required for
+    # live R-multiple measurement (live_vs_oos_tracker reads these).
+    if not dry_run:
+        try:
+            _fill_back_orders(client, account_id, db)
+        except Exception as e:
+            print(f"  [fill_back failed: {e}]")
 
     # Daily-target action (added 2026-05-05): when realized day P&L
     # exceeds daily_hard_target_usd, optionally cancel working orders

@@ -73,15 +73,11 @@ autonomous_restrictions:
   rr_floor_override:           2.5   # vs 2.0 standard
 
   # PER-STRATEGY: each strategy can place at most N trades per session.
-  # Stops the "narrow_range_break fired 30 times" pattern.
-  # 2026-05-06: raised 1→4 to give the concentrated gap_fill treasury
-  # allowlist enough shots per session. With only 1 strategy in the
-  # active filter, this cap was the bottleneck — gap_fill fires at most
-  # once per session even though it has 11 validated cells. Now allows
-  # up to 4 fires per session across the curve. max_trades_per_day=8 +
-  # rates_curve.max_net_contracts=1 are the real safety floor (one
-  # position open at a time, fully sequential).
-  per_strategy_per_session_cap: 4
+  # 2026-05-07: TIGHTENED 4→2 for first live night with the new wider
+  # 14h time window + 30-min lookback. Bounds blast radius on this
+  # first real test of the system. Restore to 4 once we have 5+ live
+  # trades confirming OOS expectancy holds.
+  per_strategy_per_session_cap: 2
 
   # HEALTH CHECKS — auto-halt when system anomalies appear:
   require_snapshot_within_minutes: 5    # refuse to trade with stale data
