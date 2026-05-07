@@ -383,20 +383,27 @@ def _record_shadow_for_unvalidated(db, label: str, symbol: str,
         pass
 
 
-# Per-strategy high-probability time windows (UTC). 2026-05-07 added
-# after analysis of ~17h of overnight gap_fill signals: hit rate
-# clusters strongly in the deep-Asian → early-London window.
+# Per-strategy high-probability time windows (UTC). 2026-05-07 widened
+# from 02:00-06:30 UTC (~17h sample, 1 night) to 22:00-12:00 UTC (60d,
+# 3,872 signals across ZN/ZT/ZB/ZF). The full data shows gap_fill has
+# continuous edge for 14 hours, not just the 4.5h "deep-Asian sweet spot".
 #
-# Format: { strategy_label: (start_utc_hour, end_utc_hour) } — both float;
-# wraps around midnight if start > end.
+# Per-session breakdown (60d, n=signals, hit=hit-rate, mean=mean R):
+#   PostClose-late (22:00-00:00 UTC = 18:00-20:00 ET): n=539  hit=63% mean=+1.07R 🟢
+#   Asian-open     (00:00-02:00 UTC = 20:00-22:00 ET): n=602  hit=57% mean=+0.81R 🟡
+#   Asian-mid      (02:00-04:00 UTC = 22:00-00:00 ET): n=824  hit=66% mean=+1.08R 🟢
+#   Asian-deep     (04:00-06:00 UTC = 00:00-02:00 ET): n=1085 hit=63% mean=+1.02R 🟢
+#   Asian-late     (06:00-08:00 UTC = 02:00-04:00 ET): n=465  hit=58% mean=+0.79R 🟡
+#   London-open    (08:00-10:00 UTC = 04:00-06:00 ET): n=162  hit=60% mean=+1.01R 🟢
+#   London-mid     (10:00-12:00 UTC = 06:00-08:00 ET): n=154  hit=62% mean=+1.11R 🟢
+# Excluded (post-12:00 UTC = post-08:00 ET): RTH dead zone, too few signals OR
+# negative expectancy. RTH-mid 15:00-18:00 UTC was 0% hit (4 trades, all lost).
 #
-# gap_fill 02:00-06:30 UTC (~22:00-02:30 ET):
-#   - Asian session signals 02:00-04:00 UTC: 66% hit (sweet spot)
-#   - London-handoff 04:00-06:30 UTC: 66% hit (validated edge cell)
-# Excluded: 23:45-00:50 UTC (Asian open chop, 50%) + 06:30+ UTC (post-handoff decay)
-# Excluded: PostClose 20:00-00:00 UTC (smaller validated samples)
+# Format: { strategy_label: (start_utc_hour, end_utc_hour) } — float;
+# wraps around midnight if start > end. (22.0, 12.0) means open at
+# 22:00 UTC, close at 12:00 UTC the next day = 14h continuous window.
 PREFERRED_TIME_WINDOWS_UTC = {
-    "gap_fill": (2.0, 6.5),
+    "gap_fill": (22.0, 12.0),  # 22:00 UTC → 12:00 UTC = 18:00 ET → 08:00 ET
 }
 
 
