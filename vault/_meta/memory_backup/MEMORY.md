@@ -24,4 +24,5 @@
 - [Feedback: Silent default = off](feedback_silent_default_means_off.md) — Load-bearing safety fields whose default (0/None/empty) equals "all good" are bugs. Hit twice in 6 days (DLL breach 4/29, NG 5/5). Audit any read-default-and-allow path
 - [Feedback: Refinement queue standing auth](feedback_refinement_queue_authorized.md) — User authorized continuing through the trading-system refinement queue when conditions are right; bounds + per-item triggers documented
 - [Feedback: Open every session with a recap](feedback_session_open_recap.md) — User authorized full autonomy 2026-05-06; lead each new session with status recap (trader, trades, P&L, validations, anomalies) before answering their question
-- [Feedback: Daily data refresh policy](feedback_daily_data_refresh_policy.md) — All data sources informing trading must auto-refresh daily; full pipeline lives in preflight steps 9-12
+- [Feedback: Daily data refresh policy](feedback_daily_data_refresh_policy.md) — All data sources informing trading must auto-refresh daily; full pipeline lives in preflight steps 9-13
+- [Feedback: Save every session for external readers](feedback_save_every_session.md) — All conversations + work auto-persisted to git; per-session structured summaries in vault/sessions/ for Claude Cowork & external tools

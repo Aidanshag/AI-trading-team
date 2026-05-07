@@ -138,6 +138,17 @@ def main() -> None:
     except Exception:
         pass
 
+    # Generate session summary first so it's part of the commit. Capture
+    # what happened this session as a structured markdown for external
+    # tools (Claude Cowork, future sessions). Best-effort — never block.
+    try:
+        subprocess.run(
+            ["python", str(PROJECT_ROOT / "scripts" / "session_summary.py")],
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=30,
+        )
+    except Exception:
+        pass
+
     # Are we in a git repo?
     try:
         run(["git", "rev-parse", "--is-inside-work-tree"])

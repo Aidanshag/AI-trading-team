@@ -2311,12 +2311,26 @@ def scan_once(*, dry_run: bool = False, cooldown_minutes: int = 45) -> dict:
             summary["skipped_per_symbol_burn"] = summary.get("skipped_per_symbol_burn", 0) + 1
             continue
         elif sym_count >= per_symbol_warn:
-            db.record_risk_event(
-                severity="warn", rule="per_symbol_burn_warn",
-                agent="auto_trader",
-                detail={"symbol": symbol, "count": sym_count,
-                        "warn_threshold": per_symbol_warn},
-            )
+            # Dedupe: emit at most once per (symbol, count) per UTC day.
+            # Without this, the warn fires on every scan (every ~5 min)
+            # for the rest of the day after the threshold is crossed —
+            # 2026-05-06 we saw 325 warn rows on MCL alone. Each NEW count
+            # value (3→4→5) is still a fresh signal worth logging.
+            today_utc = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+            already = db.connect().execute(
+                "SELECT 1 FROM risk_events "
+                "WHERE rule='per_symbol_burn_warn' AND ts LIKE ? "
+                "  AND detail LIKE ? LIMIT 1",
+                (f"{today_utc}%",
+                 f'%"symbol": "{symbol}", "count": {sym_count}%'),
+            ).fetchone()
+            if not already:
+                db.record_risk_event(
+                    severity="warn", rule="per_symbol_burn_warn",
+                    agent="auto_trader",
+                    detail={"symbol": symbol, "count": sym_count,
+                            "warn_threshold": per_symbol_warn},
+                )
 
         # GUARD 1: already have a position on this symbol → skip
         existing = _broker_position_for(client, account_id, symbol)
