@@ -63,26 +63,46 @@ def check_env() -> bool:
 
 def check_broker() -> tuple[bool, dict]:
     print("Step 2/7: broker auth + canTrade")
-    try:
-        from tools.projectx_client import get_client, get_account_id
-        client = get_client()
-        accounts = client.get_accounts()
-        aid = get_account_id()
-        mine = next((a for a in accounts if str(a.get("id")) == str(aid)), None)
-        if mine is None:
-            _fail(f"account {aid} not visible")
-            return False, {}
-        balance = float(mine.get("balance", 0))
-        can_trade = bool(mine.get("canTrade"))
-        if not can_trade:
-            _fail(f"canTrade=false (balance ${balance:.2f}). "
-                  f"Topstep has flagged the account; cannot start session.")
-            return False, mine
-        _ok(f"account {mine.get('name')}: balance ${balance:.2f}, canTrade=True")
-        return True, mine
-    except Exception as e:
-        _fail(f"broker error: {type(e).__name__}: {e}")
-        return False, {}
+    # 2026-05-07: added retry-with-backoff for sketchy wifi resilience.
+    # Previous behavior failed on first DNS blip → killed trader → daemon
+    # revived → preflight failed again → loop. Now retries 3x over ~30s
+    # before giving up, which covers most home-wifi micro-drops.
+    import time
+    last_err = None
+    for attempt in range(3):
+        try:
+            from tools.projectx_client import get_client, get_account_id
+            client = get_client()
+            accounts = client.get_accounts()
+            aid = get_account_id()
+            mine = next((a for a in accounts if str(a.get("id")) == str(aid)), None)
+            if mine is None:
+                _fail(f"account {aid} not visible")
+                return False, {}
+            balance = float(mine.get("balance", 0))
+            can_trade = bool(mine.get("canTrade"))
+            if not can_trade:
+                _fail(f"canTrade=false (balance ${balance:.2f}). "
+                      f"Topstep has flagged the account; cannot start session.")
+                return False, mine
+            attempt_note = f" (attempt {attempt + 1})" if attempt > 0 else ""
+            _ok(f"account {mine.get('name')}: balance ${balance:.2f}, canTrade=True{attempt_note}")
+            return True, mine
+        except Exception as e:
+            last_err = e
+            err_str = str(e).lower()
+            transient = any(k in err_str for k in (
+                "getaddrinfo", "timeout", "connectionerror",
+                "connectionreset", "remote disconnected"
+            ))
+            if attempt < 2 and transient:
+                wait_s = 5 * (attempt + 1)
+                print(f"    transient network error: {type(e).__name__} — retrying in {wait_s}s...")
+                time.sleep(wait_s)
+                continue
+            break
+    _fail(f"broker error after 3 attempts: {type(last_err).__name__}: {last_err}")
+    return False, {}
 
 
 def check_halt() -> bool:
@@ -133,16 +153,43 @@ def check_focus_universe() -> bool:
 
 def check_snapshot_writer() -> bool:
     print("Step 5/7: snapshot writer end-to-end")
+    # 2026-05-07: same retry-with-backoff as check_broker, since this
+    # also requires network access to Topstep to actually capture.
+    import asyncio, time
+    from runtime.orchestrator import Orchestrator
+    from state.db import get_db
+    last_err = None
+    result = None
+    for attempt in range(3):
+        try:
+            async def _run():
+                o = Orchestrator()
+                return await o.capture_account_snapshot()
+            result = asyncio.run(_run())
+            if result:
+                break
+            # If returned None on attempt 1-2, retry; could be a network blip
+            if attempt < 2:
+                print(f"    snapshot returned None — retrying in {5*(attempt+1)}s...")
+                time.sleep(5 * (attempt + 1))
+                continue
+        except Exception as e:
+            last_err = e
+            err_str = str(e).lower()
+            transient = any(k in err_str for k in (
+                "getaddrinfo", "timeout", "connectionerror",
+                "connectionreset", "remote disconnected"
+            ))
+            if attempt < 2 and transient:
+                print(f"    transient network error: {type(e).__name__} — retrying...")
+                time.sleep(5 * (attempt + 1))
+                continue
+            break
     try:
-        import asyncio
-        from runtime.orchestrator import Orchestrator
-        from state.db import get_db
-        async def _run():
-            o = Orchestrator()
-            return await o.capture_account_snapshot()
-        result = asyncio.run(_run())
         if not result:
-            _fail("capture_account_snapshot returned None — writer broken")
+            err_msg = (f"after 3 attempts: {type(last_err).__name__}"
+                       if last_err else "returned None — writer broken")
+            _fail(f"capture_account_snapshot {err_msg}")
             return False
         snap = get_db().latest_account_snapshot()
         if not snap:

@@ -383,10 +383,47 @@ def _record_shadow_for_unvalidated(db, label: str, symbol: str,
         pass
 
 
+# Per-strategy high-probability time windows (UTC). 2026-05-07 added
+# after analysis of ~17h of overnight gap_fill signals: hit rate
+# clusters strongly in the deep-Asian → early-London window.
+#
+# Format: { strategy_label: (start_utc_hour, end_utc_hour) } — both float;
+# wraps around midnight if start > end.
+#
+# gap_fill 02:00-06:30 UTC (~22:00-02:30 ET):
+#   - Asian session signals 02:00-04:00 UTC: 66% hit (sweet spot)
+#   - London-handoff 04:00-06:30 UTC: 66% hit (validated edge cell)
+# Excluded: 23:45-00:50 UTC (Asian open chop, 50%) + 06:30+ UTC (post-handoff decay)
+# Excluded: PostClose 20:00-00:00 UTC (smaller validated samples)
+PREFERRED_TIME_WINDOWS_UTC = {
+    "gap_fill": (2.0, 6.5),
+}
+
+
+def _is_in_preferred_window(label: str) -> bool:
+    """True if no preferred window OR current UTC time is in the window."""
+    win = PREFERRED_TIME_WINDOWS_UTC.get(label)
+    if win is None:
+        return True
+    from datetime import datetime, timezone
+    now_utc = datetime.now(tz=timezone.utc)
+    h = now_utc.hour + now_utc.minute / 60.0
+    start, end = win
+    if start <= end:
+        return start <= h < end
+    return h >= start or h < end   # wraps midnight
+
+
 def _signal_passes_cell_allowlist(label: str, symbol: str, signal: dict) -> bool:
     """True if the strategy has no cell restriction OR the signal matches
     one of the allowed cells. Called inside scan_once after a signal is
     generated, before any order placement."""
+    # 2026-05-07: high-probability time window check applied first.
+    # If a strategy has a preferred window and current time is outside,
+    # block the signal (it'll be shadow-logged by the gate).
+    if not _is_in_preferred_window(label):
+        return False
+
     cells = STRATEGY_CELL_ALLOWLIST.get(label)
     if cells is None:
         return True  # no restriction
@@ -453,11 +490,20 @@ def fetch_bars(client, symbol: str, *, minutes: int = 5, lookback: int = 200) ->
 
 def find_latest_signal(bars: pd.DataFrame, strategy_fn, **kwargs) -> dict | None:
     """Run a strategy on the bars; return the LAST entry signal if any
-    fired in the most recent 3 bars (i.e., still actionable)."""
+    fired in the most recent N bars (i.e., still actionable).
+
+    2026-05-07: widened lookback from 3 bars (15 min) to 6 bars (30 min)
+    after diagnosis showed the trader was missing nearly all gap_fill
+    signals — they fire on a single bar, and a 15-min visibility window
+    combined with 5-min scan cadence + occasional wifi blips meant most
+    were missed. 30 min is still actionable for gap_fill (the gap stays
+    unfilled until price returns) and gives every signal at least 6
+    scans of catch chances.
+    """
     if len(bars) < 30:
         return None
     last_idx = bars.index[-1]
-    cutoff = bars.index[-3] if len(bars) >= 3 else bars.index[0]
+    cutoff = bars.index[-6] if len(bars) >= 6 else bars.index[0]
     latest = None
     try:
         for sig in strategy_fn(bars, **kwargs):
