@@ -1639,10 +1639,34 @@ def _capture_account_snapshot(client, account_id) -> dict | None:
         return {"balance_usd": balance, "realized_pl_day_usd": realized_day,
                 "trailing_dd_usd": trailing_dd, "can_trade": can_trade}
     except Exception as e:
+        # Network down (DNS failure, broker timeout, etc.) — instead of
+        # returning None and letting the trader die from snapshot-age,
+        # write a DEGRADED heartbeat row using the last known balance with
+        # can_trade=False. This keeps the daemon's snapshot-age check
+        # fresh (no false revival thrash) while the gate still refuses
+        # new orders because can_trade=False. When network recovers,
+        # the next call gets fresh real data.
+        # 2026-05-07: added after wifi-drop death-revive thrash diagnosis.
+        err_msg = str(e)[:300]
         db.record_risk_event(
             severity="warn", rule="snapshot_capture_failed",
-            agent="auto_trader", detail={"error": str(e)[:300]},
+            agent="auto_trader", detail={"error": err_msg, "degraded_heartbeat": True},
         )
+        try:
+            last = db.latest_account_snapshot()
+            if last:
+                db.record_account_snapshot(
+                    balance_usd=float(last.get("balance_usd") or 0),
+                    environment=str(last.get("environment") or "combine"),
+                    unrealized_pl_usd=0.0,
+                    realized_pl_day_usd=float(last.get("realized_pl_day_usd") or 0),
+                    trailing_dd_usd=float(last.get("trailing_dd_usd") or 0),
+                    open_contracts_total=int(last.get("open_contracts_total") or 0),
+                    can_trade=False,   # explicit refusal for the gate
+                )
+                print(f"  [degraded heartbeat written: {err_msg[:80]}]")
+        except Exception:
+            pass  # best-effort; if even this fails, trader will die naturally
         return None
 
 
