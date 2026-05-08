@@ -1,0 +1,93 @@
+# Top-level fund toggles that don't fit elsewhere.
+# Kept small; most config lives in the specialized files.
+
+# ── CURRENT PHASE — the single goal driving every decision ──
+# Phase: combine | maintain | funded
+#   combine  → pass the $50K Combine ($3K cumulative, no DLL/TDD breach,
+#              ≥5 days, no day > 50% consistency). All other goals deferred.
+#              ← THIS IS THE CURRENT PHASE.
+#   maintain → after passing, hold $3K+ for 5 trading days before withdrawal.
+#   funded   → live funded account, monthly NET P&L is the KPI.
+# Source of truth canon: vault/_meta/current_goal.md
+current_phase: combine
+
+# ── Idle-work mode ──────────────────────────────────────────
+# When true, agents with nothing live to do pull from the idle backlog at
+# vault/_meta/idle_backlog.md. Expands the brain autonomously while the
+# user is away. When false, agents never touch the backlog — they idle.
+#
+# Activation requires BOTH this flag AND the backlog's frontmatter
+# `status` field being `active`. Two-step gate is intentional.
+idle_work_enabled: true
+
+# Cost guardrails that apply only during idle-work mode (tighter than live)
+idle_work_guardrails:
+  max_tokens_per_wake: 3000
+  max_wakes_per_day: 20
+  force_cheap_tier: true          # no balanced/deep/frontier during idle
+  halt_if_live_events: true       # pause idle work if a market event fires
+
+# ── Autonomous mode ─────────────────────────────────────────
+# When true, the orchestrator runs unattended: scheduler emits ticks,
+# CIO wakes analysts, full chains run end-to-end without human approval.
+# When false (default), the orchestrator still runs but every order
+# goes through the supervised flow — which currently means the user is
+# in the loop via Claude Code.
+#
+# Hard rules that ONLY apply under autonomous mode:
+# - risk_limits.yaml:account.max_trades_per_day acts as a hard ceiling
+# - autonomy_guardrails below cap daily wake count and API spend
+autonomous_mode: true
+
+# Autonomous-mode cost + activity guardrails (independent of idle_work).
+autonomy_guardrails:
+  max_wakes_per_day: 200          # high-frequency cadence: 5-min ticks + parallel scans
+  max_usd_per_day: 15.00          # hard daily $ ceiling on API spend (~$300/mo at full util)
+  halt_action: "block_wakes"      # when exceeded: refuse new wakes (don't crash)
+
+# ── Autonomous-mode trade restrictions (added 2026-04-30 post DLL-breach)
+# These tighten the supervised defaults whenever autonomous_mode: true.
+# Every restriction here targets a specific failure mode from the 2026-04-29
+# incident. When autonomous_mode is FALSE, these are ignored — supervised
+# trading uses the looser values from risk_limits.yaml directly.
+autonomous_restrictions:
+  # WINDOW — 2026-05-04: user reopened to 24/5 to surface live trade flow for
+  # diagnostics. Hard floors (DLL, TDD, defensive ladder, daily target lock,
+  # snapshot freshness, kill switch, halt timestamp) remain the safety floor.
+  # Re-engage rth_only:true if overnight bleed reappears.
+  rth_only:        false
+  rth_start_et:    "07:30"      # retained for reference; ignored while rth_only=false
+  rth_end_et:      "15:30"      # retained for reference; ignored while rth_only=false
+
+  # DAILY CAPS (override values from risk_limits.yaml.account):
+  # 2026-05-06 audit: previous values were calibrated for micro-contract
+  # mix. Now trading full-size treasury contracts (ZN/ZT/ZB/ZF) which
+  # have $5 round-trip fees and $156-312 stop-out economics. Adjusted:
+  internal_dll_target_usd:   500    # 2026-05-06: $250→$500 — one ZB stop ($312) was breaching internal DLL before edge could express. $500 allows ~3 normal losing-trade outcomes before halt.
+  daily_fee_budget_usd:       40    # 2026-05-06 (later): $25→$40 — aligns with max_trades_per_day=8 × $5 RT fees on full-size treasury contracts. Previous $25 was capping us at trade #5, leaving 3 max-cap trades unreachable.
+  max_concurrent_positions:    1    # 2026-05-06: 2→1 — aligned with rates_curve.max_net_contracts=1, removes misleading decorative setting
+  max_trades_per_day:          8    # raised 2026-05-04 for overnight diagnostic mode (was 4); revert if downside materializes
+
+  # CONVICTION + R:R: skip "low" conviction; lift R:R floor.
+  min_conviction:              med   # only med/high fire under autonomous
+  rr_floor_override:           2.5   # vs 2.0 standard
+
+  # PER-STRATEGY: each strategy can place at most N trades per session.
+  # 2026-05-07 evening: user raised back to 4 after feeling 2 was too
+  # restrictive. The $150 LOSS_TIER_HARD_CAP_USD + max_trades_per_day=8
+  # remain the bounded-downside controls.
+  per_strategy_per_session_cap: 4
+
+  # HEALTH CHECKS — auto-halt when system anomalies appear:
+  require_snapshot_within_minutes: 5    # refuse to trade with stale data
+  consecutive_losers_halt:         3    # 3 losses in a row → 30-min pause
+  consecutive_loser_pause_minutes: 30   # 2026-05-06: 60→30 — 60 min was forfeiting half a session; 30 min is enough anti-tilt cooldown to break a tilt loop without losing the day
+  agent_wake_error_threshold:      5    # 5 wake_errors / 30 min → halt
+  agent_wake_error_window_minutes: 30
+
+# ── Auto-halt at session close ──────────────────────────────
+# When true, session_close_workflow re-engages trading_halt_until in
+# risk_limits.yaml, freezing trading until next session morning. User
+# (or scheduled task) explicitly clears it to resume.
+auto_halt_at_session_close: false   # 24/5 mode — no overnight halt re-arm
+auto_halt_resume_offset_hours: 16   # session closes 16:00 CT; resume +16h ≈ next 08:00 CT

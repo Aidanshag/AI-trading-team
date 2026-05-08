@@ -1,0 +1,76 @@
+# CME futures and futures options the fund is permitted to trade on Topstep.
+# Minimal metadata — enough for the risk hook and position sizing logic.
+# Sectors: index_macro, energies, metals, grains, softs, livestock, rates, fx_futures.
+
+symbols:
+  # ── Equity index futures (macro expression) ──
+  ES:  { name: "E-mini S&P 500",         sector: index_macro, tick_size: 0.25,  tick_value: 12.50, session_tz: America/Chicago }
+  MES: { name: "Micro E-mini S&P 500",   sector: index_macro, tick_size: 0.25,  tick_value: 1.25,  session_tz: America/Chicago }
+  NQ:  { name: "E-mini Nasdaq 100",      sector: index_macro, tick_size: 0.25,  tick_value: 5.00,  session_tz: America/Chicago }
+  MNQ: { name: "Micro Nasdaq 100",       sector: index_macro, tick_size: 0.25,  tick_value: 0.50,  session_tz: America/Chicago }
+  RTY: { name: "E-mini Russell 2000",    sector: index_macro, tick_size: 0.10,  tick_value: 5.00,  session_tz: America/Chicago }
+  M2K: { name: "Micro Russell 2000",     sector: index_macro, tick_size: 0.10,  tick_value: 0.50,  session_tz: America/Chicago }
+  YM:  { name: "E-mini Dow",             sector: index_macro, tick_size: 1.00,  tick_value: 5.00,  session_tz: America/Chicago }
+  MYM: { name: "Micro Dow",              sector: index_macro, tick_size: 0.50,  tick_value: 0.50,  session_tz: America/Chicago }
+  NKD: { name: "Nikkei 225 (USD)",       sector: index_macro, tick_size: 5.00,  tick_value: 25.00, session_tz: America/Chicago }
+
+  # ── Energies (expanded: every tradeable petro derivative) ──
+  CL:  { name: "Crude Oil WTI",          sector: energies, tick_size: 0.01,   tick_value: 10.00, session_tz: America/New_York }
+  MCL: { name: "Micro Crude Oil",        sector: energies, tick_size: 0.01,   tick_value: 1.00,  session_tz: America/New_York }
+  NG:  { name: "Natural Gas Henry Hub",  sector: energies, tick_size: 0.001,  tick_value: 10.00, session_tz: America/New_York }
+  MNG: { name: "Micro Natural Gas",      sector: energies, tick_size: 0.005,  tick_value: 1.25,  session_tz: America/New_York }
+  QG:  { name: "E-mini Natural Gas",     sector: energies, tick_size: 0.005,  tick_value: 12.50, session_tz: America/New_York }
+  RB:  { name: "RBOB Gasoline",          sector: energies, tick_size: 0.0001, tick_value: 4.20,  session_tz: America/New_York }
+  HO:  { name: "NY ULSD (Diesel)",       sector: energies, tick_size: 0.0001, tick_value: 4.20,  session_tz: America/New_York }
+  # BZ (Brent), EH (Ethanol) removed 2026-04-29 — not on Topstep.
+
+  # ── Metals (expanded: all tradeable metals) ──
+  GC:  { name: "Gold",                   sector: metals, tick_size: 0.10,   tick_value: 10.00, session_tz: America/New_York }
+  MGC: { name: "Micro Gold",             sector: metals, tick_size: 0.10,   tick_value: 1.00,  session_tz: America/New_York }
+  SI:  { name: "Silver",                 sector: metals, tick_size: 0.005,  tick_value: 25.00, session_tz: America/New_York }
+  SIL: { name: "Micro Silver",           sector: metals, tick_size: 0.005,  tick_value: 5.00,  session_tz: America/New_York }
+  HG:  { name: "Copper",                 sector: metals, tick_size: 0.0005, tick_value: 12.50, session_tz: America/New_York }
+  MHG: { name: "Micro Copper",           sector: metals, tick_size: 0.0005, tick_value: 1.25,  session_tz: America/New_York }
+  PL:  { name: "Platinum",               sector: metals, tick_size: 0.10,   tick_value: 5.00,  session_tz: America/New_York }
+  # PA (Palladium), ALI (Aluminum) removed 2026-04-29 — not on Topstep.
+
+  # ── Grains & Oilseeds (sector: ag — merged with livestock per risk_limits.yaml) ──
+  ZC:  { name: "Corn",                   sector: ag, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZS:  { name: "Soybeans",               sector: ag, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZW:  { name: "Wheat (CBOT SRW)",       sector: ag, tick_size: 0.0025, tick_value: 12.50, session_tz: America/Chicago }
+  ZL:  { name: "Soybean Oil",            sector: ag, tick_size: 0.0001, tick_value: 6.00,  session_tz: America/Chicago }
+  ZM:  { name: "Soybean Meal",           sector: ag, tick_size: 0.10,   tick_value: 10.00, session_tz: America/Chicago }
+  # NOTE: ZO (Oats), ZR (Rough Rice) removed 2026-04-29 — not on Topstep.
+  # Archive deep-dives at vault/_archive/.
+
+  # ── Softs ── REMOVED 2026-04-29: KC, CT, SB, CC, OJ, LBR are ICE-listed
+  # and not tradeable on Topstep. Vault deep-dives archived.
+
+  # ── Livestock (sector: ag — merged with grains per risk_limits.yaml) ──
+  LE:  { name: "Live Cattle",            sector: ag, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
+  HE:  { name: "Lean Hogs",              sector: ag, tick_size: 0.025, tick_value: 10.00, session_tz: America/Chicago }
+  # GF (Feeder Cattle) removed — not on Topstep.
+
+  # ── Rates ──
+  ZT:  { name: "2-Year T-Note",          sector: rates, tick_size: 0.0078125, tick_value: 15.625, session_tz: America/Chicago }
+  ZF:  { name: "5-Year T-Note",          sector: rates, tick_size: 0.0078125, tick_value: 7.8125, session_tz: America/Chicago }
+  ZN:  { name: "10-Year T-Note",         sector: rates, tick_size: 0.015625,  tick_value: 15.625, session_tz: America/Chicago }
+  ZB:  { name: "30-Year T-Bond",         sector: rates, tick_size: 0.03125,   tick_value: 31.25,  session_tz: America/Chicago }
+  UB:  { name: "Ultra T-Bond",           sector: rates, tick_size: 0.03125,   tick_value: 31.25,  session_tz: America/Chicago }
+
+  # ── FX futures ──
+  "6E": { name: "Euro FX",               sector: fx_futures, tick_size: 0.00005,   tick_value: 6.25,  session_tz: America/Chicago }
+  "6B": { name: "British Pound",         sector: fx_futures, tick_size: 0.0001,    tick_value: 6.25,  session_tz: America/Chicago }
+  "6J": { name: "Japanese Yen",          sector: fx_futures, tick_size: 0.0000005, tick_value: 6.25,  session_tz: America/Chicago }
+  "6A": { name: "Australian Dollar",     sector: fx_futures, tick_size: 0.00005,   tick_value: 5.00,  session_tz: America/Chicago }
+  "6C": { name: "Canadian Dollar",       sector: fx_futures, tick_size: 0.00005,   tick_value: 5.00,  session_tz: America/Chicago }
+  "6S": { name: "Swiss Franc",           sector: fx_futures, tick_size: 0.0001,    tick_value: 12.50, session_tz: America/Chicago }
+  M6E: { name: "Micro Euro FX",          sector: fx_futures, tick_size: 0.0001,    tick_value: 1.25,  session_tz: America/Chicago }
+  M6B: { name: "Micro British Pound",    sector: fx_futures, tick_size: 0.0001,    tick_value: 0.625, session_tz: America/Chicago }
+  E7:  { name: "E-mini Euro FX",         sector: fx_futures, tick_size: 0.0001,    tick_value: 6.25,  session_tz: America/Chicago }
+
+  # ── Additional contracts confirmed available on Topstep (verified 2026-04-28) ──
+  QM:  { name: "E-mini Crude Oil",       sector: energies, tick_size: 0.025,   tick_value: 12.50, session_tz: America/New_York }
+
+  # ── Crypto futures (CME) ──
+  METK: { name: "Micro Ether",           sector: crypto, tick_size: 0.50,    tick_value: 0.05,  session_tz: America/Chicago }
