@@ -1,17 +1,18 @@
 # Memory backup manifest
 
-Last sync: **2026-05-07T19:39:54+00:00**
+Last sync: **2026-05-08T04:41:42+00:00**
 
 Source: `C:\Users\Owner\.claude\projects\C--Users-Owner-OneDrive-Personal-AI-AI-Trading\memory`
 Backup: `vault\_meta\memory_backup`
 
-Files: **30** (excluding this manifest)
+Files: **32** (excluding this manifest)
 
 | File | Size | Modified |
 |---|---:|---|
 | `feedback_agent_autonomy.md` | 3760 | 2026-05-05T01:58:28+00:00 |
 | `feedback_api_conservation.md` | 1131 | 2026-04-23T19:12:05+00:00 |
 | `feedback_auto_repair_dead_agents.md` | 2380 | 2026-05-04T20:31:10+00:00 |
+| `feedback_autonomous_overnight_fixes.md` | 4668 | 2026-05-07T20:04:08+00:00 |
 | `feedback_cio_performance_mgmt.md` | 1500 | 2026-04-23T20:14:51+00:00 |
 | `feedback_cost_urgency.md` | 1606 | 2026-05-01T18:14:43+00:00 |
 | `feedback_cowork_coordination.md` | 3874 | 2026-05-07T00:39:22+00:00 |
@@ -30,7 +31,8 @@ Files: **30** (excluding this manifest)
 | `feedback_silent_default_means_off.md` | 2377 | 2026-05-06T00:01:37+00:00 |
 | `feedback_single_session.md` | 1496 | 2026-04-29T06:57:13+00:00 |
 | `feedback_trading_workflow.md` | 1909 | 2026-04-23T20:09:56+00:00 |
-| `MEMORY.md` | 5984 | 2026-05-07T00:07:57+00:00 |
+| `feedback_two_layer_architecture.md` | 10857 | 2026-05-07T20:23:46+00:00 |
+| `MEMORY.md` | 6641 | 2026-05-07T20:22:12+00:00 |
 | `project_2026_05_05_profit_lock_incident.md` | 2413 | 2026-05-05T21:49:20+00:00 |
 | `project_after_hours_reopening.md` | 1942 | 2026-05-04T20:40:12+00:00 |
 | `project_bracket_oco_bug.md` | 2509 | 2026-05-04T23:06:16+00:00 |

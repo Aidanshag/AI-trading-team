@@ -1,6 +1,6 @@
 ---
 type: macro_levels
-generated_at: 2026-05-07T10:00:07.470225+00:00
+generated_at: 2026-05-08T10:00:10.671016+00:00
 ---
 
 # Macro levels — auto-fetched from FRED
@@ -9,15 +9,15 @@ Live regime context for the agent preambles. Updated daily.
 
 | Series | Label | As of | Level | Δ 5d | Δ 20d |
 |---|---|---|---:|---:|---:|
-| DGS10 | 10Y Treasury yield | 2026-05-05 | 4.430 % | +0.070 | +0.100 |
-| DGS2 | 2Y Treasury yield | 2026-05-05 | 3.930 % | +0.090 | +0.120 |
-| DGS30 | 30Y Treasury yield | 2026-05-05 | 4.980 % | +0.040 | +0.080 |
-| DFII10 | 10Y real yield (TIPS) | 2026-05-05 | 1.960 % | +0.040 | +0.000 |
-| T10Y2Y | 10s2s curve slope | 2026-05-06 | 0.490 % | -0.010 | -0.010 |
-| T10YIE | 10Y breakeven inflation | 2026-05-06 | 2.420 % | -0.040 | +0.090 |
+| DGS10 | 10Y Treasury yield | 2026-05-06 | 4.360 % | -0.060 | +0.070 |
+| DGS2 | 2Y Treasury yield | 2026-05-06 | 3.870 % | -0.050 | +0.080 |
+| DGS30 | 30Y Treasury yield | 2026-05-06 | 4.940 % | -0.040 | +0.050 |
+| DFII10 | 10Y real yield (TIPS) | 2026-05-06 | 1.940 % | -0.020 | -0.020 |
+| T10Y2Y | 10s2s curve slope | 2026-05-07 | 0.490 % | -0.030 | -0.020 |
+| T10YIE | 10Y breakeven inflation | 2026-05-07 | 2.450 % | -0.010 | +0.110 |
 | DTWEXBGS | Broad USD (trade-weighted) | 2026-05-01 | 118.393 idx | -0.337 | -2.264 |
-| VIXCLS | VIX | 2026-05-05 | 17.380 | -0.450 | -8.400 |
-| SOFR | Secured Overnight Funding | 2026-05-05 | 3.620 % | -0.020 | +0.000 |
+| VIXCLS | VIX | 2026-05-06 | 17.390 | -1.420 | -3.650 |
+| SOFR | Secured Overnight Funding | 2026-05-06 | 3.610 % | -0.020 | +0.020 |
 
 ## Implications for `gap_fill` Treasury edge
 

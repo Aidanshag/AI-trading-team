@@ -1,69 +1,70 @@
 {
-  "generated_at": "2026-05-07T10:00:09.454208+00:00",
+  "generated_at": "2026-05-08T10:00:13.605609+00:00",
   "source": "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions?fields=record_date,security_type,security_term,auction_date,issue_date,offering_amt,announcemt_date,reopening&page[size]=100",
   "auctions": [
     {
-      "auction_date": "2026-05-07",
-      "announcement_date": "2026-05-05",
-      "issue_date": "2026-05-12",
-      "security_type": "Bill",
-      "security_term": "8-Week",
-      "reopening": "Yes",
-      "offering_amt_usd": 85000000000.0,
-      "affected_futures": []
-    },
-    {
-      "auction_date": "2026-05-07",
-      "announcement_date": "2026-05-05",
-      "issue_date": "2026-05-12",
-      "security_type": "Bill",
-      "security_term": "4-Week",
-      "reopening": "Yes",
-      "offering_amt_usd": 90000000000.0,
-      "affected_futures": []
-    },
-    {
       "auction_date": "2026-05-11",
+      "auction_time_et": "13:00",
+      "auction_dt_et": "2026-05-11T13:00",
       "announcement_date": "2026-05-06",
       "issue_date": "2026-05-15",
       "security_type": "Note",
       "security_term": "3-Year",
       "reopening": "No",
       "offering_amt_usd": 58000000000.0,
-      "affected_futures": []
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": [
+        "ZT",
+        "ZF"
+      ]
     },
     {
       "auction_date": "2026-05-11",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-11T11:30",
       "announcement_date": "2026-05-07",
       "issue_date": "2026-05-14",
       "security_type": "Bill",
       "security_term": "13-Week",
       "reopening": "Yes",
-      "offering_amt_usd": null,
-      "affected_futures": []
+      "offering_amt_usd": 89000000000.0,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
     },
     {
       "auction_date": "2026-05-11",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-11T11:30",
       "announcement_date": "2026-05-07",
       "issue_date": "2026-05-14",
       "security_type": "Bill",
       "security_term": "26-Week",
       "reopening": "No",
-      "offering_amt_usd": null,
-      "affected_futures": []
+      "offering_amt_usd": 77000000000.0,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
     },
     {
       "auction_date": "2026-05-12",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-12T11:30",
       "announcement_date": "2026-05-07",
       "issue_date": "2026-05-14",
       "security_type": "Bill",
       "security_term": "6-Week",
       "reopening": "Yes",
-      "offering_amt_usd": null,
-      "affected_futures": []
+      "offering_amt_usd": 80000000000.0,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
     },
     {
       "auction_date": "2026-05-12",
+      "auction_time_et": "13:00",
+      "auction_dt_et": "2026-05-12T13:00",
       "announcement_date": "2026-05-06",
       "issue_date": "2026-05-15",
       "security_type": "Note",
@@ -72,20 +73,30 @@
       "offering_amt_usd": 42000000000.0,
       "affected_futures": [
         "ZN"
-      ]
+      ],
+      "affected_primary": [
+        "ZN"
+      ],
+      "affected_basis": []
     },
     {
       "auction_date": "2026-05-12",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-12T11:30",
       "announcement_date": "2026-05-07",
       "issue_date": "2026-05-14",
       "security_type": "Bill",
       "security_term": "52-Week",
       "reopening": "No",
-      "offering_amt_usd": null,
-      "affected_futures": []
+      "offering_amt_usd": 50000000000.0,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
     },
     {
       "auction_date": "2026-05-13",
+      "auction_time_et": "13:00",
+      "auction_dt_et": "2026-05-13T13:00",
       "announcement_date": "2026-05-06",
       "issue_date": "2026-05-15",
       "security_type": "Bond",
@@ -94,7 +105,11 @@
       "offering_amt_usd": 25000000000.0,
       "affected_futures": [
         "ZB"
-      ]
+      ],
+      "affected_primary": [
+        "ZB"
+      ],
+      "affected_basis": []
     }
   ]
 }

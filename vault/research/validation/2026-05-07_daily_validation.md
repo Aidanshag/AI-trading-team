@@ -1,32 +1,24 @@
 ---
 type: daily_strategy_validation
-date: 2026-05-07T19:30:29.811857+00:00
-cells_evaluated: 2033
-promotions: 3
+date: 2026-05-07T20:30:31.395573+00:00
+cells_evaluated: 2049
+promotions: 0
 demotions: 1
 live_cells_total: 18
 ---
 
 # Daily strategy validation — 2026-05-07
 
-Cells evaluated: **2033**  
-Promotions: **3**  
+Cells evaluated: **2049**  
+Promotions: **0**  
 Demotions: **1**  
 Total live cells: **18**
-
-## PROMOTED to live
-
-| Strategy | Symbol | Session | Side | n_OOS | E_OOS | t_OOS |
-|---|---|---|---|---:|---:|---:|
-| rsi2_extreme_reversion | MCL | RTH | long | 50 | +0.84 | +1.58 |
-| pivot_reversal | GC | Asian | long | 32 | +0.41 | +1.51 |
-| fair_value_gap_tuned | 6A | London | short | 25 | +0.54 | +1.52 |
 
 ## DEMOTED to shadow
 
 | Strategy | Symbol | Session | Side | n_OOS | E_OOS | t_OOS | Reason |
 |---|---|---|---|---:|---:|---:|---|
-| fair_value_gap_tuned | MES | London | short | 26 | +0.48 | +1.39 | 3_consecutive_fails |
+| inside_bar_break | MES | RTH | long | 34 | +0.32 | +1.26 | 3_consecutive_fails |
 
 ## Live allowlist snapshot
 

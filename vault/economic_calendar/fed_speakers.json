@@ -1,28 +1,7 @@
 {
-  "generated_at": "2026-05-07T10:00:10.358677+00:00",
+  "generated_at": "2026-05-08T10:00:14.770858+00:00",
   "source": "https://www.federalreserve.gov/calendar/feed.ics",
   "events": [
-    {
-      "ts_utc": "2026-05-07T15:00:00+00:00",
-      "summary": "G.19 - Consumer Credit",
-      "description": "",
-      "location": "",
-      "influence": "LOW"
-    },
-    {
-      "ts_utc": "2026-05-07T16:30:00+00:00",
-      "summary": "H.4.1 - Factors Affecting Reserve Balances",
-      "description": "",
-      "location": "",
-      "influence": "LOW"
-    },
-    {
-      "ts_utc": "2026-05-08T05:45:00+00:00",
-      "summary": "Speech - Governor Lisa D. Cook",
-      "description": "Perspectives on Tokenization and Implications for the Financial System",
-      "location": "At the Central Bank of West African States (BCEAO) Conference on Digital Assets, Dakar, Senegal",
-      "influence": "MEDIUM"
-    },
     {
       "ts_utc": "2026-05-08T19:30:00+00:00",
       "summary": "Panel Discussion - Governor Christopher J. Waller",
@@ -35,6 +14,13 @@
       "summary": "Speech - Vice Chair for Supervision Michelle W. Bowman",
       "description": "Monetary Policy",
       "location": "At the Hoover Institution Monetary Policy Conference, Stanford, Calif.",
+      "influence": "MEDIUM"
+    },
+    {
+      "ts_utc": "2026-05-14T19:00:00+00:00",
+      "summary": "Speech - Governor Michael S. Barr",
+      "description": "Balance Sheet",
+      "location": "At a Money Marketeers FOMC Event, New York, N.Y.",
       "influence": "MEDIUM"
     },
     {

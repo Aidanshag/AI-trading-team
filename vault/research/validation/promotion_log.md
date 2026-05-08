@@ -85,3 +85,7 @@
 - ✅ PROMOTE pivot_reversal × GC × Asian × long  (OOS E=+0.41R, t=+1.51, n=32)
 - ✅ PROMOTE fair_value_gap_tuned × 6A × London × short  (OOS E=+0.54R, t=+1.52, n=25)
 - ❌ DEMOTE fair_value_gap_tuned × MES × London × short  (reason: 3_consecutive_fails, last OOS E=+0.48R)
+
+## 2026-05-07
+
+- ❌ DEMOTE inside_bar_break × MES × RTH × long  (reason: 3_consecutive_fails, last OOS E=+0.32R)
