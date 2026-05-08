@@ -1248,6 +1248,64 @@ def order_block_d1(bars, **kwargs) -> Iterator[Signal]:
     return order_block(bars, **kwargs)
 
 
+def gap_fill_wide(
+    bars,
+    min_gap_atr: float = 1.5,
+    rr_target: float = 1.5,
+    stop_atr_mult: float = 1.5,
+    min_stop_ticks: int = 3,
+    tick_size: float = None,
+) -> Iterator[Signal]:
+    """gap_fill variant with TRADABLE stops.
+
+    Why: default gap_fill uses stop = entry ± 0.5×ATR. On 5m treasury
+    bars where ATR is typically 1-3 ticks, this produces sub-tick stops
+    that get noise-stopped by spread + slippage in live execution. The
+    backtest accepts these (idealized fills) but live trades churn fees.
+
+    This variant changes:
+      - min_gap_atr 0.75 → 1.5 (only larger gaps fire)
+      - stop = entry ± 1.5×ATR (was 0.5×ATR) — wider buffer
+      - min_stop_ticks=3 hard floor when tick_size provided
+
+    Designed 2026-05-08 to address the 'tiny stop' issue blocking live
+    trading on the treasury curve.
+    """
+    o, c, h, l = bars["Open"], bars["Close"], bars["High"], bars["Low"]
+    prev_c = c.shift(1)
+    atr = _atr(bars, 14)
+
+    # Hard min stop in price (when tick_size known)
+    min_stop_price = (min_stop_ticks * tick_size) if tick_size else 0
+
+    for i in range(20, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        gap = float(o.iloc[i] - prev_c.iloc[i])
+        if abs(gap) < min_gap_atr * a:
+            continue
+        entry = float(o.iloc[i])
+        target = float(prev_c.iloc[i])
+        # Stop distance = max(stop_atr_mult × ATR, min_stop_ticks × tick_size)
+        stop_dist = max(stop_atr_mult * a, min_stop_price)
+        if gap > 0:
+            stop = entry + stop_dist
+            if (entry - target) / max(stop - entry, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="short", price=entry, stop=stop, target=target,
+                    reason=f"gap_fill_wide_short gap={gap/a:+.1f}×ATR stop={stop_dist:.4f}",
+                )
+        else:
+            stop = entry - stop_dist
+            if (target - entry) / max(entry - stop, 1e-9) >= rr_target:
+                yield Signal.entry(
+                    date=date, side="long", price=entry, stop=stop, target=target,
+                    reason=f"gap_fill_wide_long gap={gap/a:+.1f}×ATR stop={stop_dist:.4f}",
+                )
+
+
 def fair_value_gap_tuned(bars, **kwargs) -> Iterator[Signal]:
     """fair_value_gap tuned variant — rr_target=2.5 (vs default 2.0).
     Tier 4 multi-sweep 2026-05-06 found rr=2.5 was the dominant
@@ -1274,6 +1332,7 @@ def liquidity_sweep_tuned(bars, **kwargs) -> Iterator[Signal]:
 STRATEGY_REGISTRY["order_block_d1"] = order_block_d1
 STRATEGY_REGISTRY["fair_value_gap_tuned"] = fair_value_gap_tuned
 STRATEGY_REGISTRY["liquidity_sweep_tuned"] = liquidity_sweep_tuned
+STRATEGY_REGISTRY["gap_fill_wide"] = gap_fill_wide
 
 
 # ── Cross-asset divergence (Quant Researcher proposal #3, 2026-05-06) ──

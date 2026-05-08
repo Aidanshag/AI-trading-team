@@ -88,6 +88,9 @@ ALL_STRATEGIES: dict[str, callable] = {
         "liquidity_sweep_tuned",
         # Novel strategies (Quant Researcher proposals):
         "cross_asset_divergence_zn",
+        # 2026-05-08: gap_fill with wide tradable stops (the previous default
+        # produced sub-tick stops that don't survive spread in live execution).
+        "gap_fill_wide",
     )
 }
 
