@@ -4,6 +4,12 @@ The CIO reads live account state, scans the regime file, picks ONE analyst
 to wake today, and explains the choice. Must end the brief with an explicit
 line:  WAKE: <analyst name>  or  WAKE: none
 so the next script can parse the decision.
+
+2026-05-08 (per cowork_coordination.md priority #9): the brief now opens
+with a cost-ledger one-liner so the CIO sees today's NET P&L (gross
+trading − fees − slippage − fixed cost) before deciding what to do.
+The line forces every session to confront 'a flat day is a -$26 day'
+per vault/_meta/economics.md.
 """
 
 import asyncio
@@ -17,14 +23,61 @@ load_dotenv()
 from runtime.orchestrator import Orchestrator
 
 
+def _cost_ledger_oneliner() -> str:
+    """Build the MTD cost-ledger one-liner for the CIO brief.
+
+    Format:
+      MTD: gross +$X, fees -$Y, slip -$Z, fixed -$W, NET +$V (Δ vs break-even)
+
+    Returns a string ready to embed in the brief. On failure (e.g. DB
+    unavailable, no snapshots yet), returns a placeholder line so the
+    brief still composes.
+    """
+    try:
+        from scripts.cost_ledger import build_ledger, FIXED_COST_PER_DAY_USD
+        from calendar import monthrange
+        now = datetime.now(tz=timezone.utc).date()
+        since = f"{now.year:04d}-{now.month:02d}-01"
+        last_day = monthrange(now.year, now.month)[1]
+        until = f"{now.year:04d}-{now.month:02d}-{last_day:02d}"
+        ledger = build_ledger(since, until)
+        s = ledger["summary"]
+        gross = s.get("gross_usd", 0.0) or 0.0
+        fees = s.get("fees_usd", 0.0) or 0.0
+        slip = s.get("slippage_usd", 0.0) or 0.0
+        fixed = s.get("fixed_cost_usd", 0.0) or 0.0
+        net = s.get("net_usd", 0.0) or 0.0
+        avg_per_day = s.get("avg_net_per_day_usd", 0.0) or 0.0
+        n_trade = s.get("n_trading_days", 0) or 0
+        n_cal = s.get("n_calendar_days", 0) or 0
+        delta_vs_be = "ahead" if avg_per_day >= 0 else "behind"
+        return (
+            f"COST LEDGER MTD ({n_trade}/{n_cal} trade-days, "
+            f"{s.get('n_entries_total', 0)} entries):  "
+            f"gross ${gross:+,.2f}  fees ${-fees:+,.2f}  "
+            f"slip ${-slip:+,.2f}  fixed ${-fixed:+,.2f}  "
+            f"NET ${net:+,.2f}  ({delta_vs_be} break-even, "
+            f"avg ${avg_per_day:+,.2f}/day)."
+        )
+    except Exception as e:
+        return (f"COST LEDGER: unavailable ({type(e).__name__}). "
+                f"Run `python -m scripts.cost_ledger --print` to inspect. "
+                f"Treat this as a fail-loud signal that telemetry is broken.")
+
+
 async def main() -> None:
     orch = Orchestrator()
 
     now_utc = datetime.now(tz=timezone.utc)
+    cost_line = _cost_ledger_oneliner()
     date_block = (
         f"CURRENT TIME: {now_utc.strftime('%Y-%m-%d %A %H:%M UTC')} "
         f"(US/Eastern: {now_utc.astimezone().strftime('%a %H:%M %Z')}).\n"
         "Use this to judge session state — do NOT guess the day.\n\n"
+        f"{cost_line}\n"
+        "The fund's only KPI per vault/_meta/economics.md is NET monthly "
+        "P&L. A flat (no-trade) day still costs ~$26 in subscriptions. "
+        "If we're behind break-even, that should bias your wake decision.\n\n"
     )
 
     task = (
