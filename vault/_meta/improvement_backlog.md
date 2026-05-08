@@ -22,13 +22,13 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
 
 ## P0 — critical (do first)
 
-- [P0] [effort: 90min] [risk: low] [status: open]
-  **Auto-promote/demote cells from live evidence**
-  Why: gap_fill backtest edge is sensitive to slippage (2026-05-08 finding: edge flips negative at 0.25 tick/side). Live data starting Sunday will reveal whether each cell's OOS edge holds. Without auto-rebalancing, brain stays naive.
-  Files: NEW `scripts/cell_auto_promote.py`, integrate into `scripts/preflight.py` step 9
-  Logic: read last 30d live trades from `state/fund.db:orders`; per-cell live_E vs OOS_E from `state/strategy_validation.json`; promote shadow→live if (n≥10, E>0, |live−OOS|<1R); demote live→shadow if (n≥10, E<0). Atomic write to `live_allowlist`. Audit log to `vault/research/cell_promotion_log.md`.
-  Acceptance: dry-run with current DB shows zero promotions/demotions (no fills yet); after Sunday fills land, surfaces meaningful changes.
-  Auto-merge: false (touches `live_allowlist` which trader reads)
+- [P0] [effort: 90min] [risk: low] [status: merged 2026-05-08 (cowork)]
+  **Auto-promote/demote cells from live evidence** — SHIPPED by cowork
+  `scripts/cell_auto_promote.py` (commit `834852f`) + 17 unit tests (commit `b3a1f75`).
+  Atomic JSON writes; honors user pin (live_strategies_filter); audit log
+  to `vault/research/cell_promotion_log.md`. Will surface meaningful
+  decisions after Sunday's fills accumulate to n≥10.
+  Remaining: wire into `scripts/preflight.py` as step 9 (CLI agent task).
 
 - [P0] [effort: 45min] [risk: medium] [status: open]
   **Trim live_trader.py: extract snapshot capture to tools/snapshot_writer.py**
@@ -52,12 +52,24 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Acceptance: backtest with post-only fills (estimated fill rate 40-60%) shows net P&L improvement after accounting for missed fills. Live data confirms entry slippage reduction.
   Auto-merge: false (touches order placement code path)
 
-- [P0] [effort: 60min] [risk: low] [status: open]
+- [P0] [effort: 60min] [risk: low] [status: framework merged 2026-05-08 (cowork); sweep-run still open]
   **Strategy parameter sweep framework — gap_fill robustness sweep**
-  Why: same finding as above. Need a gap_fill parameterization with enough per-trade $ edge to absorb 0.25-0.5 tick slippage. Default (min_gap_atr=0.75, rr_target=1.5) is too tight.
-  Files: NEW `scripts/param_sweep.py`. First sweep: gap_fill, min_gap_atr ∈ {0.5,0.75,1.0,1.5}, rr_target ∈ {1.0,1.25,1.5,2.0}, on ZN/ZB/ZT/ZF, walk-forward 60d.
-  Acceptance: produces `vault/research/param_sweeps/gap_fill_2026-05-08.csv` with per-cell hit/E/t-stat/sample-size; flags top 3 cells by slippage-adjusted EV.
-  Auto-merge: true (offline analysis, no production code touched)
+  Framework SHIPPED by cowork: `scripts/param_sweep.py` (commit `ce495bb`).
+  Generic walk-forward sweeper, replaces per-sweep `walk_forward_*.py` pattern.
+  **Still TODO**: actually run the gap_fill robustness sweep:
+    `python -m scripts.param_sweep --strategy gap_fill \
+      --params 'min_gap_atr=0.5,0.75,1.0,1.5;rr_target=1.0,1.25,1.5,2.0' \
+      --symbols ZN,ZT,ZB,ZF`
+  Output: `vault/research/param_sweeps/gap_fill_<date>.csv`. Goal: find
+  params with enough per-trade R to absorb 0.25-0.5 tick slippage.
+  Auto-merge: true (offline analysis only)
+
+### Cowork shipped 2026-05-08 (status: merged)
+
+- `scripts/cell_auto_promote.py` (commit `834852f`) + tests (`b3a1f75`)
+- `scripts/param_sweep.py` (commit `ce495bb`) — framework only, sweep run pending
+- `scripts/regime_classifier.py` (commit `729c1fb`) — vol/trend/news regime tags
+- `scripts/cost_ledger.py` (commit `1ed3b4e`) — daily NET P&L automation
 
 ## P1 — high (Phase 2 work)
 
