@@ -1464,6 +1464,142 @@ def cross_asset_divergence_zn(bars, partner_bars=None,
 STRATEGY_REGISTRY["cross_asset_divergence_zn"] = cross_asset_divergence_zn
 
 
+def wide_session_drive(
+    bars: pd.DataFrame,
+    or_minutes: int = 30,
+    stop_range_mult: float = 1.0,
+    target_range_mult: float = 2.5,
+    max_hold_hours: int = 4,
+) -> Iterator[Signal]:
+    """Wide-stop opening-range breakout — slippage-tolerant.
+
+    Spec source: vault/research/slippage_mitigation_playbook.md §3.
+
+    Why: gap_fill family has sub-tick stops that don't survive realistic
+    slippage. wide_session_drive uses the FULL session opening range as
+    the unit, making typical stops 30-100 ticks wide. 1 tick of slippage
+    is then a 1-3% cost of stop distance instead of a 100% cost.
+
+    Mechanic:
+      1. For each session boundary in the bars, compute the opening
+         range over the first `or_minutes`.
+      2. Watch for the next bar that closes outside that range.
+      3. On break:
+           entry = break_price (open of breaking bar)
+           stop  = ±(stop_range_mult × OR width) from entry
+           target= ±(target_range_mult × OR width) from entry
+      4. Yield Signal.entry with side matching the break direction.
+
+    Sessions (ET): Asian = 18:00 → 04:00, London = 04:00 → 09:30,
+                   RTH = 09:30 → 16:00, PostClose = 16:00 → 18:00.
+
+    Trade-off vs gap_fill: lower hit rate (~35-45%), longer holds, but
+    much higher per-trade R because winners are 5-10× the stop distance.
+    Math expects this to make slippage a small percentage of expected
+    gain, not the dominant cost.
+
+    Validation plan (per playbook §3):
+      1. Grid backtest at slippage levels [0, 0.25, 0.5, 1.0]
+      2. Acceptance: positive expectancy at 0.25 slippage on n≥30 trades
+      3. If passes, walk-forward validation auto-runs
+      4. If walk-forward passes (n≥20, t≥1.5 OOS), brain auto-promotes
+    """
+    if len(bars) < 60:
+        return
+
+    # Convert index to ET to detect session boundaries
+    idx = bars.index
+    if idx.tz is None:
+        idx_et = idx.tz_localize("UTC").tz_convert("America/New_York")
+    else:
+        idx_et = idx.tz_convert("America/New_York")
+
+    # Session start hour (ET) for the four sessions
+    SESSION_STARTS = {
+        "Asian":     (18, 0),     # 18:00 ET
+        "London":    (4, 0),      # 04:00 ET
+        "RTH":       (9, 30),     # 09:30 ET
+        "PostClose": (16, 0),     # 16:00 ET
+    }
+
+    def _session_for(ts) -> str:
+        h = ts.hour + ts.minute / 60.0
+        if 18 <= h or h < 4:    return "Asian"
+        if 4 <= h < 9.5:        return "London"
+        if 9.5 <= h < 16:       return "RTH"
+        return "PostClose"
+
+    # Walk through bars and detect session-open events. For each new
+    # session start, compute the OR over the first or_minutes worth of
+    # bars (assuming 5m bars: or_minutes/5 bars).
+    bar_minutes = 5  # default; works correctly for 5m intraday data
+    or_bars = max(1, or_minutes // bar_minutes)
+
+    O = bars["Open"]; H = bars["High"]; L = bars["Low"]; C = bars["Close"]
+
+    # Identify each session start index
+    session_starts: list[int] = []
+    last_session = None
+    for i, ts_et in enumerate(idx_et):
+        sess = _session_for(ts_et)
+        if sess != last_session:
+            session_starts.append(i)
+            last_session = sess
+
+    # For each session start, compute the OR and watch for break
+    for s_idx in session_starts:
+        end_or = s_idx + or_bars
+        if end_or >= len(bars) - 2:
+            continue
+        or_high = float(H.iloc[s_idx:end_or].max())
+        or_low = float(L.iloc[s_idx:end_or].min())
+        or_width = or_high - or_low
+        if or_width <= 0:
+            continue
+
+        # Walk subsequent bars looking for break — within max_hold_hours
+        # from session start so we don't carry into next session.
+        max_bars_from_start = (max_hold_hours * 60) // bar_minutes
+        end_watch = min(s_idx + max_bars_from_start, len(bars) - 1)
+
+        broke_long = False
+        broke_short = False
+
+        for j in range(end_or, end_watch):
+            close = float(C.iloc[j])
+            if not broke_long and close > or_high:
+                broke_long = True
+                entry = float(O.iloc[j + 1] if j + 1 < len(bars) else close)
+                stop  = entry - stop_range_mult * or_width
+                target = entry + target_range_mult * or_width
+                yield Signal(
+                    date=idx[j + 1] if j + 1 < len(bars) else idx[j],
+                    side="long", price=entry,
+                    stop=stop, target=target,
+                    reason=(f"session_drive_long or={or_width:.4f} "
+                            f"close>{or_high:.4f}"),
+                    kind="entry",
+                )
+                break   # one break per session
+            if not broke_short and close < or_low:
+                broke_short = True
+                entry = float(O.iloc[j + 1] if j + 1 < len(bars) else close)
+                stop  = entry + stop_range_mult * or_width
+                target = entry - target_range_mult * or_width
+                yield Signal(
+                    date=idx[j + 1] if j + 1 < len(bars) else idx[j],
+                    side="short", price=entry,
+                    stop=stop, target=target,
+                    reason=(f"session_drive_short or={or_width:.4f} "
+                            f"close<{or_low:.4f}"),
+                    kind="entry",
+                )
+                break
+
+
+STRATEGY_REGISTRY["wide_session_drive"] = wide_session_drive
+
+
 def get_strategy(name: str):
     if name not in STRATEGY_REGISTRY:
         raise ValueError(

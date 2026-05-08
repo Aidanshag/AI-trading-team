@@ -126,59 +126,10 @@ def dll_breached(snap: dict) -> tuple[bool, str]:
 # ────────────────────────────────────────────────────────────────
 # Snapshot capture (heartbeat + DLL)
 # ────────────────────────────────────────────────────────────────
-
-def capture_snapshot(client, account_id) -> dict | None:
-    """Pull broker state, compute realized P&L, write snapshot row."""
-    db = get_db()
-    try:
-        accounts = client.get_accounts()
-        mine = next((a for a in accounts if str(a.get("id")) == str(account_id)), None)
-        if not mine:
-            return None
-        balance = float(mine.get("balance", 0))
-        can_trade = bool(mine.get("canTrade", True))
-        positions = client.get_positions(account_id) or []
-        open_contracts = sum(int(p.get("size") or 0) for p in positions)
-
-        first_today = db.first_snapshot_today_utc()
-        realized_day = balance - float(first_today["balance_usd"]) if first_today else 0.0
-        starting = float(_load_yaml("config/risk_limits.yaml").get("account", {}).get("starting_balance", 50000))
-        peak = db.peak_eod_balance(fallback=starting)
-        trailing_dd = max(0.0, peak - balance)
-
-        # Unrealized P&L computed from positions × latest bar mark
-        unrealized = compute_unrealized(client, positions)
-
-        db.record_account_snapshot(
-            balance_usd=balance, environment="combine",
-            unrealized_pl_usd=unrealized,
-            realized_pl_day_usd=realized_day,
-            trailing_dd_usd=trailing_dd,
-            open_contracts_total=open_contracts,
-            can_trade=can_trade,
-        )
-        return {"balance_usd": balance, "realized_pl_day_usd": realized_day,
-                "unrealized_pl_usd": unrealized,
-                "open_contracts_total": open_contracts, "can_trade": can_trade}
-    except Exception as e:
-        # Write degraded heartbeat with last-known balance
-        try:
-            last = db.latest_account_snapshot()
-            if last:
-                db.record_account_snapshot(
-                    balance_usd=float(last.get("balance_usd") or 0),
-                    environment="combine",
-                    unrealized_pl_usd=0.0,
-                    realized_pl_day_usd=float(last.get("realized_pl_day_usd") or 0),
-                    trailing_dd_usd=float(last.get("trailing_dd_usd") or 0),
-                    open_contracts_total=int(last.get("open_contracts_total") or 0),
-                    can_trade=False,
-                )
-        except Exception:
-            pass
-        _log(f"snapshot capture failed: {type(e).__name__}: {e}")
-        return None
-
+# capture_snapshot extracted to tools/snapshot_writer.py 2026-05-08
+# (continuous trim, mirrors the compute_unrealized extraction). The
+# function body is unchanged — degraded-heartbeat fallback preserved.
+from tools.snapshot_writer import capture_snapshot  # noqa: E402
 
 # compute_unrealized extracted to tools/unrealized_pnl.py 2026-05-08 (continuous trim).
 from tools.unrealized_pnl import compute_unrealized  # noqa: E402

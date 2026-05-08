@@ -377,6 +377,25 @@ def main() -> int:
     except Exception as e:
         _warn(f"validation skipped: {type(e).__name__}: {e}")
 
+    # Step 9b: auto-promote/demote cells from live evidence.
+    # Reads last 30d of fills, compares live expectancy to OOS predictions,
+    # updates live_allowlist atomically. ADVISORY — failure logs warn but
+    # doesn't block trading. Cowork-shipped 2026-05-08.
+    print(f"\n[step 9b] auto-promote/demote cells from live evidence")
+    try:
+        import subprocess
+        proc = subprocess.run(
+            ["python", "scripts/cell_auto_promote.py"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if proc.returncode == 0:
+            tail = "\n    ".join(proc.stdout.strip().splitlines()[-5:])
+            _ok(f"cell auto-promote:\n    {tail}")
+        else:
+            _warn(f"cell auto-promote returned {proc.returncode}")
+    except Exception as e:
+        _warn(f"cell auto-promote skipped: {type(e).__name__}: {e}")
+
     # Step 10: resolve any shadow trades from prior session
     print(f"\n[step 10] shadow trade resolver")
     try:

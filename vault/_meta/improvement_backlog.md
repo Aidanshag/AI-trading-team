@@ -37,6 +37,31 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Acceptance: live_trader imports `capture_snapshot` from `tools.snapshot_writer`; all 25 unit tests still pass; dry-run scan output identical to pre-extraction. Trader < 700 lines.
   Auto-merge: false (touches the running trader path; user should review PR)
 
+- [P0] [effort: 4h] [risk: low] [status: open]
+  **Strategy R&D: target >50% hit rate at heavy slippage**
+  Why: user directive 2026-05-08 — at >50% hit rate with positive R-mult, profitability is statistically nearly guaranteed because the win:loss arithmetic compounds in our favor independent of slippage. Current `gap_fill_wide` has ~67% hit but few signals; we need 2-3 strategies with both high cadence AND high hit rate.
+  Approach (multiple candidates to evaluate in parallel):
+    1. **Bollinger band 2σ + RSI extreme + reversal candle**: fade extremes when 3 conditions align. Wide stop = 1.5×ATR beyond extreme. Target = 1.5×ATR. Expected hit rate 65-75%.
+    2. **Failed breakout pattern**: 20-bar high/low test that fails to follow through. Stop above failed level, target = 1.5× attempted move. Expected hit rate 55-65%.
+    3. **Multi-timeframe confluence**: only fire when 5m, 15m, 1h trend agree. Wide stop based on 1h ATR. Expected hit rate 60-70% but rare signals.
+    4. **Volume-weighted reversal**: extreme volume (>2× MA) at price extreme + reversal bar. Wide stop. Expected hit rate 60%.
+    5. **Previous-day-level fade**: test of previous day high/low with multiple touches → reversal. Expected hit rate 60-70%.
+  Validation criterion: each candidate must show:
+    - OOS n ≥ 50 over 60d
+    - OOS hit rate ≥ 55%
+    - At 0.5 tick/side slippage: positive expectancy
+    - At 1.0 tick/side slippage: positive expectancy
+  Acceptance: at least 2 candidates pass criterion; results in `vault/research/high_hit_rate_strategies/`. Best candidate(s) registered in STRATEGY_REGISTRY for live validation.
+  Auto-merge: false (touches strategy library; needs review)
+
+- [P1] [effort: 60min] [risk: low] [status: open]
+  **Run param sweep with slippage-adjusted dollar metrics**
+  Why: cowork's `param_sweep.py` reports R-multiples but doesn't model slippage in dollars. The 2026-05-08 finding showed that R-multiple ≠ slippage-resistance. Need a sweep that runs each param combo through `model_strategy_returns_with_slippage.py`-style logic.
+  Files: extend `scripts/param_sweep.py` to accept `--slippage-levels 0,0.25,0.5,1.0` and `--metric dollar` mode; OR create wrapper that takes sweep output and applies slippage modeling.
+  First sweep: gap_fill on (min_gap_atr × stop_atr_mult × min_stop_ticks) — find slippage-optimal parameter combo.
+  Acceptance: writes `vault/research/param_sweeps/gap_fill_dollars_slippage_<date>.csv` with per-combo P_pass at each slippage level.
+  Auto-merge: true (offline analysis)
+
 - [P1] [effort: 90min] [risk: low] [status: open]
   **New strategy: wide_session_drive — designed for slippage tolerance**
   Why: only gap_fill_wide currently survives realistic slippage in our registry. We need 2-3 slippage-tolerant strategies as a portfolio, not a single point of failure. Wide-stop strategies with wide targets absorb slippage as a small fraction.
