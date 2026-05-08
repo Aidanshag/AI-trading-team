@@ -111,12 +111,17 @@ Lessons from it:
 
 ## Open questions for future sessions
 
-1. **The sub-tick stop issue** is unresolved. The strategy's natural stops on
-   treasury futures are often <1 tick — backtest accepts these but live
-   execution will get noise-stopped by spread. Either:
-   - Reparameterize gap_fill to require larger gaps (separate from this lesson)
-   - Accept tiny-stop trading with the per-trade loss cap as backstop
-   - Find different strategies whose natural stops are bigger
+1. **The sub-tick stop issue — RESOLVED 2026-05-08 via Option B.** Tested
+   `gap_fill_wide` (min_gap_atr=1.5, stop_atr_mult=1.5, min_stop_ticks=3 floor)
+   on 60d treasury data: only 10–14 signals per symbol over 60 days, OOS
+   samples n=1–3 — too sparse to validate or trade. The binding constraint
+   was `min_stop_ticks=3` + `rr_target=1.5`, which kills RR for most setups.
+   Decision: accept the original validated `gap_fill` (sub-tick stops, +1.10R
+   OOS on n=256 from 2026-05-04 walk-forward). The simplified `live_trader.py`
+   has no `MIN_STOP_TICKS` gate; the per-trade $150 loss cap + bracket OCO
+   serve as backstops against spread-noise stop-outs. `gap_fill_wide` stays
+   in the registry as a future high-conviction selective variant if ever
+   needed; it does not ship to the live allowlist.
 2. **Topstep OCO reliability** — the v1 misdirected_leg events on every trade
    suggested broker-side OCO is flaky. The v2 trusts it; if that's wrong,
    trades will close at unexpected prices. Live data tomorrow tells us.
