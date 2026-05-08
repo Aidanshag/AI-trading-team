@@ -429,41 +429,77 @@ def write_summary_md(out_path: Path, results: list[dict],
         out_path.write_text("\n".join(L) + "\n", encoding="utf-8")
         return
 
-    # Best variant per symbol by OOS expectancy with sufficient n
-    L.append("## Best variant per symbol (OOS E, n≥30, t≥1.5)\n")
-    L += ["| Symbol | Best params | OOS_n | OOS_E | OOS_t | TRAIN_E | TRAIN_t |",
-          "|---|---|---:|---:|---:|---:|---:|"]
+    # NEW (per CC's redirect 2026-05-08): rank by SLIPPAGE-ADJUSTED
+    # NET $ at 0.25 ticks/side, not by R-multiple. R-multiples are
+    # slippage-blind — a +2.80R cell with 1-tick stops loses money to
+    # 0.5 ticks of round-trip slippage. Net dollars tells the truth.
+
+    L.append("## Best variant per symbol — slippage-adjusted (OOS, n≥30, t≥1.5)")
+    L.append("")
+    L.append("Ranked by `mean_net_usd_at_slip_0.25` (typical live slippage).")
+    L.append("")
+    L += ["| Symbol | Best params | OOS_n | OOS_E (R) | OOS_t | $@slip=0.25 | $@slip=0.5 | $@slip=1.0 | breakeven_slip_ticks | mean_risk_ticks |",
+          "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     by_sym: dict[str, list[dict]] = {}
     for r in results:
         by_sym.setdefault(r["symbol"], []).append(r)
     for sym in sorted(by_sym):
         candidates = [r for r in by_sym[sym]
-                      if r.get("oos") and r["oos"]["n"] >= 30
-                      and r["oos"]["t"] >= 1.5]
+                      if r.get("oos") and r["oos"].get("n", 0) >= 30
+                      and r["oos"].get("t", 0) >= 1.5]
         if not candidates:
-            L.append(f"| {sym} | _(no qualifying variant)_ |  |  |  |  |  |")
+            L.append(f"| {sym} | _(no qualifying variant)_ |  |  |  |  |  |  |  |  |")
             continue
-        best = max(candidates, key=lambda r: r["oos"]["e"])
+        # Rank by slippage-adjusted dollar at 0.25 ticks/side
+        def _key(r):
+            return r["oos"].get("mean_net_usd_at_slip_0_25", -9999)
+        best = max(candidates, key=_key)
         params_str = ", ".join(f"{k}={v}" for k, v in best["params"].items())
-        oos = best["oos"]; tr = best["train"] or {"e": 0, "t": 0}
+        oos = best["oos"]
+        bk = oos.get("breakeven_slip_ticks")
+        bk_s = "∞" if bk is None else f"{bk:.2f}"
         L.append(f"| {sym} | `{params_str}` | {oos['n']} "
                  f"| {oos['e']:+.2f} | {oos['t']:+.2f} "
-                 f"| {tr['e']:+.2f} | {tr['t']:+.2f} |")
+                 f"| {oos.get('mean_net_usd_at_slip_0_25', 0):+.0f} "
+                 f"| {oos.get('mean_net_usd_at_slip_0_5', 0):+.0f} "
+                 f"| {oos.get('mean_net_usd_at_slip_1_0', 0):+.0f} "
+                 f"| {bk_s} | {oos.get('mean_risk_ticks', 0):.1f} |")
 
-    L += ["", "## All combinations (full grid)", ""]
-    L += ["| Symbol | Params | TRAIN n | TRAIN E | TRAIN t | OOS n | OOS E | OOS t |",
-          "|---|---|---:|---:|---:|---:|---:|---:|"]
+    L += ["", "## All combinations — slippage-adjusted dollars (OOS only)", ""]
+    L += ["| Symbol | Params | OOS n | OOS E (R) | OOS t | $@0 | $@0.25 | $@0.5 | $@1.0 | breakeven |",
+          "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in results:
         params_str = ", ".join(f"{k}={v}" for k, v in r["params"].items())
-        tr = r.get("train"); oos = r.get("oos")
-        tr_n = tr["n"] if tr else 0
-        tr_e = f"{tr['e']:+.2f}" if tr else "—"
-        tr_t = f"{tr['t']:+.2f}" if tr else "—"
-        oos_n = oos["n"] if oos else 0
-        oos_e = f"{oos['e']:+.2f}" if oos else "—"
-        oos_t = f"{oos['t']:+.2f}" if oos else "—"
+        oos = r.get("oos")
+        if not oos:
+            L.append(f"| {r['symbol']} | `{params_str}` | 0 | — | — | — | — | — | — | — |")
+            continue
+        bk = oos.get("breakeven_slip_ticks")
+        bk_s = "∞" if bk is None else f"{bk:.2f}"
         L.append(f"| {r['symbol']} | `{params_str}` "
-                 f"| {tr_n} | {tr_e} | {tr_t} | {oos_n} | {oos_e} | {oos_t} |")
+                 f"| {oos['n']} | {oos['e']:+.2f} | {oos['t']:+.2f} "
+                 f"| {oos.get('mean_net_usd_at_slip_0_0', 0):+.0f} "
+                 f"| {oos.get('mean_net_usd_at_slip_0_25', 0):+.0f} "
+                 f"| {oos.get('mean_net_usd_at_slip_0_5', 0):+.0f} "
+                 f"| {oos.get('mean_net_usd_at_slip_1_0', 0):+.0f} "
+                 f"| {bk_s} |")
+
+    L += ["",
+          "## How to read",
+          "",
+          "- `OOS E (R)` is the per-trade R-multiple — slippage-blind.",
+          "- `$@slip=X` is the NET dollar per trade after X ticks/side of"
+          " round-trip slippage (entry + exit each cost X ticks).",
+          "- `breakeven_slip_ticks` is the slippage level at which mean"
+          " net $ crosses zero. ∞ means the cell stays profitable beyond 2 ticks/side.",
+          "- A cell with high R but low `$@slip=0.25` is a trap: paper"
+          " edge that doesn't survive realistic slippage.",
+          "- A cell with low R but high `breakeven_slip_ticks` is robust:"
+          " the per-trade $ edge is large enough to absorb realistic costs.",
+          "",
+          "Per the slippage-mitigation playbook (`vault/research/slippage_mitigation_playbook.md`)"
+          " typical Topstep slippage on gap_fill_wide is 0.25-0.5 ticks/side. The"
+          " `$@slip=0.25` column is the deployment-relevant metric."]
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(L) + "\n", encoding="utf-8")

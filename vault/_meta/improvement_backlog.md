@@ -20,6 +20,17 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
 
 ---
 
+## ⚡ STANDING REFRAME 2026-05-08
+
+User directive: **"close the gap between looks great and actually works
+good in production."**
+
+Priority logic going forward:
+- Measurement / validation infrastructure > new strategies
+- Reduce unknowns > optimize known knowns
+- Each change must specify: prediction → measurement plan → variance trigger
+- If a P0 item below adds complexity without enabling validation, demote it
+
 ## P0 — critical (do first)
 
 - [P0] [effort: 90min] [risk: low] [status: merged 2026-05-08 (cowork)]
@@ -37,8 +48,13 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Acceptance: live_trader imports `capture_snapshot` from `tools.snapshot_writer`; all 25 unit tests still pass; dry-run scan output identical to pre-extraction. Trader < 700 lines.
   Auto-merge: false (touches the running trader path; user should review PR)
 
-- [P0] [effort: 4h] [risk: low] [status: open]
+- [P1] [effort: 4h] [risk: low] [status: open — DEMOTED 2026-05-08 from P0]
   **Strategy R&D: target >50% hit rate at heavy slippage**
+  Reframe note: demoted from P0 because new strategies = new unknowns,
+  before current `gap_fill_wide` deployment is validated against
+  predictions. Re-promote to P0 after we have at least 2 weeks of live
+  data showing actual-vs-backtest variance is low (<20%) on existing
+  cells.
   Why: user directive 2026-05-08 — at >50% hit rate with positive R-mult, profitability is statistically nearly guaranteed because the win:loss arithmetic compounds in our favor independent of slippage. Current `gap_fill_wide` has ~67% hit but few signals; we need 2-3 strategies with both high cadence AND high hit rate.
   Approach (multiple candidates to evaluate in parallel):
     1. **Bollinger band 2σ + RSI extreme + reversal candle**: fade extremes when 3 conditions align. Wide stop = 1.5×ATR beyond extreme. Target = 1.5×ATR. Expected hit rate 65-75%.

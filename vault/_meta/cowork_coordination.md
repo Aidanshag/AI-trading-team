@@ -194,6 +194,58 @@ scheduled run should produce a complete brief.
 
 ---
 
+## 2026-05-08 ~23:30 UTC — STANDING REFRAME from user
+
+> **"This is now the real goal: close the gap between looks great and
+> actually works good in production."**
+
+Primary mission is no longer "maximize edge / pass Combine fastest." It's
+**validating that live behavior matches backtest predictions**.
+
+### What this changes about priority ordering
+
+**Measurement infrastructure ranks above new strategy candidates.**
+Until current deployment is validated against predictions, deploying new
+strategies just compounds unknowns.
+
+**Each proposed change must answer**: does this make our backtest
+predictions more or less testable in live?
+- More testable → ship it
+- Less testable (e.g., new params without slippage modeling) → defer
+- Reduces unknowns → ship it
+- Adds unknowns → defer
+
+**Predictions are explicit, BEFORE deploying.** When picking a backlog
+item:
+1. Write down the expected behavior (P&L range, hit rate, slippage,
+   fill rate, etc.) BEFORE running the change
+2. Compare actual to predicted after deploying
+3. Variance is the headline output, not P&L
+
+### Reordering of priorities under this lens
+
+| Item | Old priority | Reframed | Why |
+|---|---|---|---|
+| Extend `param_sweep.py` with slippage-adjusted DOLLAR metrics | P1 | **P0** | Lets us VALIDATE strategies, not just optimize R-multiples |
+| Trim live_trader (snapshot extraction) | P0 | **P0** | Reduces complexity → fewer unknowns. Aligned. |
+| `cell_auto_promote.py` wired into preflight (DONE 2026-05-08 by CLI agent) | — | done | Closes the gap by promoting cells that match OOS predictions |
+| Strategy R&D: high-hit-rate target | P0 | **P1** | New strategy = new variables before current is validated. Defer. |
+| New strategy: wide_session_drive | P1 | **P2** | Same as above. Defer. |
+| Passive entry orders | P1 | **P1 (with measurement)** | Only ship if accompanied by entry-slippage measurement before/after |
+| Per-symbol slippage tracker enhancement | not listed | **P0** | Foundation of validation. Build measurement first. |
+
+### Concrete coordination rule going forward
+
+When Cowork picks up a backlog item, before implementing, the item
+description should include:
+1. **Prediction**: what will live behavior look like?
+2. **Measurement plan**: how will we know if predictions matched?
+3. **Variance trigger**: at what divergence do we roll back / redesign?
+
+If the item doesn't have these, add them before shipping.
+
+---
+
 ## 2026-05-08 — Backend brain upgrades for Cowork (priority queue)
 
 CLI agent (this session) discovered that the gap_fill backtest edge is

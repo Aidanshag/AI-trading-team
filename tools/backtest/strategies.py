@@ -1600,6 +1600,258 @@ def wide_session_drive(
 STRATEGY_REGISTRY["wide_session_drive"] = wide_session_drive
 
 
+# ───────────────────────────────────────────────────────────────────
+# High-hit-rate slippage-tolerant strategy candidates (P0 R&D, 2026-05-08)
+#
+# Per CC's redirect 2026-05-08: high-hit-rate strategies absorb slippage
+# better because losers happen less often, so the per-loser slippage
+# tax compounds slower. The two below are designed for:
+#   - Hit rate target ≥ 60% on validation backtest
+#   - Per-trade $ edge ≥ 3× expected round-trip slippage
+#   - Wide-enough stops that 1-tick slippage is 5-15% of stop distance,
+#     not 100%
+# Both register in STRATEGY_REGISTRY for use with scripts.param_sweep.
+# ───────────────────────────────────────────────────────────────────
+
+
+def session_vwap_reversion(
+    bars: pd.DataFrame,
+    deviation_sigma: float = 1.5,
+    stop_sigma: float = 2.5,
+    lookback_session_bars: int = 24,
+    max_hold_hours: int = 4,
+) -> Iterator[Signal]:
+    """Fade extreme deviations from intraday VWAP. High-hit-rate
+    mean-reversion designed for slippage tolerance.
+
+    Mechanic:
+      1. Compute session-anchored VWAP and rolling σ of the deviation.
+      2. When close deviates > deviation_sigma above VWAP, enter SHORT
+         with stop at +stop_sigma σ and target = VWAP.
+      3. Symmetric for deviations below: enter LONG.
+
+    Why high-hit-rate:
+      VWAP is the volume-weighted center of session activity. Extreme
+      deviations from VWAP historically revert to VWAP within hours
+      with hit rate 60-70% in non-trending regimes. The trade fails
+      only on strong trending days (regime gate should filter these).
+
+    Why slippage-tolerant:
+      Stop is (stop_sigma − deviation_sigma) × σ wide. For typical
+      Treasury σ of 3-5 ticks per bar, stop is 6-15 ticks. 1-tick
+      slippage is 5-15% of stop, not 100% like sub-tick gap_fill.
+
+    Tradeoff vs gap_fill:
+      Lower per-trade R (target = VWAP, ~1× σ from entry; stop is
+      1× σ → 1:1 R:R typical). But survives slippage where gap_fill
+      doesn't.
+    """
+    if len(bars) < 60:
+        return
+
+    O = bars["Open"]; H = bars["High"]; L = bars["Low"]; C = bars["Close"]
+    V = bars["Volume"] if "Volume" in bars.columns else None
+
+    # Index in ET to detect session resets (VWAP anchors per session)
+    idx = bars.index
+    if idx.tz is None:
+        idx_et = idx.tz_localize("UTC").tz_convert("America/New_York")
+    else:
+        idx_et = idx.tz_convert("America/New_York")
+
+    def _session(ts) -> str:
+        h = ts.hour + ts.minute / 60.0
+        if 18 <= h or h < 4:    return "Asian"
+        if 4 <= h < 9.5:        return "London"
+        if 9.5 <= h < 16:       return "RTH"
+        return "PostClose"
+
+    # Walk bars: track per-session running VWAP and deviation σ
+    typical = (H + L + C) / 3.0
+    session_starts: list[int] = []
+    last_sess = None
+    for i, ts in enumerate(idx_et):
+        s = _session(ts)
+        if s != last_sess:
+            session_starts.append(i)
+            last_sess = s
+    session_starts.append(len(bars))   # sentinel
+
+    bar_minutes = 5
+    max_bars_hold = (max_hold_hours * 60) // bar_minutes
+
+    for s_start, s_end in zip(session_starts, session_starts[1:]):
+        if s_end - s_start < 6:
+            continue   # session too short
+        # Build session-anchored VWAP up to each bar within session
+        cum_pv = 0.0
+        cum_v = 0.0
+        deviations: list[float] = []
+        vwaps: list[float] = []
+        for k in range(s_start, s_end):
+            v = float(V.iloc[k]) if V is not None and not pd.isna(V.iloc[k]) else 1.0
+            tp = float(typical.iloc[k])
+            cum_pv += tp * v
+            cum_v += v
+            vwap = cum_pv / cum_v if cum_v > 0 else tp
+            vwaps.append(vwap)
+            deviations.append(float(C.iloc[k]) - vwap)
+
+        if len(deviations) < 12:
+            continue
+
+        # Use rolling σ of deviation over a small window to gate signal
+        for k in range(s_start + 12, s_end):
+            local_idx = k - s_start
+            if local_idx < 12:
+                continue
+            window = deviations[max(0, local_idx - lookback_session_bars):local_idx]
+            if len(window) < 8:
+                continue
+            try:
+                sd = stdev(window)
+            except Exception:
+                continue
+            if sd <= 0:
+                continue
+            dev = deviations[local_idx]
+            vwap = vwaps[local_idx]
+            close = float(C.iloc[k])
+            z = dev / sd
+            # Watch one bar ahead so we enter on next-bar open
+            if k + 1 >= s_end:
+                continue
+            entry_idx = k + 1
+            entry = float(O.iloc[entry_idx])
+
+            if z > deviation_sigma:
+                # Short fade
+                stop = entry + (stop_sigma - deviation_sigma) * sd
+                target = vwap
+                if stop <= entry or target >= entry:
+                    continue
+                yield Signal(
+                    date=idx[entry_idx], side="short", price=entry,
+                    stop=stop, target=target,
+                    reason=(f"vwap_revert_short z={z:.2f} σ={sd:.4f} "
+                            f"vwap={vwap:.4f}"),
+                    kind="entry",
+                )
+            elif z < -deviation_sigma:
+                # Long fade
+                stop = entry - (stop_sigma - deviation_sigma) * sd
+                target = vwap
+                if stop >= entry or target <= entry:
+                    continue
+                yield Signal(
+                    date=idx[entry_idx], side="long", price=entry,
+                    stop=stop, target=target,
+                    reason=(f"vwap_revert_long z={z:.2f} σ={sd:.4f} "
+                            f"vwap={vwap:.4f}"),
+                    kind="entry",
+                )
+
+
+STRATEGY_REGISTRY["session_vwap_reversion"] = session_vwap_reversion
+
+
+def range_consolidation_bounce(
+    bars: pd.DataFrame,
+    range_lookback: int = 20,
+    max_range_atr_mult: float = 1.5,
+    stop_buffer_atr: float = 0.3,
+    target_pct: float = 0.5,
+) -> Iterator[Signal]:
+    """Pure range-bounce strategy. Identifies tight consolidations,
+    enters on touch of either bound, targets the midpoint.
+
+    Mechanic:
+      1. Compute rolling range_lookback-bar high/low.
+      2. Range is "tight" if (range_high − range_low) <
+         max_range_atr_mult × ATR(14). Tight range = consolidation.
+      3. When the next bar's LOW touches range_low (with no break
+         below): enter LONG. Stop = range_low − stop_buffer_atr × ATR.
+         Target = range midpoint + target_pct × (range / 2).
+      4. Symmetric for range_high: enter SHORT.
+
+    Why high-hit-rate:
+      In confirmed consolidation, touches of the range edge typically
+      bounce because there's accumulated buy/sell interest at the
+      boundary (the edge is what defined the range). Hit rate 65-75%
+      historically when range is genuine; <50% when range is breaking.
+
+    Why slippage-tolerant:
+      Stops include stop_buffer_atr beyond the range edge — typically
+      0.3 × ATR ≈ 1-2 ticks for treasuries. Combined with the range
+      width itself, stops are 5-20 ticks. 1-tick slippage is small.
+
+    Failure mode (acknowledged):
+      Range breakouts that go through. The strategy will lose ~25-35%
+      of trades to clean breakouts. Mitigation: skip when ATR is
+      expanding (volatility breakout regime) — caller should pair with
+      a vol-regime gate.
+    """
+    if len(bars) < range_lookback + 20:
+        return
+
+    H = bars["High"]; L = bars["Low"]; C = bars["Close"]; O = bars["Open"]
+    atr = _atr(bars, 14)
+    rolling_high = H.rolling(range_lookback).max()
+    rolling_low = L.rolling(range_lookback).min()
+
+    for i in range(range_lookback + 5, len(bars) - 1):
+        a = atr.iloc[i]
+        if pd.isna(a) or a == 0:
+            continue
+        rh = float(rolling_high.iloc[i])
+        rl = float(rolling_low.iloc[i])
+        rng = rh - rl
+        if rng <= 0:
+            continue
+        # Tight-range filter
+        if rng > max_range_atr_mult * a:
+            continue
+
+        midpoint = (rh + rl) / 2.0
+        next_o = float(O.iloc[i + 1])
+        next_l = float(L.iloc[i + 1])
+        next_h = float(H.iloc[i + 1])
+        next_c = float(C.iloc[i + 1])
+
+        # LONG bounce — bar touches range_low but closes back inside
+        if next_l <= rl and next_c > rl:
+            entry = next_o   # next-bar open after the touch
+            stop = rl - stop_buffer_atr * float(a)
+            target = midpoint + target_pct * (rng / 2.0)
+            if stop >= entry or target <= entry:
+                continue
+            yield Signal(
+                date=bars.index[i + 1], side="long", price=entry,
+                stop=stop, target=target,
+                reason=(f"range_bounce_long range={rng:.4f} "
+                        f"rl={rl:.4f} mid={midpoint:.4f}"),
+                kind="entry",
+            )
+
+        # SHORT bounce — bar touches range_high but closes back inside
+        elif next_h >= rh and next_c < rh:
+            entry = next_o
+            stop = rh + stop_buffer_atr * float(a)
+            target = midpoint - target_pct * (rng / 2.0)
+            if stop <= entry or target >= entry:
+                continue
+            yield Signal(
+                date=bars.index[i + 1], side="short", price=entry,
+                stop=stop, target=target,
+                reason=(f"range_bounce_short range={rng:.4f} "
+                        f"rh={rh:.4f} mid={midpoint:.4f}"),
+                kind="entry",
+            )
+
+
+STRATEGY_REGISTRY["range_consolidation_bounce"] = range_consolidation_bounce
+
+
 def get_strategy(name: str):
     if name not in STRATEGY_REGISTRY:
         raise ValueError(
