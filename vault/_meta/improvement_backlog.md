@@ -22,7 +22,20 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
 
 ## P0 — critical (do first)
 
-(empty — Phase 1 closed today's critical gaps)
+- [P0] [effort: 90min] [risk: low] [status: open]
+  **Auto-promote/demote cells from live evidence**
+  Why: gap_fill backtest edge is sensitive to slippage (2026-05-08 finding: edge flips negative at 0.25 tick/side). Live data starting Sunday will reveal whether each cell's OOS edge holds. Without auto-rebalancing, brain stays naive.
+  Files: NEW `scripts/cell_auto_promote.py`, integrate into `scripts/preflight.py` step 9
+  Logic: read last 30d live trades from `state/fund.db:orders`; per-cell live_E vs OOS_E from `state/strategy_validation.json`; promote shadow→live if (n≥10, E>0, |live−OOS|<1R); demote live→shadow if (n≥10, E<0). Atomic write to `live_allowlist`. Audit log to `vault/research/cell_promotion_log.md`.
+  Acceptance: dry-run with current DB shows zero promotions/demotions (no fills yet); after Sunday fills land, surfaces meaningful changes.
+  Auto-merge: false (touches `live_allowlist` which trader reads)
+
+- [P0] [effort: 60min] [risk: low] [status: open]
+  **Strategy parameter sweep framework — gap_fill robustness sweep**
+  Why: same finding as above. Need a gap_fill parameterization with enough per-trade $ edge to absorb 0.25-0.5 tick slippage. Default (min_gap_atr=0.75, rr_target=1.5) is too tight.
+  Files: NEW `scripts/param_sweep.py`. First sweep: gap_fill, min_gap_atr ∈ {0.5,0.75,1.0,1.5}, rr_target ∈ {1.0,1.25,1.5,2.0}, on ZN/ZB/ZT/ZF, walk-forward 60d.
+  Acceptance: produces `vault/research/param_sweeps/gap_fill_2026-05-08.csv` with per-cell hit/E/t-stat/sample-size; flags top 3 cells by slippage-adjusted EV.
+  Auto-merge: true (offline analysis, no production code touched)
 
 ## P1 — high (Phase 2 work)
 
