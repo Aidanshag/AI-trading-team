@@ -103,9 +103,41 @@ def get_strategy_fn(strategy_name: str):
     return fn
 
 
+# ── Per-symbol tick economics for $-conversion ────────────────
+# Used to convert per-trade prices into dollar P&L and to convert
+# slippage in ticks/side into a dollar cost per round-trip.
+TICK_ECONOMICS = {
+    # symbol: (tick_size, tick_value_usd)
+    "ZN": (0.015625, 15.625), "ZB": (0.03125, 31.25),
+    "ZT": (0.0078125, 15.625), "ZF": (0.0078125, 7.8125),
+    "NG": (0.001, 10.0),
+    "GC": (0.10, 10.0), "SI": (0.005, 25.0), "HG": (0.0005, 12.5),
+    "MES": (0.25, 1.25), "MNQ": (0.25, 0.50),
+    "ES": (0.25, 12.50), "NQ": (0.25, 5.00),
+    "MCL": (0.01, 1.00), "CL": (0.01, 10.00),
+    "RB": (0.0001, 4.20), "HO": (0.0001, 4.20),
+    "6E": (0.00005, 6.25), "6B": (0.0001, 6.25),
+    "6J": (0.0000005, 6.25), "6A": (0.0001, 10.00), "6C": (0.0001, 10.00),
+}
+
+
+def _round_trip_slip_cost_usd(symbol: str, slip_ticks_per_side: float) -> float:
+    """Total slippage cost for one round trip = entry slip + exit slip.
+    Slippage applies to BOTH legs (entry crosses spread, exit crosses spread).
+    """
+    _, tick_value = TICK_ECONOMICS.get(symbol, (0.01, 1.0))
+    return 2.0 * slip_ticks_per_side * tick_value
+
+
 def run_strategy(strategy_fn, bars, symbol: str, params: dict) -> list[dict]:
-    """Invoke the strategy; return per-trade rows with R-multiples.
-    Mirrors the existing walk_forward_*.py pattern."""
+    """Invoke the strategy; return per-trade rows with R-multiples AND
+    dollar metrics. Mirrors the existing walk_forward_*.py pattern but
+    augments each row with:
+        gross_usd     — raw $ result from entry/exit prices
+        risk_ticks    — distance from entry to stop in ticks (for sanity)
+
+    Slippage-adjusted columns are computed at summary time per slip level.
+    """
     from tools.backtest.engine import backtest_strategy
     try:
         result = backtest_strategy(strategy_fn, bars, symbol=symbol, params=params)
@@ -114,6 +146,7 @@ def run_strategy(strategy_fn, bars, symbol: str, params: dict) -> list[dict]:
               f"{type(e).__name__}: {e}", file=sys.stderr)
         return []
     rows = []
+    tick_size, tick_value = TICK_ECONOMICS.get(symbol, (0.01, 1.0))
     for t in result.trades:
         if t.is_open:
             continue
@@ -122,9 +155,29 @@ def run_strategy(strategy_fn, bars, symbol: str, params: dict) -> list[dict]:
             et = et.tz_localize("UTC").tz_convert("America/New_York")
         else:
             et = et.tz_convert("America/New_York")
+        # Compute gross $ from entry + exit prices (1 contract assumed).
+        gross_usd = 0.0
+        try:
+            entry = float(t.entry_price)
+            exit_p = float(t.exit_price)
+            if t.side == "long":
+                gross_usd = (exit_p - entry) / tick_size * tick_value
+            else:
+                gross_usd = (entry - exit_p) / tick_size * tick_value
+        except Exception:
+            gross_usd = 0.0
+        # Risk distance in ticks (for sanity / "is the stop 1 tick or 100?")
+        risk_ticks = 0.0
+        try:
+            entry = float(t.entry_price); stop = float(t.stop_price)
+            risk_ticks = abs(entry - stop) / tick_size
+        except Exception:
+            pass
         rows.append({
             "symbol": symbol, "entry_et": et, "side": t.side,
             "r": t.r_multiple,
+            "gross_usd": gross_usd,
+            "risk_ticks": risk_ticks,
             "session": session_for_hour_minute(et.hour + et.minute / 60),
         })
     return rows
@@ -132,7 +185,19 @@ def run_strategy(strategy_fn, bars, symbol: str, params: dict) -> list[dict]:
 
 # ── Walk-forward stats ─────────────────────────────────────────
 
-def stats(rows: list[dict]) -> dict | None:
+# Slippage levels we report at: 0 (paper), 0.25 (best-case live),
+# 0.5 (typical Topstep gap_fill_wide), 1.0 (worst-case).
+SLIP_LEVELS_TICKS = [0.0, 0.25, 0.5, 1.0]
+
+
+def stats(rows: list[dict], symbol: str | None = None) -> dict | None:
+    """Compute R-multiple stats AND slippage-adjusted dollar metrics.
+
+    Output schema additions vs original:
+      mean_$_at_slip_<X>   — mean per-trade NET $ at X ticks/side slippage
+      hit_rate_at_slip_<X> — share of trades that net positive at X slippage
+      breakeven_slip_ticks — slippage level where mean_$ crosses 0 (or None)
+    """
     if not rows:
         return None
     rs = [r["r"] for r in rows]
@@ -141,7 +206,50 @@ def stats(rows: list[dict]) -> dict | None:
     e = mean(rs)
     sd = stdev(rs) if n > 1 else 0.0
     t = (e / (sd / (n ** 0.5))) if (sd > 0 and n > 1) else 0.0
-    return {"n": n, "hit": hit, "e": e, "t": t}
+
+    out = {"n": n, "hit": hit, "e": e, "t": t}
+
+    # Dollar metrics (only when symbol/economics available)
+    sym = symbol or (rows[0].get("symbol") if rows else None)
+    if sym and sym in TICK_ECONOMICS:
+        gross_dollars = [r.get("gross_usd", 0.0) for r in rows]
+        out["mean_gross_usd"] = mean(gross_dollars) if gross_dollars else 0.0
+        out["mean_risk_ticks"] = (mean([r.get("risk_ticks", 0) for r in rows])
+                                  if rows else 0)
+        for slip in SLIP_LEVELS_TICKS:
+            cost = _round_trip_slip_cost_usd(sym, slip)
+            net_dollars = [g - cost for g in gross_dollars]
+            mean_net = mean(net_dollars) if net_dollars else 0.0
+            hit_net = (sum(1 for g in net_dollars if g > 0) / len(net_dollars)
+                       if net_dollars else 0)
+            tag = f"{slip}".replace(".", "_")
+            out[f"mean_net_usd_at_slip_{tag}"] = mean_net
+            out[f"hit_rate_at_slip_{tag}"] = hit_net
+
+        # Breakeven slippage — bisect between 0 and 2.0 ticks/side
+        # to find where mean_net crosses zero. None if always positive
+        # or always negative.
+        def _net_at(slip):
+            cost = _round_trip_slip_cost_usd(sym, slip)
+            return mean([g - cost for g in gross_dollars])
+        if gross_dollars:
+            net_0 = _net_at(0); net_2 = _net_at(2.0)
+            if net_0 <= 0:
+                out["breakeven_slip_ticks"] = 0.0
+            elif net_2 > 0:
+                out["breakeven_slip_ticks"] = None  # tolerates >2 ticks
+            else:
+                lo, hi = 0.0, 2.0
+                for _ in range(20):  # bisect ~6 decimal places
+                    mid = (lo + hi) / 2
+                    if _net_at(mid) > 0:
+                        lo = mid
+                    else:
+                        hi = mid
+                out["breakeven_slip_ticks"] = round((lo + hi) / 2, 3)
+        else:
+            out["breakeven_slip_ticks"] = None
+    return out
 
 
 def split_train_oos(rows: list[dict], holdout_pct: float, ref_index):
@@ -226,8 +334,8 @@ def run_sweep(strategy_name: str, grid: dict[str, list],
         for params in grid_combinations(grid):
             rows = run_strategy(strategy_fn, b, sym, params)
             train, oos, cutoff = split_train_oos(rows, holdout_pct, b.index)
-            s_tr = stats(train)
-            s_oos = stats(oos)
+            s_tr = stats(train, symbol=sym)
+            s_oos = stats(oos, symbol=sym)
             results.append({
                 "strategy": strategy_name, "symbol": sym,
                 "params": params, "cutoff": str(cutoff),
@@ -235,11 +343,19 @@ def run_sweep(strategy_name: str, grid: dict[str, list],
                 "n_trades_total": len(rows),
             })
             params_str = ", ".join(f"{k}={v}" for k, v in params.items())
-            tr_str = (f"n={s_tr['n']} E={s_tr['e']:+.2f} t={s_tr['t']:+.2f}"
-                      if s_tr else "(empty)")
-            oos_str = (f"n={s_oos['n']} E={s_oos['e']:+.2f} t={s_oos['t']:+.2f}"
-                       if s_oos else "(empty)")
-            print(f"  {sym} {params_str:<30s}  TRAIN: {tr_str}  OOS: {oos_str}")
+            # Print line includes BOTH R-multiple and slippage-adjusted
+            # $ at 0.25 ticks/side (typical live slippage).
+            def _fmt(s):
+                if not s: return "(empty)"
+                base = f"n={s['n']} E={s['e']:+.2f} t={s['t']:+.2f}"
+                if "mean_net_usd_at_slip_0_25" in s:
+                    bk = s.get("breakeven_slip_ticks")
+                    bk_str = "∞" if bk is None else f"{bk:.2f}"
+                    return (base + f" $@.25={s['mean_net_usd_at_slip_0_25']:+.0f}"
+                            f" be@{bk_str}t")
+                return base
+            print(f"  {sym} {params_str:<30s}  TRAIN: {_fmt(s_tr)}  "
+                  f"OOS: {_fmt(s_oos)}")
     return results
 
 
@@ -252,11 +368,22 @@ def write_csv(out_path: Path, results: list[dict]) -> None:
         return
     # Discover all param keys to flatten into columns
     param_keys = sorted({k for r in results for k in r["params"]})
-    headers = ["strategy", "symbol"] + [f"p_{k}" for k in param_keys] + [
+    slip_tags = ["0_0", "0_25", "0_5", "1_0"]
+    base_headers = ["strategy", "symbol"] + [f"p_{k}" for k in param_keys] + [
         "n_trades_total",
         "train_n", "train_hit", "train_e", "train_t",
+        "train_mean_gross_usd", "train_mean_risk_ticks",
         "oos_n", "oos_hit", "oos_e", "oos_t",
+        "oos_mean_gross_usd", "oos_mean_risk_ticks",
+        "oos_breakeven_slip_ticks",
     ]
+    # Per-slip dollar columns for OOS (the deployment-relevant slice)
+    slip_headers = []
+    for slip in slip_tags:
+        slip_headers += [f"oos_mean_net_usd_at_slip_{slip}",
+                         f"oos_hit_rate_at_slip_{slip}"]
+    headers = base_headers + slip_headers
+
     with out_path.open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(headers)
@@ -269,9 +396,18 @@ def write_csv(out_path: Path, results: list[dict]) -> None:
                 s = r.get(slice_name)
                 if s:
                     row += [s["n"], f"{s['hit']:.4f}",
-                            f"{s['e']:.4f}", f"{s['t']:.4f}"]
+                            f"{s['e']:.4f}", f"{s['t']:.4f}",
+                            f"{s.get('mean_gross_usd', 0):.2f}",
+                            f"{s.get('mean_risk_ticks', 0):.2f}"]
                 else:
-                    row += ["", "", "", ""]
+                    row += ["", "", "", "", "", ""]
+            # OOS-specific: breakeven_slip + per-slip $ columns
+            oos = r.get("oos") or {}
+            bk = oos.get("breakeven_slip_ticks")
+            row.append("∞" if bk is None else f"{bk:.3f}")
+            for slip in slip_tags:
+                row.append(f"{oos.get(f'mean_net_usd_at_slip_{slip}', 0):.2f}")
+                row.append(f"{oos.get(f'hit_rate_at_slip_{slip}', 0):.4f}")
             w.writerow(row)
 
 
