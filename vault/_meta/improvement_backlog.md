@@ -37,6 +37,21 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Acceptance: live_trader imports `capture_snapshot` from `tools.snapshot_writer`; all 25 unit tests still pass; dry-run scan output identical to pre-extraction. Trader < 700 lines.
   Auto-merge: false (touches the running trader path; user should review PR)
 
+- [P1] [effort: 90min] [risk: low] [status: open]
+  **New strategy: wide_session_drive — designed for slippage tolerance**
+  Why: only gap_fill_wide currently survives realistic slippage in our registry. We need 2-3 slippage-tolerant strategies as a portfolio, not a single point of failure. Wide-stop strategies with wide targets absorb slippage as a small fraction.
+  Logic: at each session boundary, define opening range (30 min), enter on break with stop = ±1.0 × range, target = ±2.5 × range. Per-trade R-multiple ~2.5; per-trade $ edge $200-800; hit rate target 35-45%.
+  Files: NEW entry in `tools/backtest/strategies.py` registered in `STRATEGY_REGISTRY`; integration into `scripts/daily_strategy_validation.py:ALL_STRATEGIES`.
+  Acceptance: backtest on 60d 5m bars across treasuries + NG + 6E + ES; slippage sensitivity at 0/0.25/0.5/1.0 ticks per side; demonstrate positive expectancy at 0.25 slippage on n≥30 trades. If passes, walk-forward validation auto-runs.
+  Auto-merge: false (touches strategy library)
+
+- [P1] [effort: 120min] [risk: medium] [status: open]
+  **Passive entry orders (post-only / limit-at-bid)**
+  Why: largest single slippage reduction lever (-50% on entry slippage). Currently using marketable-limit at +5 ticks which crosses the spread. Post-only would rest at the favorable side and only fill when market comes to us.
+  Files: `scripts/live_trader.py:place_bracket` — change entry from marketable-limit to post-only-limit. Add a fill-timeout (e.g., 5 min) after which we cancel and try again or skip the signal.
+  Acceptance: backtest with post-only fills (estimated fill rate 40-60%) shows net P&L improvement after accounting for missed fills. Live data confirms entry slippage reduction.
+  Auto-merge: false (touches order placement code path)
+
 - [P0] [effort: 60min] [risk: low] [status: open]
   **Strategy parameter sweep framework — gap_fill robustness sweep**
   Why: same finding as above. Need a gap_fill parameterization with enough per-trade $ edge to absorb 0.25-0.5 tick slippage. Default (min_gap_atr=0.75, rr_target=1.5) is too tight.
