@@ -267,6 +267,56 @@ def check_agent_cli() -> bool:
         return True
 
 
+def check_no_conflicting_trader() -> bool:
+    """Block launch if another live_trader or auto_trader process is already
+    running. Prevents v1+v2 double-trading after the 2026-05-08 simplification
+    cutover and prevents accidental double-start of v2.
+
+    Returns False (fail-closed) if a conflicting process is found, True if
+    the slot is free.
+    """
+    print("Step X: no conflicting trader process running")
+    try:
+        import subprocess
+        # Use WMIC (works without admin, deprecated but ships with Windows)
+        result = subprocess.run(
+            ["wmic", "process", "where", "name='python.exe'",
+             "get", "ProcessId,CommandLine", "/format:csv"],
+            capture_output=True, text=True, timeout=15,
+        )
+        my_pid = os.getpid()
+        conflicts = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line or line.startswith("Node"):
+                continue
+            parts = line.split(",")
+            if len(parts) < 3:
+                continue
+            cmdline = ",".join(parts[1:-1]).strip()
+            try:
+                pid = int(parts[-1].strip())
+            except ValueError:
+                continue
+            if pid == my_pid:
+                continue
+            if ("scripts.live_trader" in cmdline or
+                    "scripts.auto_trader" in cmdline):
+                conflicts.append((pid, cmdline[:80]))
+        if conflicts:
+            for pid, cl in conflicts:
+                _fail(f"conflicting trader running PID={pid}: {cl}...")
+            _fail("aborting launch to prevent double-trade race")
+            return False
+        _ok("no conflicting trader process detected")
+        return True
+    except Exception as e:
+        _warn(f"trader-conflict check skipped: {type(e).__name__}: {e}")
+        # Fail-open here: if WMIC is unavailable, don't block legitimate launches.
+        # The PID lock in v1's auto_trader still provides a backstop.
+        return True
+
+
 def check_risk_gate_wired() -> bool:
     """Submit a synthetic order to apply_risk_gate and confirm the kill_switch
     check actually ran — sanity that the hook isn't silently no-op'ing."""
@@ -303,6 +353,7 @@ def main() -> int:
     checks.append(check_snapshot_writer())
     checks.append(check_tests())
     checks.append(check_risk_gate_wired())
+    checks.append(check_no_conflicting_trader())
     checks.append(check_agent_cli())
 
     # Step 9: refresh strategy validation state (rolling daily walk-forward).
