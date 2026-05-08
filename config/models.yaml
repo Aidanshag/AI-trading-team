@@ -1,0 +1,100 @@
+# Model assignments per agent. Defaults favor cheap models aggressively.
+# Escalation is explicit and metered. When Anthropic releases a new
+# top-of-stack model, update the `frontier` slot and the alias pointers
+# below — every agent picks it up on next wake.
+#
+# Conservation > speed. We save ~10x on token cost by defaulting analysts
+# to Haiku (cheap) and escalating per-decision rather than per-agent.
+
+defaults:
+  cheap:     claude-haiku-4-5-20251001
+  balanced:  claude-sonnet-4-6
+  deep:      claude-opus-4-7
+  # Frontier = newest, most capable reasoning model.
+  # On each new Anthropic release, change this one line.
+  frontier:  claude-opus-4-7
+
+# ── Per-agent base tier ──────────────────────────────────────
+# Rule: start with the cheapest tier that does the job. Escalate only when
+# the decision justifies it.
+agents:
+  cio:                cheap          # orchestration = routing + arbitration, not reasoning
+  portfolio_manager:  cheap          # deterministic sizing math
+  risk_manager:       deep           # Opus 4.7 — safety critical. Originally this failed due to the SDK 32K command-line limit; prompt trim resolved it.
+  options_risk:       deep           # Opus 4.7 — options math + IV regime reasoning
+  execution_trader:   cheap
+  compliance:         cheap
+  research:           frontier       # the one place frontier is justified
+  red_team:           cheap          # devil's advocate — structured skepticism
+  book_monitor:       cheap          # position watcher — mostly NO_CHANGE outputs
+  diamond_hunter:     cheap          # asymmetric-convexity hunter — rare wakes
+  fund_engineer:      cheap          # autonomous brain-builder — constrained scope
+  edge_hunter:        cheap          # fast intraday setup-spotter — every tick
+
+  # Institutional research roles (added for hit-rate improvement)
+  quant_researcher:    balanced      # factor decomposition + physics + Jane Street math
+  macro_strategist:    deep          # weekly thematic memos — multi-month bias
+  flow_analyst:        balanced      # CFTC COT + dealer gamma + fund flows
+  volatility_strategist: balanced    # vol surface + term structure + skew (now also covers single-name options when equities desk activates)
+  # NOTE: execution_specialist merged into execution_trader (2026-04-27)
+
+  # Futures analysts — Haiku default; CIO escalates specific asks to Sonnet.
+  analyst_energies:    cheap
+  analyst_metals:      cheap
+  analyst_ag:          cheap          # merged Grains + Livestock (2026-04-29)
+  analyst_rates:       cheap
+  analyst_fx_futures:  cheap
+  analyst_index_macro: cheap
+  # Retired 2026-04-29 (Topstep cleanup):
+  #  - analyst_softs    — KC/CT/SB/CC/OJ/LBR are ICE-listed, not Topstep
+  #  - analyst_grains   — merged into analyst_ag
+  #  - analyst_livestock — merged into analyst_ag (only LE/HE remain)
+
+  # Equities desk — RETIRED 2026-04-27. Equities not trading on Topstep
+  # (Combine is futures-only). When equities activate, recreate a leaner
+  # team. Removed: equity_pm, equity_execution_trader, analyst_growth_tech,
+  # analyst_defensive, analyst_cyclicals, analyst_financials, single_name_options.
+
+# ── Per-call escalation ──────────────────────────────────────
+# An agent can request a one-shot escalation to a higher tier for a specific
+# hard decision. Must be justified in the request. Orchestrator logs every
+# escalation to decisions(kind='escalation') with rationale.
+escalation:
+  allow_analyst_to_balanced: true    # analyst → Sonnet for hard thesis calls
+  allow_pm_to_balanced: true         # PM → Sonnet on regime-ambiguous sizing
+  allow_risk_to_frontier: true       # Risk → Opus-4.7-frontier for novel structures
+  allow_options_to_frontier: true
+
+  # Research agent is the ONLY place frontier is used as the default. Any
+  # other path to frontier is gated by CIO and counted toward this cap.
+  research_daily_call_cap: 10        # hard circuit breaker on Research wakes
+  frontier_escalation_daily_cap: 5   # hard circuit breaker on one-shot frontier escalations
+
+# ── Prompt caching (token savings) ───────────────────────────
+caching:
+  cache_system_prompts:   true
+  cache_playbooks:        true
+  cache_tool_definitions: true
+  cache_symbol_registry:  true
+  cache_team_preamble:    true
+  min_cache_ttl_seconds:  300
+
+# ── Hard token caps per wake ─────────────────────────────────
+token_budget_per_wake:
+  cheap:     5000
+  balanced:  10000
+  deep:      20000
+  frontier:  50000
+
+# ── Tick cadence (event-driven) ──────────────────────────────
+# During market hours, CIO wakes on this cadence and decides whether any
+# analyst needs to wake. Analysts do NOT wake on ticks themselves.
+cadence:
+  market_hours_tick_minutes: 30      # was 15; slower is cheaper
+  off_hours_tick_minutes: 120        # 2h overnight (Asian session check)
+  weekend_tick_minutes: 0            # off entirely on weekends
+
+# ── Daily cost guardrail ─────────────────────────────────────
+# Fund halts new wakes (except critical risk events) when daily cost exceeds
+# this cap. Protects against runaway spend from a prompt loop.
+daily_cost_guardrail_usd: 15.00

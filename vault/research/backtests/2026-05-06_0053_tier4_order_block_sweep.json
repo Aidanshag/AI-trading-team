@@ -1,0 +1,66 @@
+[
+  {
+    "params": {
+      "displacement_atr": 1.0,
+      "max_age_bars": 100,
+      "rr_target": 1.5
+    },
+    "symbol": "MNQ",
+    "session": "Asian",
+    "side": "short",
+    "oos": {
+      "n": 28,
+      "hit": 0.571,
+      "e": 0.429,
+      "t": 1.8
+    }
+  },
+  {
+    "params": {
+      "displacement_atr": 1.0,
+      "max_age_bars": 50,
+      "rr_target": 2.0
+    },
+    "symbol": "6E",
+    "session": "RTH",
+    "side": "short",
+    "oos": {
+      "n": 26,
+      "hit": 0.538,
+      "e": 0.615,
+      "t": 2.06
+    }
+  },
+  {
+    "params": {
+      "displacement_atr": 1.0,
+      "max_age_bars": 50,
+      "rr_target": 1.5
+    },
+    "symbol": "6B",
+    "session": "London",
+    "side": "long",
+    "oos": {
+      "n": 25,
+      "hit": 0.72,
+      "e": 0.8,
+      "t": 3.49
+    }
+  },
+  {
+    "params": {
+      "displacement_atr": 1.0,
+      "max_age_bars": 50,
+      "rr_target": 2.0
+    },
+    "symbol": "6B",
+    "session": "Asian",
+    "side": "short",
+    "oos": {
+      "n": 37,
+      "hit": 0.459,
+      "e": 0.378,
+      "t": 1.52
+    }
+  }
+]
