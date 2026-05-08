@@ -180,49 +180,8 @@ def capture_snapshot(client, account_id) -> dict | None:
         return None
 
 
-def compute_unrealized(client, positions: list[dict]) -> float:
-    """Sum unrealized P&L across positions using latest 1-min bar close."""
-    if not positions:
-        return 0.0
-    syms = _load_yaml("config/symbols.yaml").get("symbols", {}) or {}
-    total = 0.0
-    now = _now_utc()
-    for p in positions:
-        size = int(p.get("size") or 0)
-        if size == 0:
-            continue
-        contract = p.get("contractId") or p.get("contract") or ""
-        avg_price = float(p.get("avgPrice") or p.get("averagePrice") or 0)
-        if avg_price <= 0 or not contract:
-            continue
-        type_code = int(p.get("type") or 0)
-        sign = 1 if type_code == 1 else -1 if type_code == 2 else (1 if size > 0 else -1)
-        size = abs(size)
-        # Resolve symbol root for tick economics
-        root = None
-        for tok in str(contract).split("."):
-            if tok in ("CON", "F", "US", ""): continue
-            if len(tok) <= 3 and tok and tok[0].isalpha() and tok[1:].isdigit(): continue
-            root = tok
-            break
-        meta = syms.get(root or "", {}) if root else {}
-        tick_size = float(meta.get("tick_size") or 0)
-        tick_value = float(meta.get("tick_value") or 0)
-        if tick_size <= 0 or tick_value <= 0:
-            continue
-        try:
-            bars = client.get_bars(contract_id=contract,
-                                    start_time=(now - timedelta(minutes=10)).isoformat(),
-                                    end_time=now.isoformat(),
-                                    unit=2, unit_number=1, limit=10, live=False)
-            mark = float(bars[-1].get("c") or 0) if bars else 0
-        except Exception:
-            mark = 0
-        if mark <= 0:
-            continue
-        points = mark - avg_price
-        total += sign * size * (points / tick_size) * tick_value
-    return total
+# compute_unrealized extracted to tools/unrealized_pnl.py 2026-05-08 (continuous trim).
+from tools.unrealized_pnl import compute_unrealized  # noqa: E402
 
 
 # ────────────────────────────────────────────────────────────────
@@ -253,33 +212,12 @@ def session_now_utc(now_utc: datetime) -> str:
 # Bars + signals
 # ────────────────────────────────────────────────────────────────
 
-def fetch_bars(client, symbol: str, minutes: int = 5, lookback: int = 200) -> pd.DataFrame | None:
-    """Fetch bars from Topstep front-month contract."""
-    try:
-        contracts = client.search_contracts(symbol, live=False)
-        if not contracts:
-            return None
-        front = sorted(contracts,
-                       key=lambda c: c.get("expiryDate") or c.get("lastTradeDate") or "")[0]
-        cid = front.get("id") or front.get("contractId")
-        end = _now_utc()
-        start = end - timedelta(minutes=minutes * lookback * 2)
-        bars = client.get_bars(contract_id=cid,
-                                start_time=start.isoformat(),
-                                end_time=end.isoformat(),
-                                unit=2, unit_number=minutes, limit=lookback,
-                                live=False)
-        if not bars:
-            return None
-        df = pd.DataFrame(bars).rename(
-            columns={"t": "Date", "o": "Open", "h": "High",
-                     "l": "Low", "c": "Close", "v": "Volume"})
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df.set_index("Date").sort_index()
-        return df.dropna()
-    except Exception as e:
-        _log(f"fetch_bars {symbol}: {type(e).__name__}: {e}")
-        return None
+# fetch_bars extracted to tools/bar_fetcher.py 2026-05-08 (continuous trim).
+# Wrapper preserves call signature so scan_once doesn't change.
+from tools.bar_fetcher import fetch_bars as _fetch_bars_impl  # noqa: E402
+
+def fetch_bars(client, symbol: str, minutes: int = 5, lookback: int = 200):
+    return _fetch_bars_impl(client, symbol, minutes, lookback, log_fn=_log)
 
 
 def find_latest_signal(bars: pd.DataFrame, strategy_fn) -> dict | None:
@@ -577,34 +515,12 @@ def cleanup_orphan_brackets(client, account_id) -> int:
     return cancelled
 
 
-# ────────────────────────────────────────────────────────────────
-# Cooldown
-# ────────────────────────────────────────────────────────────────
+# Cooldown / daily-count queries extracted to tools/trade_state.py 2026-05-08.
+from tools.trade_state import recent_thesis_for as _recent_thesis_for_impl  # noqa: E402
+from tools.trade_state import todays_trade_count  # noqa: E402
 
 def recent_thesis_for(symbol: str, minutes: int = SAME_SYMBOL_COOLDOWN_MIN) -> bool:
-    """True if this symbol has fired within the cooldown window."""
-    cutoff = (_now_utc() - timedelta(minutes=minutes)).isoformat(timespec="seconds")
-    db = get_db()
-    row = db.connect().execute(
-        "SELECT 1 FROM orders WHERE symbol=? AND agent='live_trader' "
-        "AND client_order_id NOT LIKE '%_stop' AND client_order_id NOT LIKE '%_target' "
-        "AND ts_proposed >= ? LIMIT 1",
-        (symbol, cutoff),
-    ).fetchone()
-    return row is not None
-
-
-def todays_trade_count() -> int:
-    """Count of entry orders placed today (UTC) by the live_trader."""
-    today = _now_utc().strftime("%Y-%m-%d")
-    db = get_db()
-    row = db.connect().execute(
-        "SELECT COUNT(*) FROM orders WHERE agent='live_trader' "
-        "AND date(ts_proposed)=? "
-        "AND client_order_id NOT LIKE '%_stop' AND client_order_id NOT LIKE '%_target'",
-        (today,),
-    ).fetchone()
-    return int(row[0]) if row else 0
+    return _recent_thesis_for_impl(symbol, minutes)
 
 
 # ────────────────────────────────────────────────────────────────
