@@ -89,3 +89,7 @@
 ## 2026-05-07
 
 - ❌ DEMOTE inside_bar_break × MES × RTH × long  (reason: 3_consecutive_fails, last OOS E=+0.32R)
+
+## 2026-05-08
+
+- ✅ PROMOTE narrow_range_break × MCL × RTH × long  (OOS E=+0.47R, t=+2.04, n=46)

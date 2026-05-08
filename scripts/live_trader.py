@@ -71,6 +71,7 @@ SCAN_INTERVAL_SEC = 300          # 5-minute cadence
 LOOKBACK_BARS = 6                 # find_latest_signal cutoff (30 min on 5m bars)
 PER_TRADE_LOSS_CAP_USD = 150.0    # force-close if unrealized < -this
 SAME_SYMBOL_COOLDOWN_MIN = 45     # don't re-fire same symbol within window
+MAX_TRADES_PER_DAY = 8            # hard cap on entries per UTC day
 LIVE_ALLOWLIST_PATH = _HERE / "state" / "strategy_validation.json"
 HALT_FILE = _HERE / "state" / "live_trader_halt"   # touch to halt; remove to resume
 
@@ -519,6 +520,19 @@ def recent_thesis_for(symbol: str, minutes: int = SAME_SYMBOL_COOLDOWN_MIN) -> b
     return row is not None
 
 
+def todays_trade_count() -> int:
+    """Count of entry orders placed today (UTC) by the live_trader."""
+    today = _now_utc().strftime("%Y-%m-%d")
+    db = get_db()
+    row = db.connect().execute(
+        "SELECT COUNT(*) FROM orders WHERE agent='live_trader' "
+        "AND date(ts_proposed)=? "
+        "AND client_order_id NOT LIKE '%_stop' AND client_order_id NOT LIKE '%_target'",
+        (today,),
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
 # ────────────────────────────────────────────────────────────────
 # Main scan loop
 # ────────────────────────────────────────────────────────────────
@@ -575,6 +589,12 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
     if open_pos > 0:
         _log(f"  {open_pos} open contracts; skipping new entries")
         return {"status": "in_position", **summary}
+
+    # Daily trade cap
+    today_count = todays_trade_count()
+    if today_count >= MAX_TRADES_PER_DAY:
+        _log(f"  daily trade cap hit ({today_count}/{MAX_TRADES_PER_DAY}); halt for today")
+        return {"status": "daily_cap_hit", "today_count": today_count, **summary}
 
     for symbol in syms:
         # Cooldown check
