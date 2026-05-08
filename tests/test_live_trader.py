@@ -191,3 +191,90 @@ def test_constants_align_with_v1_intent():
     assert lt.LOOKBACK_BARS == 6              # 30 min on 5m bars
     assert lt.SCAN_INTERVAL_SEC == 300        # 5 min
     assert lt.PER_TRADE_LOSS_CAP_USD == 150.0  # tightened for first night
+
+
+# ─── orphan-bracket cleanup ─────────────────────────────────────
+
+class _FakeClient:
+    def __init__(self, positions, working):
+        self._positions = positions
+        self._working = working
+        self.cancelled = []
+
+    def get_positions(self, account_id):
+        return self._positions
+
+    def get_working_orders(self, account_id):
+        return self._working
+
+    def cancel_order(self, account_id, order_id):
+        self.cancelled.append(order_id)
+        return {"success": True}
+
+
+def test_cleanup_skips_when_position_open():
+    """Don't cancel bracket legs when position is open (legitimate bracket)."""
+    pos = [{"contractId": "CON.F.US.TYA.M26", "size": 1, "type": 1}]
+    old_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    working = [{
+        "id": 999, "contractId": "CON.F.US.TYA.M26",
+        "customTag": "live_abc_stop", "creationTimestamp": old_ts,
+    }]
+    fake = _FakeClient(pos, working)
+    n = lt.cleanup_orphan_brackets(fake, 12345)
+    assert n == 0
+    assert fake.cancelled == []
+
+
+def test_cleanup_skips_within_grace_period():
+    """Don't cancel bracket legs younger than ORPHAN_GRACE_SEC even if flat."""
+    pos = []  # flat
+    fresh_ts = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
+    working = [{
+        "id": 1001, "contractId": "CON.F.US.TYA.M26",
+        "customTag": "live_xyz_stop", "creationTimestamp": fresh_ts,
+    }]
+    fake = _FakeClient(pos, working)
+    n = lt.cleanup_orphan_brackets(fake, 12345)
+    assert n == 0
+    assert fake.cancelled == []
+
+
+def test_cleanup_cancels_orphan_past_grace():
+    """Cancel bracket leg older than grace period when position is flat."""
+    pos = []  # flat
+    old_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    working = [{
+        "id": 2001, "contractId": "CON.F.US.TYA.M26",
+        "customTag": "live_abc_stop", "creationTimestamp": old_ts,
+    }, {
+        "id": 2002, "contractId": "CON.F.US.TYA.M26",
+        "customTag": "live_abc_target", "creationTimestamp": old_ts,
+    }]
+    fake = _FakeClient(pos, working)
+    n = lt.cleanup_orphan_brackets(fake, 12345)
+    assert n == 2
+    assert fake.cancelled == [2001, 2002]
+
+
+def test_cleanup_ignores_non_live_tags():
+    """Don't touch orders that aren't ours (no 'live_' prefix)."""
+    pos = []
+    old_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    working = [{
+        "id": 3001, "contractId": "CON.F.US.TYA.M26",
+        "customTag": "manual_user_order", "creationTimestamp": old_ts,
+    }]
+    fake = _FakeClient(pos, working)
+    n = lt.cleanup_orphan_brackets(fake, 12345)
+    assert n == 0
+    assert fake.cancelled == []
+
+
+def test_cleanup_handles_broker_fetch_failure():
+    """Cleanup doesn't crash if broker fetch fails."""
+    class _BrokenClient:
+        def get_positions(self, _): raise RuntimeError("network down")
+        def get_working_orders(self, _): return []
+    n = lt.cleanup_orphan_brackets(_BrokenClient(), 12345)
+    assert n == 0
