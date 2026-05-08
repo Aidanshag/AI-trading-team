@@ -76,16 +76,15 @@ LIVE_ALLOWLIST_PATH = _HERE / "state" / "strategy_validation.json"
 HALT_FILE = _HERE / "state" / "live_trader_halt"   # touch to halt; remove to resume
 
 
-def _load_yaml(path: str) -> dict:
-    return yaml.safe_load((_HERE / path).read_text(encoding="utf-8")) or {}
-
-
-def _now_utc() -> datetime:
-    return datetime.now(tz=timezone.utc)
-
-
-def _utcnow_iso() -> str:
-    return _now_utc().isoformat(timespec="seconds")
+# Pure utility helpers — extracted to tools/trader_utils.py 2026-05-08.
+# Re-imported with leading-underscore aliases so existing call-sites and
+# tests (which use lt._foo) keep working.
+from tools.trader_utils import (
+    _load_yaml,
+    _now_utc,
+    _utcnow_iso,
+    is_sunday_reopen_blackout,
+)
 
 
 def _log(msg: str) -> None:
@@ -314,13 +313,8 @@ def find_latest_signal(bars: pd.DataFrame, strategy_fn) -> dict | None:
 # Bracket placement
 # ────────────────────────────────────────────────────────────────
 
-def _tick_size(symbol: str) -> float:
-    syms = _load_yaml("config/symbols.yaml").get("symbols", {})
-    return float((syms.get(symbol) or {}).get("tick_size", 0.01))
-
-
-def _round_to_tick(price: float, tick: float) -> float:
-    return round(round(price / tick) * tick, 8)
+# Tick math extracted to tools/trader_utils.py
+from tools.trader_utils import _tick_size, _round_to_tick  # noqa: E402
 
 
 def place_bracket(client, account_id, symbol: str, signal: dict,
@@ -625,6 +619,12 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
     if halted:
         _log(f"HALTED: {reason}")
         return {"status": "halted", "reason": reason}
+
+    # Sunday-reopen first-30-min blackout: skip new entries when spreads are widest.
+    # Snapshots + cleanup still run; we just don't place new trades.
+    if is_sunday_reopen_blackout(_now_utc()):
+        _log("Sunday-reopen blackout (17:00-17:30 ET): skipping new entries this scan")
+        return {"status": "sunday_reopen_blackout"}
 
     try:
         client = get_client()

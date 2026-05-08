@@ -30,6 +30,13 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
   Acceptance: dry-run with current DB shows zero promotions/demotions (no fills yet); after Sunday fills land, surfaces meaningful changes.
   Auto-merge: false (touches `live_allowlist` which trader reads)
 
+- [P0] [effort: 45min] [risk: medium] [status: open]
+  **Trim live_trader.py: extract snapshot capture to tools/snapshot_writer.py**
+  Why: trader at 763 lines as of 2026-05-08 after adding cleanup + Sunday-reopen gates. The capture_snapshot + compute_unrealized block is ~100 lines of "broker state observer" logic that is not core execution. Extract to tools/ keeps the knife focused.
+  Files: `scripts/live_trader.py` (lines 131-226 region), NEW `tools/snapshot_writer.py`
+  Acceptance: live_trader imports `capture_snapshot` from `tools.snapshot_writer`; all 25 unit tests still pass; dry-run scan output identical to pre-extraction. Trader < 700 lines.
+  Auto-merge: false (touches the running trader path; user should review PR)
+
 - [P0] [effort: 60min] [risk: low] [status: open]
   **Strategy parameter sweep framework — gap_fill robustness sweep**
   Why: same finding as above. Need a gap_fill parameterization with enough per-trade $ edge to absorb 0.25-0.5 tick slippage. Default (min_gap_atr=0.75, rr_target=1.5) is too tight.
