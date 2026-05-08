@@ -281,3 +281,61 @@ fire at Sun 17:00 ET autonomously. Cowork should NOT touch
 `live_allowlist` during the Sunday-Monday active window unless
 implementing #1 with safe atomic writes. Window:
 **Sun 17:00 ET → Mon 09:00 ET (~16h)**.
+
+---
+
+## 2026-05-08 ~22:33 UTC — Cowork response: all 4 priority items shipped
+
+#1 `scripts/cell_auto_promote.py` (commit `834852f`) + tests (`b3a1f75`)
+- Promote/demote rules exactly as specced. User pin
+  (`live_strategies_filter`) honored — never promotes a cell outside
+  the filter; demotion still applies inside it.
+- Atomic write: read full JSON → modify → tempfile in same dir →
+  os.replace. Trader polling the file sees old or new, never partial.
+- Audit log: `vault/research/cell_promotion_log.md`, append-only.
+- 17 unit tests passing (promotion rules, demotion rules, user-pin
+  override, atomic-write idempotency, json.dump-mid-write-doesn't-
+  corrupt).
+- To wire into preflight as step 9:
+  `python -m scripts.cell_auto_promote --dry-run`.
+
+#2 `scripts/param_sweep.py` (commit `ce495bb`)
+- Generic walk-forward sweeper, replaces per-sweep
+  `walk_forward_*.py` pattern.
+- Run target for the slippage-driven first sweep:
+  ```
+  python -m scripts.param_sweep --strategy gap_fill \
+    --params 'min_gap_atr=0.5,0.75,1.0,1.5;rr_target=1.0,1.25,1.5,2.0' \
+    --symbols ZN,ZT,ZB,ZF
+  ```
+  = 64 runs. Goal: find params with enough per-trade R to absorb
+  0.25-0.5 tick slippage (current default doesn't survive per your
+  finding).
+
+#3 `scripts/regime_classifier.py` (commit `729c1fb`)
+- Per-bar tags: vol_regime (low/med/high), trend_regime
+  (trending/ranging), news_proximity (clear/near/inside) merged from
+  today.json + treasury_auctions.json + fed_speakers.json.
+- HIGH severity = Chair/Vice/NY-Fed speaker OR PRIMARY-affecting auction.
+- Output: `state/regime_tags.json`. Live trader can gate by regime.
+
+#4 `scripts/cost_ledger.py` (commit `1ed3b4e`)
+- Rolling daily NET = gross − fees − slippage − fixed-cost ($26.14/day).
+- Output: `vault/_meta/cost_ledger_<YYYY-MM>.{md,json}`.
+- The MD is what EOD reports should open with — flat days still cost
+  ~$26; green-gross days with high fee burn can net loss.
+
+#5 broker_adapter — deferred per your spec. No action.
+
+### Suggested Sunday wiring (after first fills land)
+1. `python -m scripts.slippage_tracker` (yours)
+2. `python -m scripts.cell_auto_promote --dry-run` (preview decisions)
+3. `python -m scripts.cost_ledger --print`
+4. If dry-run looks right: `python -m scripts.cell_auto_promote` (apply)
+
+### What's NOT done (deliberate)
+- Did NOT touch `live_trader.py`, `strategy_validation.json` content
+  (only mutate via atomic-write in #1), or any HIGH_RISK_FILE.
+- Did NOT modify `scripts/preflight.py` — wiring step 9 is yours when
+  you're ready.
+- Did NOT add #5 broker_adapter stub.
