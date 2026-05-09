@@ -307,9 +307,11 @@ at LIVE SMALL or LIVE FULL stage. The gate isn't soft.
 Quant Researcher: when designing a new hypothesis, write the IDEA
 artifact first. Don't go straight to BACKTEST.
 
-Cowork + Claude Code: when promoting a cell across stages, update
-`vault/_meta/cell_lifecycle.md` (TBD — companion doc to this one
-listing each cell's current stage + last gate-pass date).
+Cowork + Claude Code: when promoting a cell across stages, append
+to `vault/research/cell_promotion_log.md` (already exists, written
+by `scripts/cell_auto_promote.py`). Per-cell current stage is tracked
+in `state/strategy_validation.json`. A separate `cell_lifecycle.md`
+is NOT needed — these two artifacts together provide the audit trail.
 
 ## Open questions
 

@@ -82,7 +82,7 @@ Every thesis names which of these strategies it's running. Calibration targets (
 
 ## Market structure (future expansion)
 
-- [[market_structure/|Market structure]] — TBD; session mechanics, auction mechanics, option expiry details.
+- [[market_structure/README|Market structure]] — slim section for trading-mechanism docs (session mechanics, auction details, etc.). Populated only when a strategy needs them.
 
 ---
 
