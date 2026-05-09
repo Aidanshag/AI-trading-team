@@ -267,6 +267,47 @@ def check_agent_cli() -> bool:
         return True
 
 
+def check_autonomous_activity_alive() -> bool:
+    """Advisory check: surface if cowork / autonomous routines have been
+    silent for >36h. Discovered 2026-05-09 that cowork doesn't run on
+    timers — only the cloud routine does — so a silent gap means the
+    brain isn't compounding as expected.
+
+    NOT fail-closed (advisory only). Just logs a warning so future-Claude
+    notices and the user can investigate.
+    """
+    print("Step Y: autonomous activity heartbeat")
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "log", "--since=36 hours ago", "--format=%H %s",
+             "--grep=cowork", "--grep=autonomous", "--grep=routine",
+             "--regexp-ignore-case", "--all-match=false"],
+            capture_output=True, text=True, timeout=15,
+        )
+        # Also count session auto-commits as a heartbeat
+        recent_any = subprocess.run(
+            ["git", "log", "--since=36 hours ago", "--oneline"],
+            capture_output=True, text=True, timeout=15,
+        )
+        cowork_lines = result.stdout.strip().splitlines() if result.stdout.strip() else []
+        any_lines = recent_any.stdout.strip().splitlines() if recent_any.stdout.strip() else []
+        if not cowork_lines and len(any_lines) <= 2:
+            _warn(f"no cowork or autonomous activity in last 36h "
+                  f"(only {len(any_lines)} commits total). "
+                  f"Brain may not be learning autonomously — investigate cloud routine "
+                  f"at https://claude.ai/code/routines")
+        elif not cowork_lines:
+            _warn(f"no cowork commits in last 36h ({len(any_lines)} session commits found). "
+                  f"Cowork sessions may need manual launch.")
+        else:
+            _ok(f"autonomous activity healthy: {len(cowork_lines)} cowork commits in last 36h")
+        return True  # always advisory
+    except Exception as e:
+        _warn(f"autonomous-activity check skipped: {type(e).__name__}: {e}")
+        return True
+
+
 def check_no_conflicting_trader() -> bool:
     """Block launch if another live_trader or auto_trader process is already
     running. Prevents v1+v2 double-trading after the 2026-05-08 simplification
@@ -354,6 +395,7 @@ def main() -> int:
     checks.append(check_tests())
     checks.append(check_risk_gate_wired())
     checks.append(check_no_conflicting_trader())
+    checks.append(check_autonomous_activity_alive())
     checks.append(check_agent_cli())
 
     # Step 9: refresh strategy validation state (rolling daily walk-forward).
