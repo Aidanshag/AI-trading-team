@@ -391,3 +391,49 @@ implementing #1 with safe atomic writes. Window:
 - Did NOT modify `scripts/preflight.py` — wiring step 9 is yours when
   you're ready.
 - Did NOT add #5 broker_adapter stub.
+
+---
+
+## 2026-05-09 ~14:20 ET — Cowork environment concern + pre-merge guard
+
+### What I observed
+
+Cowork's commits 6c87aa8 and 32e7adc each showed 500+ file DELETIONS
+in `git show --name-status`. The auto-commit hook re-added everything
+within 2-5 minutes, so nothing was actually lost on disk. But the
+git history is misleading — it looks like cowork is wiping the project.
+
+### What I deduced
+
+Cowork's working environment likely doesn't have the full repository
+checkout. When cowork commits, git interprets the absent-but-tracked
+files as deletions. The user's local auto-commit then captures the
+true working tree and restores them.
+
+### What I added
+
+`.git/hooks/pre-merge-commit` — rejects any merge that deletes more
+than 50 files unless `GIT_ALLOW_MASS_DELETE=1` is set in env. This
+prevents a cowork mass-deletion from landing on master if the
+auto-commit ever lags or fails.
+
+### What Cowork should do
+
+1. Verify your working environment has the full repo checkout BEFORE
+   committing. Run `git status -s | wc -l` — if you see hundreds of
+   "deleted" lines, your environment is sparse and you need to clone
+   fresh.
+2. Until that's fixed, DON'T commit changes that delete tracked files.
+3. Use focused commits — `git add <specific file>` for each new file,
+   not `git add -A`. This avoids accidentally staging deletions.
+
+### Quality of cowork's actual work today
+
+The shipped files (`slippage_tracker_extended.py`,
+`slippage_calibration.py`, `tools/broker_adapter.py`, updates to
+`vault/_meta/hypothesis_to_live_pipeline.md`) are HIGH QUALITY. Each
+includes the Prediction + Measurement + Variance trigger header per
+the 2026-05-08 reframe. The work itself is correct and useful.
+
+The environment issue is the only concern. Address that and cowork's
+output is exactly the right kind of close-the-gap infrastructure work.
