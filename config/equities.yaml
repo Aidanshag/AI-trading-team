@@ -1,0 +1,62 @@
+# Equities and equity-options configuration.
+# The fund is NOT live on equities yet — no broker is wired. Agents operate
+# in learning/shadow mode until `trading_enabled` is flipped and a broker
+# client is implemented.
+
+trading:
+  # ── Master switch ──────────────────────────────────────────────
+  # When false: equity agents may publish theses and shadow trades but the
+  # orchestrator refuses to route any proposal to an execution path. The
+  # equity execution trader has no broker tools attached.
+  # When true (+ broker wired): same workflow as futures — PM → Risk →
+  # (Options Risk if options) → Execution.
+  trading_enabled: false
+
+  # ── Broker selection (when trading_enabled flips) ──────────────
+  # Candidates: alpaca | tradier | ibkr
+  broker: alpaca
+  environment: paper          # paper | live
+
+  # Leave creds blank until broker is chosen and account opened
+  # alpaca:   API_KEY, API_SECRET in .env
+  # tradier:  ACCESS_TOKEN in .env
+  # ibkr:     gateway host/port in .env, credentials in IBKR
+
+shadow_mode:
+  # What agents do while trading_enabled is false. The goal is calibration —
+  # an honest paper-trade log that can be graded against reality.
+  enabled: true
+  track_counterfactual_pl: true
+  # Where the shadow-trade ledger lives — in SQL decisions table (kind=shadow_trade)
+  # AND as human-readable notes under vault/equities/shadow_trades/
+  mirror_to_vault: true
+
+learning:
+  # Each analyst wake produces at least N and at most M new or updated thesis
+  # notes or research notes.
+  min_research_items_per_wake: 1
+  max_research_items_per_wake: 3
+  # Weekly meta-review day (UTC) — compare shadow trades to actual moves.
+  weekly_review_weekday: sunday
+
+# Starting watchlists — seed only. Agents will curate these over time.
+# See vault/equities/watchlists/ for the live versions.
+seed_watchlists:
+  growth_tech: [AAPL, MSFT, NVDA, GOOGL, META, AMZN, TSLA, AMD, AVGO, CRM, NOW, ADBE, ORCL, MU, QCOM]
+  defensive:   [JNJ, LLY, UNH, MRK, ABBV, PFE, TMO, DHR, COST, WMT, PG, KO, PEP, MDLZ, NEE, DUK]
+  cyclicals:   [CAT, DE, BA, GE, HON, UNP, UPS, FDX, RTX, LMT, XOM, CVX, COP, SLB, EOG, FCX, NEM]
+  financials:  [JPM, BAC, WFC, GS, MS, C, BLK, SCHW, BRK.B, AXP, V, MA, SPGI, MCO, ICE, CME]
+
+# Equity-specific risk additions (on top of firm-wide rules)
+equity_risk:
+  # Position sizing cap as % of ADV (avg daily volume) — liquidity guard
+  max_pct_of_adv: 0.01
+  # No entries in the last N minutes before close on earnings day
+  earnings_blackout_before_close_min: 30
+  # No overnight holds into earnings unless structure is defined-risk
+  no_naked_overnight_into_earnings: true
+  # Reject any short without a located borrow (when we ever short — per
+  # firm-wide no-naked-shorts rule, this is moot; stays as a backstop)
+  require_locate_for_shorts: true
+  # Halt handling: if a name is halted, all existing orders cancel
+  cancel_on_halt: true

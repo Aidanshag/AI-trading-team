@@ -1,0 +1,20 @@
+{
+  "narrow_range_break": {
+    "GC": false,
+    "MCL": false,
+    "NG": false,
+    "MNQ": false,
+    "MES": false,
+    "ZN": false,
+    "6E": false
+  },
+  "inside_bar_break": {
+    "GC": false,
+    "MCL": false,
+    "NG": false,
+    "MNQ": false,
+    "MES": false,
+    "ZN": false,
+    "6E": false
+  }
+}
