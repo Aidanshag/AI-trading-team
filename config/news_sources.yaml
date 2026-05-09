@@ -1,0 +1,129 @@
+# News, subscriptions, and social internet-data access for agents.
+#
+# Philosophy: prefer licensed/public sources. Programmatic scraping of
+# paywalled subs (WSJ, FT, bloomberg.com, Barron's) is a ToS violation and
+# risks getting your personal account banned. For paywalled content, the
+# user's manual summaries (vault/news_imports/) are the legitimate path.
+#
+# Tiers, in order of preference:
+#   1. RSS (free, instant, public)
+#   2. Paid licensed APIs (NewsAPI, Benzinga, X/Twitter API, Dow Jones)
+#   3. General web search (Tavily) for public/non-paywalled pages
+#   4. Manual user-curated imports (`vault/news_imports/`)
+#   5. Bloomberg Terminal via BLPAPI — only on a machine with Terminal
+#      logged in; respect your license terms
+
+# ── Tier 1: RSS feeds (free, public) ──────────────────────────
+rss_feeds:
+  # Headlines & markets
+  cnbc_top:        "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+  cnbc_markets:    "https://www.cnbc.com/id/15839069/device/rss/rss.html"
+  cnbc_economy:    "https://www.cnbc.com/id/10000664/device/rss/rss.html"
+  cnbc_commod:     "https://www.cnbc.com/id/10000108/device/rss/rss.html"
+  wsj_markets:     "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain"   # headlines only
+  wsj_econ:        "https://feeds.content.dowjones.io/public/rss/socialeconomyfeed"
+  reuters_markets: "https://www.reutersagency.com/feed/?best-sectors=markets&post_type=best"
+  marketwatch_top: "https://feeds.content.dowjones.io/public/rss/mw_topstories"
+  bloomberg_op:    "https://feeds.bloomberg.com/markets/news.rss"    # opinion feed only
+  zerohedge:       "https://feeds.feedburner.com/zerohedge/feed"
+  calculated_risk: "https://www.calculatedriskblog.com/feeds/posts/default"
+
+  # Central banks & data
+  fed_press:       "https://www.federalreserve.gov/feeds/press_all.xml"
+  fed_speeches:    "https://www.federalreserve.gov/feeds/speeches.xml"
+  bls_news:        "https://www.bls.gov/feed/bls_latest.rss"
+  treasury_press:  "https://home.treasury.gov/rss/press.xml"
+  bea_gdp:         "https://www.bea.gov/rss/rss.xml"
+
+  # Commodities / energy / ags
+  eia_today:       "https://www.eia.gov/rss/todayinenergy.xml"
+  usda_news:       "https://www.usda.gov/rss/latest-releases.xml"
+
+# ── Tier 2A: licensed news APIs ───────────────────────────────
+apis:
+  newsapi:
+    enabled: false
+    key_env: NEWSAPI_KEY
+    base_url: "https://newsapi.org/v2"
+
+  benzinga:
+    enabled: false
+    key_env: BENZINGA_API_KEY
+
+  polygon_news:
+    enabled: false
+    key_env: POLYGON_API_KEY
+
+  dow_jones_newswires:       # legitimate WSJ access (expensive, enterprise)
+    enabled: false
+    key_env: DJ_NEWSWIRES_KEY
+
+  prefer_licensed_over_rss: true
+
+# ── Tier 2B: X / Twitter ──────────────────────────────────────
+twitter:
+  enabled: false              # flip to true once API key is provisioned
+  # Official X API. Basic tier ~$100/mo supports ~10K reads/month — enough
+  # to poll the user's curated account list + keyword queries periodically.
+  bearer_token_env: X_BEARER_TOKEN
+  tier: basic                 # basic | pro | enterprise
+  polling_cadence_seconds: 300    # poll list timeline every 5 min
+  account_list_path: vault/social/twitter_watchlist.md    # user-curated
+  keyword_queries:
+    - "$CL OR crude oil OPEC"
+    - "$GC OR gold real yields"
+    - "$ES OR $SPX Fed"
+    - "FOMC Powell"
+    - "CPI print"
+    - "NFP jobs report"
+  # Ingestion: every matching tweet becomes a row in state news_items and
+  # a note in vault/social/twitter_ingest/YYYY-MM-DD/.
+
+# ── Tier 3: general web search ─────────────────────────────────
+web_search:
+  provider: tavily           # tavily | perplexity | none
+  key_env: TAVILY_API_KEY
+  max_queries_per_wake: 3
+
+# ── Tier 4: manual imports from user ───────────────────────────
+# The legitimate path for paywalled content (WSJ article bodies, Bloomberg
+# long-reads, Barron's, FT). User reads + summarizes + imports.
+# See vault/news_imports/README.md for the format.
+manual_imports:
+  path: vault/news_imports/
+  recency_hours: 72
+  # User-curated TL;DRs are treated as HIGHER priority than API headlines
+  # because they're filtered by the user's judgment.
+  priority_multiplier: 2.0
+
+# ── Tier 5: Bloomberg Terminal (BLPAPI) ────────────────────────
+bloomberg:
+  enabled: false
+  # If you have Terminal access on THIS machine, set to true and install
+  # BLPAPI per Bloomberg's docs. Respect your license's redistribution
+  # terms. For academic licenses, consult your Bloomberg administrator
+  # before using output to inform real-money trading decisions.
+
+# ── ToS / legal guardrails (enforced at fetch layer) ──────────
+tos_guardrails:
+  # Hard blocklist — never fetch paywalled article bodies programmatically.
+  # The news tool refuses fetch_url to any host here.
+  # Agents use manual_imports or RSS headlines for these sources.
+  never_fetch_hosts:
+    - "www.wsj.com"
+    - "www.ft.com"
+    - "www.bloomberg.com"        # use BLPAPI or manual imports
+    - "www.barrons.com"
+    - "www.economist.com"
+    - "seekingalpha.com"
+  user_agent: "AI-Trading-Fund/0.1 (personal research)"
+  request_delay_seconds: 1.0
+  respect_robots_txt: true
+
+# ── Platform-agents bridge (agents you create in the Anthropic Console) ──
+# If you maintain Managed Agents at platform.claude.com that generate
+# research, paste their output into vault/platform_agents/ — the fund
+# reads this folder just like news_imports, but tagged platform-agent.
+platform_agents_bridge:
+  path: vault/platform_agents/
+  recency_hours: 168          # 1 week

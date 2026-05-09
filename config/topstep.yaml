@@ -1,0 +1,56 @@
+# Topstep Combine rules and API routing — LIVE as of 2026-04-23.
+
+account:
+  tier: "50K"
+  environment: combine            # combine | funded
+
+  # Published Topstep rules for the $50K Combine
+  starting_balance: 50000
+  daily_loss_limit_usd: 1000
+  trailing_drawdown_usd: 2000
+  max_contracts: 5
+  scaling_enabled: true           # must scale up to max contracts gradually
+  consistency_rule: true          # no single day > 50% of total profit
+  minimum_trading_days: 10        # min days before passing
+
+  # ── Pass criteria for the $50K Combine ──
+  profit_target_usd: 3000         # 6% profit required to pass
+  # (Topstep's precise rules may change — verify on the TopstepX dashboard)
+
+api:
+  gateway: projectx               # projectx | tradovate | rithmic
+  base_url: "https://api.topstepx.com"
+  ws_url:   "wss://rtc.topstepx.com/hubs"
+  # Auth via env: PROJECTX_API_KEY, PROJECTX_USERNAME, PROJECTX_ACCOUNT_ID
+
+# Trading hours policy
+session_policy:
+  allow_overnight_holds: false         # flat by 15:50 CT (conservative during Combine)
+  pause_minutes_before_news: 10        # tighter than funded mode
+  pause_minutes_after_news:  10
+
+# Symbols permitted to trade
+permitted_symbols_source: config/symbols.yaml
+
+# ── Combine-specific operational rules ──
+combine_operation:
+  # Scale-up plan: start conservative, earn risk as P&L grows
+  starting_max_contracts: 1       # open with 1-lot only
+  scaling_milestones:
+    - pnl_usd: 500
+      max_contracts: 2
+    - pnl_usd: 1000
+      max_contracts: 3
+    - pnl_usd: 2000
+      max_contracts: 5
+
+  # Consistency-rule enforcement
+  # If a single day's profit exceeds 50% of total profit-to-date, next day
+  # Risk Manager forces defensive posture until the consistency ratio
+  # normalizes.
+  enforce_consistency_intraday: true
+
+  # Time-of-day discipline
+  no_new_positions_before_local_time: "08:30"   # CT; skip pre-market noise
+  no_new_positions_after_local_time: "15:00"    # CT; allow 50 min to flatten
+  flatten_cutoff_local_time: "15:50"            # CT

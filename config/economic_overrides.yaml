@@ -1,0 +1,47 @@
+# Manually curated one-off economic events — read by
+# scripts/build_economic_calendar.py and merged with the recurring
+# patterns (NFP, EIA Thursday, Jobless Claims, etc.) hardcoded in that
+# script.
+#
+# Update this file when the BLS / FOMC / Fed publish new schedules
+# (typically once per quarter). Times are UTC.
+#
+# Schema:
+#   ts_utc: ISO-8601 with Z suffix
+#   impact: high | medium | low (only `high` triggers blackout)
+#   event:  human-readable name
+#   symbols_affected: list of CME roots (informational; the hook
+#                     blackouts are global, not symbol-specific)
+
+events:
+  # ── 2026 FOMC meeting decisions (placeholder schedule — update
+  #    with actual dates from federalreserve.gov/monetarypolicy) ──
+  - ts_utc: "2026-05-06T18:00:00Z"
+    impact: high
+    event: "FOMC Statement + Press Conference"
+    symbols_affected: [ZN, ZB, ES, MES, 6E, GC]
+  - ts_utc: "2026-06-17T18:00:00Z"
+    impact: high
+    event: "FOMC Statement + SEP + Press Conference"
+    symbols_affected: [ZN, ZB, ES, MES, 6E, GC]
+  - ts_utc: "2026-07-29T18:00:00Z"
+    impact: high
+    event: "FOMC Statement + Press Conference"
+    symbols_affected: [ZN, ZB, ES, MES, 6E, GC]
+
+  # ── CPI / PPI 2026 release calendar (BLS publishes annually) ──
+  # Dates verified against bls.gov/schedule
+  - ts_utc: "2026-05-12T12:30:00Z"
+    impact: high
+    event: "CPI (April 2026)"
+    symbols_affected: [ZN, ZB, ES, MES, 6E, GC]
+  - ts_utc: "2026-06-10T12:30:00Z"
+    impact: high
+    event: "CPI (May 2026)"
+    symbols_affected: [ZN, ZB, ES, MES, 6E, GC]
+  - ts_utc: "2026-07-15T12:30:00Z"
+    impact: high
+    event: "CPI (June 2026)"
+    symbols_affected: [ZN, ZB, ES, MES, 6E, GC]
+
+  # ── Add Fed-speaker events / special releases here as needed ──
