@@ -59,8 +59,19 @@ try {
         -WindowStyle Hidden `
         -PassThru
     Write-Log "launched live_trader, PID $($proc.Id)"
+    # Alert: a launch happening here means the trader was NOT running, which
+    # is evidence of a prior crash or clean shutdown we didn't intend.
+    try {
+        & $Python -m tools.alert "Trader was not running -- launched new instance (PID $($proc.Id)). Check logs for prior shutdown reason." --level=warn | Out-Null
+        Write-Log "alert dispatched"
+    } catch {
+        Write-Log "alert dispatch FAILED: $_"
+    }
     exit 0
 } catch {
     Write-Log "LAUNCH FAILED: $_"
+    try {
+        & $Python -m tools.alert "CRITICAL: morning restart task tried to launch live_trader but Start-Process FAILED. Trader is DOWN. Manual intervention required." --level=crit | Out-Null
+    } catch { }
     exit 3
 }
