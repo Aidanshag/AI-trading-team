@@ -12,9 +12,14 @@ $ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $TaskName = "FundLiveTraderSundayKickstart"
 $LogPath = Join-Path $ProjectRoot "logs\livetrader_sunday_kickstart.log"
+$RestartScript = Join-Path $ProjectRoot "scripts\restart-live-trader-if-dead.ps1"
 
 if (-not (Test-Path $Python)) {
     Write-Host "ERROR: python.exe not found at $Python" -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path $RestartScript)) {
+    Write-Host "ERROR: restart script not found at $RestartScript" -ForegroundColor Red
     exit 1
 }
 
@@ -35,17 +40,12 @@ if ($existing) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
 
-# Action: launch live_trader, log all output. No preflight (user-initiated overnight run).
-$psArg = @"
-"`$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss.fffzzz') Sunday kickstart firing -- launching live_trader" |
-    Out-File -FilePath '$LogPath' -Append
-& "$Python" -m scripts.live_trader 2>&1 |
-    Out-File -FilePath '$LogPath' -Append
-"@
-
+# Action: invoke the shared idempotent launcher via -File. Avoids the multi-line
+# -Command quoting pitfall that caused the 2026-05-10 kickstart to fail with
+# LastTaskResult=1 and no log file written. Same wrapper as FundLiveTraderMonMorning.
 $Action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -Command $psArg" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$RestartScript`"" `
     -WorkingDirectory $ProjectRoot
 
 # One-time trigger at the computed Sunday 17:00 local time
