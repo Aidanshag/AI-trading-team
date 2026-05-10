@@ -93,3 +93,12 @@
 ## 2026-05-08
 
 - ✅ PROMOTE narrow_range_break × MCL × RTH × long  (OOS E=+0.47R, t=+2.04, n=46)
+
+## 2026-05-10
+
+- ✅ PROMOTE fair_value_gap × MNQ × RTH × long  (OOS E=+0.40R, t=+1.77, n=45)
+- ✅ PROMOTE liquidity_sweep × MNQ × London × long  (OOS E=+0.46R, t=+1.71, n=33)
+- ✅ PROMOTE liquidity_sweep_tuned × MNQ × London × long  (OOS E=+0.57R, t=+1.73, n=29)
+- ❌ DEMOTE narrow_range_break × MNQ × London × long  (reason: 3_consecutive_fails, last OOS E=+0.09R)
+- ❌ DEMOTE inside_bar_break × 6A × London × long  (reason: 3_consecutive_fails, last OOS E=+0.21R)
+- ❌ DEMOTE fair_value_gap_tuned × 6A × London × short  (reason: 3_consecutive_fails, last OOS E=+0.60R)
