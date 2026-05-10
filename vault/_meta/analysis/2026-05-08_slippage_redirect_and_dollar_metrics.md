@@ -7,9 +7,44 @@ sources:
   - vault/research/param_sweeps/gap_fill_2026-05-08_2304.md
   - vault/research/slippage_mitigation_playbook.md
   - vault/_meta/cowork_coordination.md (CC's 2026-05-08 redirect)
+  - vault/research/historical_slippage_topstep.md (added 2026-05-09 update)
 confidence: PATTERN
 status: open
+amended: 2026-05-09
 ---
+
+> ## ⚠ AMENDMENT 2026-05-09 — empirical slippage is materially better
+>
+> This piece used 0.25 ticks/side as the "typical / conservative live
+> slippage" assumption. After reading
+> `vault/research/historical_slippage_topstep.md` (n=31 v1 fills mined
+> from `state/fund.db:orders`), the empirical floor is closer to
+> **0.10–0.15 ticks/side** on liquid futures. Entries on
+> marketable-limit fill *favorable* (mean -10.4 ticks vs intent — better
+> than asked); stop fills are +1-2 ticks adverse; targets fill at limit
+> price. So:
+>
+> - The structural Pattern C finding (R-multiples are slippage-blind;
+>   the dollar-metric extension to `param_sweep.py` was the right
+>   redirect) is **unchanged**.
+> - The deployment-relevant column is closer to
+>   `mean_net_usd_at_slip_0.10` (between the script's 0.0 and 0.25
+>   levels), not the 0.25 column I emphasised.
+> - Combine pass probability per the historical-slippage doc is
+>   93–98%, not the more conservative number derived from 0.25
+>   per-side modelling.
+> - The "park" decision on the +2.80R / +2.10R / +1.91R
+>   parked-sweep variants was correct (slippage-blind), but the
+>   dollar-metric re-sweep (queued 2026-05-09) may show those
+>   wide-stop variants comfortably surviving 0.10–0.15 ticks/side
+>   slippage. The verdict isn't "they don't work in production" — it's
+>   "the original sweep didn't measure the deployment-relevant thing,
+>   and a properly-instrumented re-sweep is pending."
+>
+> Treasuries (ZN/ZB/ZT/ZF) have zero historical fills in the v1 sample —
+> Sunday 2026-05-10 onward will be the first measurement. If live
+> treasury slippage materially exceeds 0.25 ticks/side on Sunday's fills,
+> revisit Pattern C as a live finding rather than backtest theory.
 
 # R-multiples are slippage-blind — the param-change recommendation is parked
 

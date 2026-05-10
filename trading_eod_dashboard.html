@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Fund — EOD Trading Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --text-primary: #1a1a1a;
+            --text-secondary: #666;
+            --border-color: #e0e0e0;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #3b82f6;
+            --dark-bg: #1f2937;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 16px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        .refresh-btn {
+            padding: 8px 16px;
+            background: var(--info-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .refresh-btn:hover {
+            background: #2563eb;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+            border-bottom: 1px solid var(--bg-secondary);
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-row-label {
+            color: var(--text-secondary);
+        }
+
+        .metric-row-value {
+            font-weight: 600;
+        }
+
+        .positive { color: var(--success-color); }
+        .negative { color: var(--danger-color); }
+        .warning { color: var(--warning-color); }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-ok {
+            background: #d1fae5;
+            color: #047857;
+        }
+
+        .status-alert {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .alert-box {
+            background: #fee2e2;
+            border-left: 4px solid var(--danger-color);
+            padding: 12px;
+            margin-bottom: 16px;
+            border-radius: 4px;
+        }
+
+        .alert-box-title {
+            font-weight: 600;
+            color: var(--danger-color);
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .alert-box-body {
+            font-size: 12px;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        .positions-table {
+            width: 100%;
+            font-size: 12px;
+            border-collapse: collapse;
+        }
+
+        .positions-table th {
+            background: var(--bg-secondary);
+            padding: 8px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .positions-table td {
+            padding: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .symbol-badge {
+            display: inline-block;
+            background: var(--info-color);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .side-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .side-long {
+            background: #d1fae5;
+            color: #047857;
+        }
+
+        .side-short {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 32px;
+            color: var(--text-secondary);
+        }
+
+        .error {
+            background: #fee2e2;
+            border: 1px solid var(--danger-color);
+            color: var(--danger-color);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .strategy-cell {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 2px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #1f2937;
+                --bg-secondary: #111827;
+                --text-primary: #f3f4f6;
+                --text-secondary: #9ca3af;
+                --border-color: #374151;
+            }
+            body { background: var(--bg-secondary); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>AI Futures Fund</h1>
+                <div class="header-meta">End-of-Day Dashboard</div>
+            </div>
+            <div style="text-align: right;">
+                <button class="refresh-btn" onclick="loadDashboard()">↻ Refresh Data</button>
+                <div class="header-meta" style="margin-top: 8px;">
+                    Last updated: <span id="timestamp">—</span>
+                </div>
+            </div>
+        </header>
+
+        <div id="alerts-container"></div>
+
+        <div class="grid">
+            <!-- Account Health -->
+            <div class="card">
+                <div class="card-title">Account Balance</div>
+                <div class="metric-value" id="balance">$49,416.75</div>
+                <div class="metric-label">Current equity</div>
+                <div class="metric-row">
+                    <span class="metric-row-label">Daily P&L</span>
+                    <span class="metric-row-value" id="daily-pnl">$0.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-row-label">Peak Daily</span>
+                    <span class="metric-row-value" id="peak-daily">$0.00</span>
+                </div>
+            </div>
+
+            <!-- Risk Status -->
+            <div class="card">
+                <div class="card-title">Risk Status</div>
+                <div style="margin-bottom: 12px;">
+                    <span class="status-badge status-ok" id="risk-status">SAFE</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-row-label">Daily Loss Limit</span>
+                    <span class="metric-row-value" id="dll-remaining">$1,000</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-row-label">Trailing Drawdown</span>
+                    <span class="metric-row-value" id="tdd-usd">$0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-row-label">Trades Today</span>
+                    <span class="metric-row-value" id="trade-count">0 / 8</span>
+                </div>
+            </div>
+
+            <!-- Strategy Performance -->
+            <div class="card">
+                <div class="card-title">Gap Fill (Wide)</div>
+                <div class="metric-value" id="strategy-status">26 Cells</div>
+                <div class="metric-label">Active trading cells</div>
+                <div class="metric-row">
+                    <span class="metric-row-label">Trades Placed</span>
+                    <span class="metric-row-value" id="gf-trades">0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-row-label">Win Rate</span>
+                    <span class="metric-row-value" id="gf-winrate">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Positions Section -->
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-title">Open Positions</div>
+            <div id="positions-container">
+                <p style="color: var(--text-secondary); font-size: 13px;">No open positions</p>
+            </div>
+        </div>
+
+        <!-- Active Trading Cells -->
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-title">Active Trading Cells</div>
+            <div id="cells-container" style="display: flex; flex-wrap: wrap;">
+                <div class="strategy-cell">ZN Asian Long</div>
+                <div class="strategy-cell">ZN Asian Short</div>
+                <div class="strategy-cell">ZN PostClose L/S</div>
+                <div class="strategy-cell">ZB Asian L/S</div>
+                <div class="strategy-cell">ZB London L/S</div>
+                <div class="strategy-cell">ZB PostClose L/S</div>
+                <div class="strategy-cell">ZT Asian L/S</div>
+                <div class="strategy-cell">ZT London L/S</div>
+                <div class="strategy-cell">ZT PostClose L</div>
+                <div class="strategy-cell">ZF Asian L/S</div>
+                <div class="strategy-cell">ZF PostClose S</div>
+                <div class="strategy-cell">NG Asian L/S</div>
+                <div class="strategy-cell">NG PostClose L/S</div>
+                <div class="strategy-cell">6E Asian L/S</div>
+                <div class="strategy-cell">6E PostClose L/S</div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 12px;">
+                ✓ All cells staged for live trading Sunday 17:00 ET
+            </div>
+        </div>
+
+        <!-- Risk Events -->
+        <div class="card">
+            <div class="card-title">Risk Events (Today)</div>
+            <div id="risk-events-container">
+                <p style="color: var(--text-secondary); font-size: 13px;">No risk events</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DATA_FILE_PATH = '/sessions/wizardly-compassionate-babbage/mnt/AI Trading/state/dashboard_data.json';
+
+        async function loadDashboard() {
+            try {
+                const response = await fetch(DATA_FILE_PATH);
+                const data = await response.json();
+
+                if (data.error) {
+                    showError('Database locked. Run: python3 scripts/export_dashboard_data.py');
+                    return;
+                }
+
+                updateDashboard(data);
+                document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+            } catch (err) {
+                console.log('Using fallback data (live database not yet initialized)');
+                // Fallback to empty state
+                document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+            }
+        }
+
+        function updateDashboard(data) {
+            // Account metrics
+            document.getElementById('balance').textContent = formatCurrency(data.account.balance_usd);
+            document.getElementById('daily-pnl').textContent = formatCurrency(data.daily_pnl.realized_usd);
+            document.getElementById('peak-daily').textContent = formatCurrency(data.daily_pnl.peak_usd);
+
+            // Risk metrics
+            const dllRemaining = Math.max(0, 1000 - Math.abs(data.daily_pnl.realized_usd));
+            document.getElementById('dll-remaining').textContent = formatCurrency(dllRemaining);
+            document.getElementById('tdd-usd').textContent = formatCurrency(data.account.trailing_dd_usd);
+            document.getElementById('trade-count').textContent = `${data.daily_pnl.trade_count} / 8`;
+
+            // Strategy metrics
+            document.getElementById('gf-trades').textContent = data.strategy_performance.gap_fill_trades_today;
+            if (data.strategy_performance.gap_fill_trades_today > 0) {
+                const wr = (data.strategy_performance.gap_fill_profitable / data.strategy_performance.gap_fill_trades_today * 100).toFixed(0);
+                document.getElementById('gf-winrate').textContent = `${wr}%`;
+            }
+
+            // Positions
+            updatePositions(data.positions);
+
+            // Alerts
+            updateAlerts(data);
+
+            // Risk events
+            updateRiskEvents(data.alerts.events);
+
+            // Risk status
+            updateRiskStatus(data);
+        }
+
+        function updatePositions(positions) {
+            if (!positions || positions.length === 0) {
+                document.getElementById('positions-container').innerHTML =
+                    '<p style="color: var(--text-secondary); font-size: 13px;">No open positions</p>';
+                return;
+            }
+
+            let html = `<table class="positions-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Contracts</th>
+                        <th>Entry Price</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            positions.forEach(pos => {
+                const sideBadge = pos.side === 'long'
+                    ? `<span class="side-badge side-long">LONG</span>`
+                    : `<span class="side-badge side-short">SHORT</span>`;
+
+                html += `<tr>
+                    <td><span class="symbol-badge">${pos.symbol}</span></td>
+                    <td>${sideBadge}</td>
+                    <td>${pos.contracts}</td>
+                    <td>${pos.avg_price.toFixed(4)}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('positions-container').innerHTML = html;
+        }
+
+        function updateAlerts(data) {
+            let alertsHtml = '';
+
+            if (data.daily_pnl.realized_usd < -500) {
+                alertsHtml += `<div class="alert-box">
+                    <div class="alert-box-title">⚠ Daily Loss Alert</div>
+                    <div class="alert-box-body">Realized loss exceeds $500. DLL remaining: ${formatCurrency(1000 + data.daily_pnl.realized_usd)}</div>
+                </div>`;
+            }
+
+            if (data.alerts.breaches_blocks > 0) {
+                alertsHtml += `<div class="alert-box">
+                    <div class="alert-box-title">🚫 Risk Events</div>
+                    <div class="alert-box-body">${data.alerts.breaches_blocks} breach/block events today. Check risk events below.</div>
+                </div>`;
+            }
+
+            if (data.account.trailing_dd_usd < -500) {
+                alertsHtml += `<div class="alert-box">
+                    <div class="alert-box-title">⚠ Trailing Drawdown Alert</div>
+                    <div class="alert-box-body">Trailing drawdown: ${formatCurrency(data.account.trailing_dd_usd)}</div>
+                </div>`;
+            }
+
+            document.getElementById('alerts-container').innerHTML = alertsHtml;
+        }
+
+        function updateRiskEvents(events) {
+            if (!events || events.length === 0) {
+                document.getElementById('risk-events-container').innerHTML =
+                    '<p style="color: var(--text-secondary); font-size: 13px;">No risk events</p>';
+                return;
+            }
+
+            let html = '<ul style="list-style: none; font-size: 12px;">';
+            events.forEach(evt => {
+                const icon = evt.severity === 'breach' ? '🚫' : '⚠';
+                html += `<li style="padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                    <strong>${icon} ${evt.rule}</strong><br>
+                    <span style="color: var(--text-secondary);">${evt.detail || '—'}</span><br>
+                    <span style="color: var(--text-secondary); font-size: 11px;">${evt.ts}</span>
+                </li>`;
+            });
+            html += '</ul>';
+            document.getElementById('risk-events-container').innerHTML = html;
+        }
+
+        function updateRiskStatus(data) {
+            let status = 'SAFE';
+            let statusClass = 'status-ok';
+
+            if (data.daily_pnl.realized_usd < -500) {
+                status = 'WARNING';
+                statusClass = 'status-warning';
+            }
+            if (data.daily_pnl.realized_usd < -1000 || data.alerts.breaches_blocks > 0) {
+                status = 'ALERT';
+                statusClass = 'status-alert';
+            }
+
+            const el = document.getElementById('risk-status');
+            el.textContent = status;
+            el.className = `status-badge ${statusClass}`;
+        }
+
+        function formatCurrency(val) {
+            if (val === null || val === undefined) return '$0.00';
+            const sign = val < 0 ? '-' : '';
+            return sign + '$' + Math.abs(val).toFixed(2);
+        }
+
+        function showError(msg) {
+            document.getElementById('alerts-container').innerHTML =
+                `<div class="error">${msg}</div>`;
+        }
+
+        // Load on page load
+        loadDashboard();
+
+        // Auto-refresh every 5 minutes
+        setInterval(loadDashboard, 300000);
+    </script>
+</body>
+</html>

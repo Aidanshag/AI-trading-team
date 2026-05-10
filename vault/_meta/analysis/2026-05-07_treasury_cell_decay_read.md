@@ -10,8 +10,35 @@ sources:
   - vault/_meta/cowork_session_log.md
   - git log since 2026-04-29
 confidence: ADVISORY
-status: open
+status: superseded_by_correction_2026-05-09
 ---
+
+> ## ⚠ CORRECTION 2026-05-09
+>
+> This analysis was written against the cell-set as I understood it on 2026-05-07
+> — `gap_fill` × 14–16 Treasury cells. The actual deployed state (live
+> allowlist generated 2026-05-08T16:35:49Z) is **`gap_fill_wide` × 26 cells**
+> across 6 symbols (treasuries + NG + 6E):
+>
+> - ZN: 4 cells (Asian L/S, PostClose L/S)
+> - ZB: 6 cells (Asian L/S, London L/S, PostClose L/S)
+> - ZT: 5 cells (Asian L/S, London L/S, PostClose L)
+> - ZF: 3 cells (Asian L/S, PostClose S)
+> - NG: 4 cells (Asian L/S, PostClose L/S)
+> - 6E: 4 cells (Asian L/S, PostClose L/S)
+>
+> The strategy code path is `gap_fill_wide`, not `gap_fill`: ≥1.5×ATR gap
+> threshold (vs 0.75), 1.5×ATR stop (vs 0.5), 3-tick stop floor. Designed
+> 2026-05-08 to fix sub-tick stops getting noise-stopped in live.
+>
+> The structural finding below — *"the live-vs-OOS tracker is reporting
+> decay on cells that are no longer allowed to trade, and the cells that
+> ARE allowed have zero live data"* — still holds. The tracker UI
+> staleness is a real Pattern A symptom regardless of which strategy is
+> deployed. But anywhere this piece names specific cells, treat the
+> reference as conceptual, not literal. The follow-up read that should
+> replace this one is queued: `vault/_meta/analysis/proposed_changes/2026-05-09_gap_fill_wide_dollar_sweep_request.md`,
+> which becomes a fresh dollar-metric cell read once CC runs the sweep.
 
 # Treasury cell decay read — 2026-05-07
 

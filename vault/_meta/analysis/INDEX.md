@@ -1,6 +1,6 @@
 ---
 type: meta_index
-updated: 2026-05-07
+updated: 2026-05-09
 ---
 
 # Analysis index — newest first
@@ -13,8 +13,8 @@ row here too.
 |---|---|---|---|---|---|
 | 2026-05-07 | lesson_meta_patterns | Cowork | PATTERN | open | Two structural design principles distilled from the 4 lessons: (A) fail-silent defaults, (B) wrong-context validation. Both at n=2; promote to RULE on a third incident. |
 | 2026-05-07 | risk_event_distribution | Cowork | ADVISORY | open | What the gate stack is actually doing — fee-budget waste, OCO race symbol pattern, network-instability recurrence, hour-of-day proof that the regime gate worked. |
-| 2026-05-07 | treasury_cell_decay_read | Cowork | ADVISORY | open | Live-vs-OOS read on the 14 active Treasury gap_fill cells; which deserve elevated scrutiny next 7 days. |
-| 2026-05-08 | slippage_redirect_and_dollar_metrics | Cowork | PATTERN | open | Why R-multiples are slippage-blind, why the 2026-05-08_2304 sweep recommendation was parked, and Pattern C (metric blindness to deployment cost) added to the meta-patterns library. |
+| 2026-05-07 | treasury_cell_decay_read | Cowork | ADVISORY | superseded_by_correction_2026-05-09 | Live-vs-OOS read on Treasury cells. CORRECTION 2026-05-09: was written against gap_fill × ~14-16 cells; actual deployed state is gap_fill_wide × 26 cells. Structural finding (tracker UI staleness) still holds; specific cell references are conceptual not literal. Replacement read pending CC running the queued dollar-metric sweep. |
+| 2026-05-08 | slippage_redirect_and_dollar_metrics | Cowork | PATTERN | amended_2026-05-09 | Why R-multiples are slippage-blind, why the 2026-05-08_2304 sweep recommendation was parked. AMENDED 2026-05-09: used 0.25 ticks/side as "typical conservative" — empirical Topstep slippage from historical_slippage_topstep.md is closer to 0.10-0.15 ticks/side. Pattern C unchanged; deployment-relevant column is closer to $@slip=0.10. |
 
 ## Proposed changes (in `proposed_changes/`)
 
@@ -22,6 +22,7 @@ row here too.
 |---|---|---|---|
 | 2026-05-08 | passive_entry_orders | PROPOSED | Slippage-reduction lever #1; passive limit at favorable side of spread for mean-reversion strategies (gap_fill family). Implementation sketch + OCO interaction notes; needs user/CC sign-off before merge. |
 | 2026-05-08 | setup_confluence_requirement | PROPOSED | Require ≥1 of (vol>1.5×MA, ATR expansion, cross-strategy agreement) before firing in autonomous mode. A/B-friendly flag design; composes with passive entries. |
+| 2026-05-09 | gap_fill_wide_dollar_sweep_request | PENDING_EXECUTION | Sweep request for CC on the trading host (Cowork's Linux sandbox can't run yfinance). gap_fill_wide × 36 combos × 6 symbols = 216 runs. Output paths under vault/research/param_sweeps/. Cowork follows up with analysis read once outputs land. |
 
 ## Priority queue 2026-05-08 — backend brain upgrades (all 4 shipped)
 

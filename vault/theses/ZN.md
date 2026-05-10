@@ -5,31 +5,45 @@ sector: rates
 conviction: high
 direction: intraday (long + short cells both validated)
 timeframe: intraday
-strategy: gap_fill
+strategy: gap_fill_wide
 status: STANDING_LIVE
 primary_driver: overnight gap mean-reversion
 related: [[ZB]], [[ZT]], [[ZF]]
-updated: 2026-05-06T23:30:00Z
+updated: 2026-05-09T15:00:00Z
 author: Cowork (Claude)
 ---
 
-# [[ZN]] — gap_fill standing edge
+# [[ZN]] — gap_fill_wide standing edge
 
-> Standing live edge on the 10Y Treasury future: fade open gaps > 0.75×ATR back to prior close. Both long (gap-down fade) and short (gap-up fade) cells validated on Asian and PostClose sessions. ZN is the original walk-forward validated symbol; the rest of the curve ([[ZB]], [[ZT]], [[ZF]]) are extensions.
+> Standing live edge on the 10Y Treasury future: fade open gaps ≥ 1.5×ATR back to prior close, with stops at 1.5×ATR (≥3 ticks hard floor) for live tradability. Both long (gap-down fade) and short (gap-up fade) cells validated on Asian and PostClose sessions. ZN is the original walk-forward validated symbol; the rest of the curve ([[ZB]], [[ZT]], [[ZF]]) are extensions.
+
+## Strategy variant — gap_fill → gap_fill_wide (2026-05-08)
+
+The deployed code path is `gap_fill_wide`, a slippage-tolerant variant of the original `gap_fill`. Three parameter changes:
+
+| Parameter | gap_fill | gap_fill_wide | Why |
+|---|---|---|---|
+| `min_gap_atr` | 0.75 | **1.5** | Only larger gaps fire; reduces low-conviction signals |
+| Stop distance | 0.5 × ATR | **1.5 × ATR** | Wider buffer; survives intra-bar noise |
+| `min_stop_ticks` | (none) | **3** | Hard floor — sub-tick stops were getting noise-stopped live |
+
+Why the variant exists: ATR on 5m treasury bars is typically 1–3 ticks. The original `gap_fill` `0.5×ATR` stop produced sub-tick stops that the backtest accepted (idealized fills) but that live execution noise-stopped before the trade had time to work. `gap_fill_wide` is the live-tradable expression of the same edge.
+
+The OOS evidence cited in this thesis is from the parent `gap_fill` walk-forward validation. The wide variant inherits the family edge but trades less frequently (signals require ≥1.5×ATR gaps). Live observations on `gap_fill_wide` specifically begin Sunday 2026-05-10.
 
 ## Thesis
 
 This is not a directional view. It is a documented statistical edge that the system trades both ways when the trigger fires.
 
-- **Mechanic.** When ZN opens with `|open − prior_close| > 0.75 × ATR(14)`, fade the gap back toward prior close. Stop is set 0.5 × ATR beyond the gap-extreme; target is prior close. `rr_target = 1.5` enforces the reward-to-risk floor at signal time. Code: `tools/backtest/strategies.py:gap_fill`.
+- **Mechanic (live: `gap_fill_wide`).** When ZN opens with `|open − prior_close| ≥ 1.5 × ATR(14)`, fade the gap back toward prior close. Stop = entry ± 1.5 × ATR (with `min_stop_ticks=3` hard floor); target is prior close. `rr_target = 1.5` enforces the reward-to-risk floor at signal time. Code: `tools/backtest/strategies.py:gap_fill_wide` (lines 1251+). Parent strategy: `tools/backtest/strategies.py:gap_fill`.
 - **Why it works on Treasuries.** Overnight gaps in rates futures absent fresh policy news tend to be flow-driven (Asian sovereign hedging, basis-trade unwinds, futures-vs-cash repricing) rather than information-driven. Once US liquidity returns, the gap is treated as noise and bid/offered back into prior structure. The fade reflects this microstructure asymmetry: information-driven gaps (FOMC, NFP, CPI) extend; flow-driven gaps revert.
 - **Walk-forward evidence (60d 5m bars, 45d train / 15d held-out OOS).** Train n=585 E=+0.87R t=+15.21. **OOS n=256 E=+1.10R t=+11.95 hit-rate=70%.** OOS hit > train hit (69.9% vs 65.7%) is a strong tell against curve-fit — the held-out window outperformed the training window. Source: `vault/research/backtests/2026-05-04_2139_walk_forward_validation.md`.
-- **Live deployment (locked 2026-05-06 22:24 UTC).** Four ZN cells active in `state/strategy_validation.json:live_allowlist`:
-  - `gap_fill | ZN | Asian | long`
-  - `gap_fill | ZN | Asian | short`
-  - `gap_fill | ZN | PostClose | long`
-  - `gap_fill | ZN | PostClose | short`
-  - Sessions in ET: Asian = 20:00–04:00, PostClose = 16:00–20:00.
+- **Live deployment (allowlist generated 2026-05-08T16:35:49Z).** Four ZN cells active in `state/strategy_validation.json:live_allowlist`:
+  - `gap_fill_wide | ZN | Asian | long`
+  - `gap_fill_wide | ZN | Asian | short`
+  - `gap_fill_wide | ZN | PostClose | long`
+  - `gap_fill_wide | ZN | PostClose | short`
+  - Sessions in ET: Asian = 20:00–04:00, PostClose = 16:00–20:00. ZN is one of 6 symbols in the 26-cell `gap_fill_wide` deployment (treasuries + NG + 6E).
 - **Per-trade economics (validated cells).** Tick = $15.625. Typical 5–8 tick stop = $80–$125 — well inside the $250 per-trade cap. Round-trip fee is in the $3 range for full-size rates contracts. Reward-to-fee at default `rr_target=1.5` clears the 3× fee floor.
 
 ## What would kill it
@@ -58,7 +72,7 @@ If a ZN cell gets flagged as ⚠ UNDERPERFORM in the live-vs-OOS tracker, this t
 
 ## Related
 
-- Strategy code: `tools/backtest/strategies.py:gap_fill`
+- Strategy code: `tools/backtest/strategies.py:gap_fill_wide` (live), `gap_fill` (parent)
 - Live allowlist: `state/strategy_validation.json:live_allowlist`
 - Walk-forward source: `vault/research/backtests/2026-05-04_2139_walk_forward_validation.md`
 - Curve siblings: [[ZB]] · [[ZT]] · [[ZF]]

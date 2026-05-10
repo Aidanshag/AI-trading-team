@@ -322,3 +322,139 @@ as "removed from tree" by 052c1da and "re-added" by b08e9c9.
   ```
   If `git status` shows all files as untracked, do NOT commit yet —
   re-add tracked files first.
+
+---
+
+## 2026-05-09 — Session catchup, theses reconciliation, sweep queued for CC
+
+**Context.** Continuation after context compaction. User said "do the
+catchup reads first" — fill blind spots before more implementation.
+Then "reconcile the theses first and then run the sweep."
+
+### Catchup reads completed
+
+- `vault/_meta/improvement_backlog.md` (full state under
+  close-the-gap reframe)
+- `vault/_meta/weekend_plan.md` (P0/P1 task queue)
+- `vault/_meta/data_strategy.md` (the $0 path — Topstep API + accumulated
+  fills as the moat)
+- `vault/_meta/agent_v2_protocol.md` (agent skills upgrade)
+- `vault/_meta/claude_ai_routine_instructions.md` (paste-ready
+  morning brief + evening journal prompts)
+- `vault/_meta/memory_backup/` — read all unread feedback files plus
+  user_profile, project_hedge_fund, project_validated_edge_gap_fill,
+  project_2026_05_05_profit_lock_incident, project_after_hours_reopening,
+  project_strategy_focus_fvg, project_bracket_oco_bug
+- `vault/research/historical_slippage_topstep.md` (n=31 v1 fills →
+  empirical slippage 0.10–0.15 ticks/side, materially better than
+  the 0.25 I'd been modelling)
+- `vault/research/param_sweeps/gap_fill_2026-05-08_2304.md` (the
+  parked sweep itself)
+
+### Findings the user got a synthesis of
+
+1. Strategic vision is **multi-account replication** (5–10%/yr per
+   account × N accounts), not single-account alpha.
+2. `feedback_silent_default_means_off.md` is my "Pattern A". Already
+   standing canon — my analysis piece was a re-derivation.
+3. `feedback_self_prompted_initiative.md` — pick highest-leverage
+   move, don't enumerate options.
+4. `feedback_proactive_diagnosis.md` + `feedback_auto_repair_dead_agents.md`
+   + `feedback_autonomous_overnight_fixes.md` — fix observed brokenness
+   in same turn (HIGH_RISK_FILES still gated).
+5. `feedback_cost_urgency.md` — clean no-trade day = -$26 loss.
+6. `feedback_restart_after_patch.md` — patches to imports require
+   trader restart with `inspect.getsource` verification.
+7. Slippage reality is materially better than my modelling
+   (0.10–0.15 vs my 0.25). Combine pass probability 93–98%.
+
+### Theses reconciled to gap_fill_wide × 26 cells
+
+Updated `vault/theses/{ZN,ZB,ZT,ZF}.md`:
+- frontmatter `strategy: gap_fill` → `gap_fill_wide`
+- frontmatter `updated:` → 2026-05-09T15:00:00Z
+- title and headline updated to reference the wide variant
+- new "Strategy variant — gap_fill → gap_fill_wide (2026-05-08)"
+  section explaining the param differences and why
+- mechanic updated (≥1.5×ATR gap, 1.5×ATR stop, 3-tick floor)
+- live deployment cells updated to match
+  `state/strategy_validation.json:live_allowlist` as of
+  2026-05-08T16:35:49Z:
+  - ZN: 4 cells (Asian L/S, PostClose L/S) — unchanged count
+  - ZB: 6 cells (Asian L/S, London L/S, PostClose L/S) — was 5,
+    +PostClose short
+  - ZT: 5 cells (Asian L/S, London L/S, PostClose L) — was 4,
+    +PostClose long
+  - ZF: 3 cells (Asian L/S, PostClose S) — unchanged
+- "Related" sections cite `gap_fill_wide` (live) + `gap_fill` (parent)
+
+OOS evidence cited in each thesis is from parent `gap_fill` —
+`gap_fill_wide` accumulates its own live data starting Sunday 2026-05-10.
+
+### Sweep queued for CC (can't run from sandbox)
+
+`vault/_meta/analysis/proposed_changes/2026-05-09_gap_fill_wide_dollar_sweep_request.md`
+
+Cowork's Linux sandbox has no PyPI access (proxy blocks `pip install
+yfinance`). Queued the exact command for CC on the trading host:
+
+```
+python -m scripts.param_sweep \
+  --strategy gap_fill_wide \
+  --params 'min_gap_atr=1.0,1.25,1.5,2.0; rr_target=1.0,1.5,2.0; stop_atr_mult=1.0,1.5,2.0' \
+  --symbols ZN,ZT,ZB,ZF,NG,6E
+```
+
+36 combos × 6 symbols = 216 runs. Dollar metrics auto-populate via the
+extension I shipped earlier (the `mean_net_usd_at_slip_X` /
+`breakeven_slip_ticks` columns fire when the symbol is in
+`TICK_ECONOMICS`). Output paths land in
+`vault/research/param_sweeps/gap_fill_wide_<UTC_DATE>_<HHMM>.{csv,md}`.
+
+Cowork-coordination.md got a "⚡ Pending request from Cowork — 2026-05-09"
+section at the top so CC sees the request on session-open.
+
+I'll write the analysis read on the next Cowork session once the output
+files exist.
+
+### Analysis pieces amended (Pattern A symptom on my own work)
+
+- `vault/_meta/analysis/2026-05-07_treasury_cell_decay_read.md`:
+  status → `superseded_by_correction_2026-05-09`. Header callout
+  explains the correct cell-set is 26 cells × 6 symbols × `gap_fill_wide`,
+  not 14-16 × treasuries × `gap_fill`. Structural finding (tracker UI
+  staleness) still valid; specific cell references are conceptual.
+- `vault/_meta/analysis/2026-05-08_slippage_redirect_and_dollar_metrics.md`:
+  status → `amended_2026-05-09`. Header callout explains empirical
+  Topstep slippage from `historical_slippage_topstep.md` is
+  0.10-0.15 ticks/side, not the 0.25 I'd been modelling. Pattern C
+  unchanged; deployment-relevant column is closer to $@slip=0.10.
+
+### INDEX.md updated
+
+`vault/_meta/analysis/INDEX.md` now reflects:
+- 2026-05-07 cell-decay piece status: superseded_by_correction_2026-05-09
+- 2026-05-08 slippage-redirect piece status: amended_2026-05-09
+- New row under "Proposed changes": 2026-05-09 sweep request
+
+### Git situation
+
+Bash `git add` failed with `fatal: unknown index entry format
+0x39330000` — same OneDrive-stale artifact we've seen before. Cleared
+with `rm .git/index && git reset --mixed HEAD`. The 4 thesis files +
+the 2 amended analysis pieces + INDEX + this entry + the proposed
+sweep-request doc + cowork_coordination update will all land via CC's
+auto-commit on its next cycle.
+
+If CC sees this entry before its next auto-commit fires, manually push
+is fine — none of the changes are HIGH_RISK_FILES.
+
+### What's pending
+
+1. **CC: run the queued sweep command** when convenient.
+2. **Cowork: write the dollar-metric analysis read** once output files exist.
+3. **Both: continue executing the close-the-gap reframe** — variance
+   between live and predicted is the headline metric, not P&L.
+
+User logged off mid-session ("finish all of this autonomously i have
+to log") — closing out cleanly with this entry.

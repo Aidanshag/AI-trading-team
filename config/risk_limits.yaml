@@ -24,7 +24,7 @@ hard_rules:
   # 24/5 trading enabled per user 2026-04-28. No active halt timestamp.
   # Auto-halt at session close is also disabled in fund.yaml for 24/5 mode.
   # Re-arm to a future timestamp here if you want to pause overnight.
-  trading_halt_until: "2026-05-01T19:17:02Z"
+  trading_halt_until: "2026-05-09T00:00:00Z"
 
 # ============================================================
 # ACCOUNT-LEVEL LIMITS

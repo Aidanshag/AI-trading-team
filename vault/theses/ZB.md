@@ -5,29 +5,35 @@ sector: rates
 conviction: high
 direction: intraday (long + short cells both validated)
 timeframe: intraday
-strategy: gap_fill
+strategy: gap_fill_wide
 status: STANDING_LIVE
 primary_driver: overnight gap mean-reversion on long-end Treasury
 related: [[ZN]], [[ZT]], [[ZF]]
-updated: 2026-05-06T23:30:00Z
+updated: 2026-05-09T15:00:00Z
 author: Cowork (Claude)
 ---
 
-# [[ZB]] — gap_fill standing edge (long-end of the curve)
+# [[ZB]] — gap_fill_wide standing edge (long-end of the curve)
 
-> Standing live edge on the 30Y Treasury Bond future. Same gap_fill mechanic as [[ZN]], applied to the long end. Five cells active live — the most cells of any single Treasury, including a London PostClose long that landed in the 2026-05-06 promotion. OOS E=+0.98R, t=+10.50, n=382.
+> Standing live edge on the 30Y Treasury Bond future. Same `gap_fill_wide` mechanic as [[ZN]] (≥1.5×ATR gap, 1.5×ATR stop, 3-tick floor), applied to the long end. **Six cells active live** — the most cells of any single Treasury, with all three sessions × both sides represented. Parent-strategy OOS E=+0.98R, t=+10.50, n=382.
+
+## Strategy variant — gap_fill → gap_fill_wide (2026-05-08)
+
+Same variant change as ZN: live code path is `gap_fill_wide`, OOS evidence cited below is from parent `gap_fill`. ZB has the highest tick value of the curve ($31.25), so the wide-stop variant matters most here — `gap_fill`'s 0.5×ATR stop translated to ~$25 worst-case which the broker noise-stopped easily; `gap_fill_wide`'s 1.5×ATR stop with 3-tick floor produces ~$94 minimum stops that survive normal book chop.
 
 ## Thesis
 
-- **Mechanic.** Identical to [[ZN]] and [[ZT]]. Code: `tools/backtest/strategies.py:gap_fill`.
+- **Mechanic (live: `gap_fill_wide`).** Identical to [[ZN]] and [[ZT]]: ≥1.5×ATR gap fires; stop = 1.5×ATR with 3-tick floor; target = prior close; rr_target=1.5. Code: `tools/backtest/strategies.py:gap_fill_wide`.
 - **Why ZB on the long end.** The 30Y is more sensitive to term-premium repricing and quarterly refunding announcements than to near-term Fed policy. Overnight gaps tend to be flow-driven (foreign sovereign rebalancing, pension duration matching, basis-trade adjustments) rather than information-driven, which is exactly the regime where gap_fill works.
 - **Walk-forward evidence (Tier 3, 2026-05-05).** OOS hit 59.2%, E=+0.98R, t=+10.50, n=382 — lower hit rate than [[ZT]] but the highest sample size in the universe. Source: `vault/research/backtests/2026-05-05_2207_tier3_gapfill_extensions.md`.
-- **Live deployment (locked 2026-05-06 22:24 UTC).** Five ZB cells active in `state/strategy_validation.json:live_allowlist`:
-  - `gap_fill | ZB | Asian | long` — OOS E=+0.82R, t=+5.34, n=129
-  - `gap_fill | ZB | Asian | short` — OOS E=+1.19R, t=+8.15, n=145
-  - `gap_fill | ZB | London | long` — OOS E=+0.57R, t=+2.11, n=26 (added 2026-05-06)
-  - `gap_fill | ZB | London | short` — OOS E=+0.94R, t=+1.80, n=31
-  - `gap_fill | ZB | PostClose | long` — OOS E=+1.04R, t=+3.41, n=28 (added 2026-05-06)
+- **Live deployment (allowlist generated 2026-05-08T16:35:49Z).** Six ZB cells active in `state/strategy_validation.json:live_allowlist` — all three sessions × both sides:
+  - `gap_fill_wide | ZB | Asian | long` — parent OOS E=+0.82R, t=+5.34, n=129
+  - `gap_fill_wide | ZB | Asian | short` — parent OOS E=+1.19R, t=+8.15, n=145
+  - `gap_fill_wide | ZB | London | long` — parent OOS E=+0.57R, t=+2.11, n=26
+  - `gap_fill_wide | ZB | London | short` — parent OOS E=+0.94R, t=+1.80, n=31
+  - `gap_fill_wide | ZB | PostClose | long` — parent OOS E=+1.04R, t=+3.41, n=28
+  - `gap_fill_wide | ZB | PostClose | short` (added in 2026-05-08 promotion)
+  - All session OOS evidence is from parent `gap_fill`; `gap_fill_wide` is a higher-bar (≥1.5×ATR) subset and accumulates its own live data starting 2026-05-10.
 - **Per-trade economics.** Tick = $31.25 — twice ZN's tick. 5-tick stop = $156. 7-tick reward = $219. Round-trip fee ~$3. Reward/fee ~73× — clears the floor by a wide margin. **The bigger ticks mean ZB has the highest per-trade variance of the curve** — manage sizing accordingly.
 
 ## What would kill it
@@ -54,7 +60,7 @@ Active. **Watch for the London cells especially** — they were added 2026-05-06
 
 ## Related
 
-- Strategy code: `tools/backtest/strategies.py:gap_fill`
+- Strategy code: `tools/backtest/strategies.py:gap_fill_wide` (live), `gap_fill` (parent)
 - Live allowlist: `state/strategy_validation.json:live_allowlist`
 - Tier 3 walk-forward: `vault/research/backtests/2026-05-05_2207_tier3_gapfill_extensions.md`
 - Recent promotions (London/PostClose adds): `vault/research/validation/promotion_log.md`
