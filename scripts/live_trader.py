@@ -77,15 +77,13 @@ MIN_SIGNAL_R_TICKS = 6            # reject signals whose stop OR target distance
                                   # buffer; if the strategy R-distance is smaller than the buffer,
                                   # the trade can't escape the buffer for a profit and may
                                   # degenerate into an orphan-leg fill. 2026-05-10 incident.)
-SKIP_TARGET_LEG = False           # workaround for 2026-05-11 broker behavior where target
-                                  # LIMIT orders auto-fill within ~100ms of placement at
-                                  # next-available market price (target limit is essentially
-                                  # ignored; position closes immediately at 1 tick adverse).
-                                  # When True: place_bracket places ONLY entry + stop, no target.
-                                  # Position then runs until stop fires OR per-trade loss cap
-                                  # OR manual flatten. See
-                                  # `vault/research/analysis/2026-05-11_broker_target_fill_anomaly.md`.
-                                  # Default OFF -- requires explicit user enable after review.
+SKIP_TARGET_LEG = True            # 2026-05-11 evening: enabled per user direction after
+                                  # confirming the broker target-fill anomaly. Target LIMIT
+                                  # orders were auto-filling within ~100ms at next-available
+                                  # market price (limit price essentially ignored). Workaround:
+                                  # place ONLY entry + stop. Position runs until stop fires,
+                                  # per-trade loss cap ($150), or manual flatten.
+                                  # See vault/research/analysis/2026-05-11_broker_target_fill_anomaly.md
 LIVE_ALLOWLIST_PATH = _HERE / "state" / "strategy_validation.json"
 HALT_FILE = _HERE / "state" / "live_trader_halt"   # touch to halt; remove to resume
 
