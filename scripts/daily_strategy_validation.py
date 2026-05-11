@@ -129,19 +129,39 @@ def session_bucket(et_hour: float) -> str:
     return "Asian"
 
 
-def fetch_bars(ticker: str, period: str = "60d", interval: str = "5m"):
-    df = yf.download(ticker, period=period, interval=interval,
-                     progress=False, auto_adjust=False)
-    if df.empty:
-        return None
-    if hasattr(df.columns, "get_level_values"):
-        df.columns = df.columns.get_level_values(0)
-    keep = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in df.columns]
-    df = df[keep].copy().dropna()
-    if df.index.tz is None:
-        df.index = df.index.tz_localize("UTC")
-    df.index = df.index.tz_convert("America/New_York")
-    return df
+def fetch_bars(ticker: str, period: str = "60d", interval: str = "5m",
+                max_retries: int = 3, backoff_sec: float = 2.0):
+    """Pull bars from yfinance with retry on transient failures.
+
+    2026-05-11: today's validation showed 794/2800 cells weren't re-evaluated
+    because yfinance returned empty data for some symbols. Adding retries
+    addresses that — yfinance's free endpoint occasionally returns empty
+    on first call for active symbols. 3 retries with exponential backoff
+    is the common pattern.
+    """
+    import time as _time
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            df = yf.download(ticker, period=period, interval=interval,
+                             progress=False, auto_adjust=False)
+        except Exception as e:
+            last_err = e
+            df = None
+        if df is not None and not df.empty:
+            if hasattr(df.columns, "get_level_values"):
+                df.columns = df.columns.get_level_values(0)
+            keep = [c for c in ["Open", "High", "Low", "Close", "Volume"]
+                    if c in df.columns]
+            df = df[keep].copy().dropna()
+            if df.index.tz is None:
+                df.index = df.index.tz_localize("UTC")
+            df.index = df.index.tz_convert("America/New_York")
+            return df
+        # Empty or exception → backoff before retry
+        if attempt < max_retries - 1:
+            _time.sleep(backoff_sec * (2 ** attempt))
+    return None
 
 
 def _tick_size_for_symbol(sym: str) -> float | None:

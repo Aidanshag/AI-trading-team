@@ -183,16 +183,132 @@ def fetch_bars(client, symbol: str, minutes: int = 5, lookback: int = 200):
     return _fetch_bars_impl(client, symbol, minutes, lookback, log_fn=_log)
 
 
+def _load_calendar_events(symbol: str) -> list[dict]:
+    """Load HIGH/MEDIUM economic events affecting `symbol` from
+    vault/economic_calendar/*.json. Returns [{'ts': datetime, 'severity': str}].
+    Never raises; returns [] on any error or missing files. 2026-05-11."""
+    cal_dir = _HERE / "vault" / "economic_calendar"
+    if not cal_dir.exists():
+        return []
+    out: list[dict] = []
+    # 1. Fed speakers / Fed releases
+    fs = cal_dir / "fed_speakers.json"
+    if fs.exists():
+        try:
+            data = json.loads(fs.read_text(encoding="utf-8"))
+            for e in data.get("events", []) or []:
+                infl = str(e.get("influence", "")).upper()
+                if infl not in ("HIGH", "MEDIUM"):
+                    continue
+                ts = e.get("ts_utc")
+                if not ts:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                except Exception:
+                    continue
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                out.append({"ts": dt, "severity": infl})
+        except Exception:
+            pass
+    # 2. Treasury auctions for this symbol
+    ta = cal_dir / "treasury_auctions.json"
+    if ta.exists():
+        try:
+            data = json.loads(ta.read_text(encoding="utf-8"))
+            for a in data.get("auctions", []) or []:
+                primary = a.get("affected_primary", []) or []
+                basis = a.get("affected_basis", []) or []
+                if symbol not in primary and symbol not in basis:
+                    continue
+                ts = a.get("auction_dt_et")
+                if not ts:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(str(ts))
+                    if dt.tzinfo is None:
+                        # ET is UTC-4 in DST. Approximate; events span ±15min anyway.
+                        dt = dt.replace(tzinfo=timezone(timedelta(hours=-4)))
+                except Exception:
+                    continue
+                severity = "HIGH" if symbol in primary else "MEDIUM"
+                out.append({"ts": dt, "severity": severity})
+        except Exception:
+            pass
+    # 3. today.json (econ data prints — EIA, CPI, NFP, etc.)
+    tj = cal_dir / "today.json"
+    if tj.exists():
+        try:
+            raw = json.loads(tj.read_text(encoding="utf-8"))
+            events_iter = raw.get("events", []) if isinstance(raw, dict) else (raw or [])
+            for e in events_iter:
+                impact = str(e.get("impact", "")).lower()
+                if impact not in ("high", "medium"):
+                    continue
+                ts = e.get("ts_utc") or e.get("time_utc")
+                if not ts:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                except Exception:
+                    continue
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                out.append({"ts": dt, "severity": impact.upper()})
+        except Exception:
+            pass
+    return out
+
+
+def news_proximity_for(symbol: str, now: datetime | None = None) -> str:
+    """Distance to nearest HIGH/MEDIUM economic event affecting `symbol`.
+    Returns 'inside' (±15 min of HIGH), 'near' (15-60 min of HIGH OR
+    ±60 min of MEDIUM), or 'clear' (otherwise). 2026-05-11.
+
+    Used to gate cells around scheduled-event volatility. Strategies like
+    vol_spike_fade can be tagged news_proximity=['near','inside'] for
+    surgical fire-only-near-news deployment.
+    """
+    if now is None:
+        now = _now_utc()
+    events = _load_calendar_events(symbol)
+    if not events:
+        return "clear"
+    closest_high = None
+    closest_med = None
+    for e in events:
+        try:
+            mins = abs((e["ts"] - now).total_seconds() / 60)
+        except Exception:
+            continue
+        if e["severity"] == "HIGH":
+            if closest_high is None or mins < closest_high:
+                closest_high = mins
+        elif e["severity"] == "MEDIUM":
+            if closest_med is None or mins < closest_med:
+                closest_med = mins
+    if closest_high is not None and closest_high <= 15:
+        return "inside"
+    if (closest_high is not None and closest_high <= 60) or \
+       (closest_med is not None and closest_med <= 60):
+        return "near"
+    return "clear"
+
+
 def current_regime(bars: pd.DataFrame,
                     vol_lookback: int = 14, vol_ref_window: int = 100,
-                    trend_lookback: int = 14, trend_ref_window: int = 100) -> dict:
+                    trend_lookback: int = 14, trend_ref_window: int = 100,
+                    symbol: str | None = None) -> dict:
     """Compute the current vol+trend regime of the latest bar.
 
     Mirrors `scripts/regime_classifier.py` logic but computes inline so
     the trader doesn't need to read a stale per-day tag file.
 
     Returns:
-        {'vol_regime': 'low'|'med'|'high', 'trend_regime': 'trending'|'ranging'}
+        {'vol_regime': 'low'|'med'|'high',
+         'trend_regime': 'trending'|'ranging',
+         'news_proximity': 'clear'|'near'|'inside'}     # if symbol provided
     Returns {} if bars too short to classify.
     """
     if len(bars) < max(vol_ref_window, trend_ref_window) + vol_lookback:
@@ -225,7 +341,13 @@ def current_regime(bars: pd.DataFrame,
             trend_regime = "ranging"
     except Exception:
         return {}
-    return {"vol_regime": vol_regime, "trend_regime": trend_regime}
+    result = {"vol_regime": vol_regime, "trend_regime": trend_regime}
+    if symbol:
+        try:
+            result["news_proximity"] = news_proximity_for(symbol)
+        except Exception:
+            pass
+    return result
 
 
 def cell_passes_regime_filter(cell: dict, regime: dict) -> tuple[bool, str]:
@@ -766,8 +888,8 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
         if bars is None or len(bars) < 30:
             continue
 
-        # Current vol+trend regime from these bars (cell-level gate uses it)
-        regime = current_regime(bars)
+        # Current vol+trend regime (+ news_proximity for this symbol)
+        regime = current_regime(bars, symbol=symbol)
 
         # For each cell, check session+side match and try to fire
         fired_for_symbol = False

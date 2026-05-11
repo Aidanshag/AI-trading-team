@@ -91,24 +91,27 @@ switch ($Verb.ToLower()) {
         & $Python -m scripts.check_status
     }
     "start" {
-        Write-Host "Starting auto-trader (5-min scans, 45-min cooldown)..." -ForegroundColor Green
+        # 2026-05-11: switched from auto_trader to live_trader (the active trader).
+        # auto_trader retained as legacy reference but not the production path anymore.
+        Write-Host "Starting live_trader (5-min scans)..." -ForegroundColor Green
         Write-Host "Press Ctrl+C to stop. Open positions stay safe at Topstep." -ForegroundColor DarkGray
         Write-Host ""
-        & $Python -u -m scripts.auto_trader --interval-minutes 5
+        & $Python -u -m scripts.live_trader
     }
     "start-debug" {
-        # 2026-04-29: zero cooldown removed after DLL breach. Use --dry-run
-        # for tight-loop testing. This entry is kept for muscle memory but
-        # uses the same safe defaults as `start`.
-        Write-Host "start-debug retired (caused 2026-04-29 DLL breach)." -ForegroundColor Yellow
-        Write-Host "For tight-loop testing use:  fund start-dry" -ForegroundColor Yellow
-        Write-Host "Falling through to safe `fund start` defaults..." -ForegroundColor DarkGray
-        & $Python -m scripts.auto_trader --interval-minutes 5
+        Write-Host "start-debug retired. Use `fund start-dry` for tight-loop testing." -ForegroundColor Yellow
+        & $Python -u -m scripts.live_trader
     }
     "start-dry" {
-        Write-Host "Starting auto-trader DRY RUN (5-min scans, no broker writes)..." -ForegroundColor Cyan
-        Write-Host ""
-        & $Python -m scripts.auto_trader --interval-minutes 5 --cooldown-minutes 5 --dry-run
+        Write-Host "Starting live_trader DRY RUN (5-min scans, no broker writes)..." -ForegroundColor Cyan
+        & $Python -m scripts.live_trader --dry-run
+    }
+    "start-legacy" {
+        # Kept for archaeological purposes only — auto_trader hasn't been the
+        # production path since 2026-05-11. Don't use unless deliberately
+        # reverting.
+        Write-Host "Starting LEGACY auto_trader (deprecated path, not recommended)..." -ForegroundColor Yellow
+        & $Python -u -m scripts.auto_trader --interval-minutes 5
     }
     "stop" {
         Write-Host "Killing all python processes..." -ForegroundColor Yellow

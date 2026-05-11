@@ -330,6 +330,68 @@ def test_cell_passes_regime_filter_unknown_regime_fail_closed():
     assert lt.cell_passes_regime_filter(open_cell,  {})[0] is True
 
 
+def test_news_proximity_clear_when_no_events_nearby(monkeypatch):
+    """When _load_calendar_events returns nothing, proximity is 'clear'."""
+    monkeypatch.setattr(lt, "_load_calendar_events", lambda sym: [])
+    assert lt.news_proximity_for("ZN") == "clear"
+
+
+def test_news_proximity_inside_within_15min_of_high(monkeypatch):
+    """A HIGH event within 15 min returns 'inside'."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
+    # Event 10 min from now
+    monkeypatch.setattr(lt, "_load_calendar_events",
+                         lambda sym: [{"ts": now + timedelta(minutes=10), "severity": "HIGH"}])
+    assert lt.news_proximity_for("ZN", now=now) == "inside"
+
+
+def test_news_proximity_near_when_30min_from_high(monkeypatch):
+    """A HIGH event 30 min away returns 'near'."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(lt, "_load_calendar_events",
+                         lambda sym: [{"ts": now + timedelta(minutes=30), "severity": "HIGH"}])
+    assert lt.news_proximity_for("ZN", now=now) == "near"
+
+
+def test_news_proximity_near_when_60min_from_medium(monkeypatch):
+    """A MEDIUM event 50 min away returns 'near' (medium has wider near window)."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(lt, "_load_calendar_events",
+                         lambda sym: [{"ts": now + timedelta(minutes=50), "severity": "MEDIUM"}])
+    assert lt.news_proximity_for("ZN", now=now) == "near"
+
+
+def test_news_proximity_clear_when_far_from_event(monkeypatch):
+    """Events 4+ hours away return 'clear'."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(lt, "_load_calendar_events",
+                         lambda sym: [{"ts": now + timedelta(hours=4), "severity": "HIGH"}])
+    assert lt.news_proximity_for("ZN", now=now) == "clear"
+
+
+def test_current_regime_includes_news_when_symbol_passed(monkeypatch):
+    """current_regime(bars, symbol='ZN') includes news_proximity in output."""
+    import pandas as pd
+    import numpy as np
+    np.random.seed(7)
+    n = 200
+    rets = np.random.randn(n) * 0.001
+    close = 100 * np.exp(np.cumsum(rets))
+    bars = pd.DataFrame(
+        {"Open": close, "High": close + 0.1, "Low": close - 0.1,
+         "Close": close, "Volume": [1]*n},
+        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
+    )
+    monkeypatch.setattr(lt, "_load_calendar_events", lambda sym: [])
+    regime = lt.current_regime(bars, symbol="ZN")
+    assert "news_proximity" in regime
+    assert regime["news_proximity"] == "clear"
+
+
 def test_current_regime_returns_empty_on_short_bars():
     """Too few bars to classify -> empty dict so gate fails closed."""
     import pandas as pd

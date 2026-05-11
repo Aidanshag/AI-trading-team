@@ -74,28 +74,54 @@ The auto_trader has its OWN parallel checks (it doesn't go through the SDK PreTo
 - Internal-DLL hard kill
 - Consecutive-loser pause + agent-cascade auto-halt
 
-## Strategic focus — gap_fill on ZN/NG/6E (validated 2026-05-04)
+## Strategic focus — diversified mix, gap_fill DEMOTED (updated 2026-05-11)
 
-The fund's **validated headline edge** is `gap_fill` on Treasury futures (ZN), nat gas (NG), and euro FX (6E). 60-day walk-forward backtest (45d train / 15d held-out OOS) on 5m intraday bars:
+**2026-05-11 correction:** the prior "gap_fill headline edge" claim was based on a validation pipeline with three compounding bugs (missing tick_size injection, t.stop_price typo, silent division-by-tiny-epsilon). Under the corrected pipeline (see `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`), **neither gap_fill nor gap_fill_wide produces a deployable parameter set**. The original t=+7.95 to +11.76 figures were artifacts. gap_fill has been removed from `live_strategies_filter`.
 
-- **ZN gap_fill (Asian + PostClose)**: train E=+0.87R t=+15.21 | **OOS E=+1.10R t=+11.95** (n=256 OOS) — fund's primary edge
-- **6E gap_fill**: train E=+1.50R | **OOS E=+2.65R t=+3.63** (small n but strong)
-- **NG gap_fill**: train E=+0.64R | OOS E=+0.83R t=+1.53 (borderline holds)
+**Current `state/strategy_validation.json:live_strategies_filter` (deployed 2026-05-11 evening, 23 cells):**
 
-Gating is enforced via `scripts/auto_trader.py:STRATEGY_SYMBOL_ALLOWLIST` — `gap_fill` ONLY fires on `{ZN, NG, 6E}`. On MES/MNQ/MCL/GC the strategy didn't validate OOS and is blocked.
+| Strategy | Symbols | Sessions | Notes |
+|---|---|---|---|
+| `fair_value_gap` | MNQ, 6E, NG | Asian, RTH | MNQ Asian long t=+3.60 n=43 is strongest |
+| `fair_value_gap_tuned` | MNQ, GC, 6E | Asian | Tuned variant, t=+3.37 best |
+| `narrow_range_break` | GC | Asian | n=39 t=+2.60 strongest non-FVG cell |
+| `vol_spike_fade` | ZF, 6C | Asian | **regime_filter: vol_regime=high** (surgical) |
+| `inside_bar_break` | NG, GC | London, PostClose | London t=+2.04, PostClose experimental |
+| `order_block_d1` | 6B | London | t=+2.54 |
+| `pivot_reversal` | MES, 6E, MNQ | Asian, London, RTH | varied |
+| `cross_asset_divergence_zn` | ZB | Asian | t=+2.27 |
+| `liquidity_sweep_tuned` | 6E | London | t=+1.50 |
+| `keltner_breakout` | 6E, MCL | Asian | **regime_filter: vol_regime=high** (borderline n) |
+| `rsi2_extreme_reversion` | MNQ | PostClose | **experimental: gather PostClose long-bias data** |
 
-**Do not promote any other strategy to high conviction without walk-forward validation showing OOS t>2.0 on at least n=100 trades.** Earlier session-state experiments (FVG/order_block/liquidity_sweep at default params) showed coin-flip expectancy and have been demoted to "low" conviction pending parameter tuning.
+**Trader-side safety floors (`scripts/live_trader.py`):**
+- `MIN_SIGNAL_R_TICKS = 6` — rejects degenerate sub-buffer signals at the trader layer
+- `SKIP_TARGET_LEG = True` — workaround for broker target-fill anomaly; positions exit via stop / per-trade cap / manual flatten only
+- `cell_passes_regime_filter` — surgical vol-aware deployment (high-vol-only for keltner + vol_spike_fade)
+- `news_proximity_for(symbol)` — infrastructure for surgical news-event deployment (not yet wired to any cell)
+- Orphan-leg fix — `place_bracket` waits for entry-fill confirmation before placing protective legs
 
-**Removed entirely 2026-05-04**: `vwap_reversion` — confirmed broken across all symbols (hit rate 1-10%, t-stat as bad as −24 on MNQ RTH OOS). Code deleted from `tools/backtest/strategies.py`.
+**Promotion rule:** as of 2026-05-11 corrections, n≥25 AND t≥1.5 AND E>0 OOS, with 2 consecutive daily passes. Strategy code must accept `tick_size`/`min_stop_ticks` parameters (or use structural stops that don't collapse sub-tick).
 
-The strategic intent is still price-action / mathematical — gap_fill IS a price-action mean-reversion strategy, just one that happens to be more rigorously validated than the ICT-flavored FVG/OB/LS at our parameter set. If walk-forward parameter sweeps later validate FVG/OB on a per-symbol/session basis, re-promote them.
+**Removed entirely:**
+- 2026-05-04: `vwap_reversion`
+- 2026-05-11: `gap_fill` and `gap_fill_wide` removed from live filter (code retained for future re-validation when backtest engine is fixed)
 
-## Two parallel trading paths (important)
+**Open structural concerns (research deferred):**
+- Backtest engine `Trade.stop_price` carry-through suspect — see `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`
+- ProjectX broker treats protective LIMIT orders as immediately marketable (NG/6B trades 2026-05-11 closed within ~100ms of placement) — see `vault/research/analysis/2026-05-11_broker_target_fill_anomaly.md`. Workaround: `SKIP_TARGET_LEG=True`.
 
-- **Agent chain** (CIO → Analyst → PM → Risk Manager → Execution Trader): orders go through `mcp__topstep__topstep_place_order`, gated by `hooks/risk_gate.py`
-- **auto_trader** (`scripts/auto_trader.py`): heuristic strategy library, calls broker directly, applies the same gates manually via `apply_risk_gate()`
+## Trading paths (updated 2026-05-11)
 
-Today (2026-04-30) the agent chain is largely dormant — the auto_trader does the actual trading. The agents do regime reads, post-mortems, weekly reviews. This split is documented in `vault/_meta/trading_process.md`.
+- **live_trader** (`scripts/live_trader.py`) — the active trader as of 2026-05-11. Reads `state/strategy_validation.json:live_allowlist` each scan, fires cells whose session+side match current state, gates each signal through MIN_SIGNAL_R_TICKS + regime_filter, places entry-then-stop (SKIP_TARGET_LEG workaround active).
+- **auto_trader** (`scripts/auto_trader.py`) — legacy trader, NOT currently used. `FundAutoTraderDaily` scheduled task is disabled. Code retained as reference / fallback option.
+- **Agent chain** (CIO → Analyst → PM → Risk Manager → Execution Trader): orders go through `mcp__topstep__topstep_place_order`, gated by `hooks/risk_gate.py`. Largely dormant — agents do regime reads, post-mortems, weekly reviews.
+
+Scheduled tasks:
+- `FundLiveTraderEnsureRunning` — single unified task, fires Sun 17:00 ET (Globex reopen) + Mon-Fri 06:30 ET (overnight recovery). Calls `scripts/restart-live-trader-if-dead.ps1` (idempotent — duplicate-safe).
+- `FundTraderWatchdog` — DB-heartbeat watchdog, runs every 3 min, auto-revives if `account_snapshots.ts` goes stale >8 min.
+- `FundMacroBriefDaily` — daily 06:00 ET, fetches macro_levels.json + treasury_auctions.json + fed_speakers.json + generates macro brief.
+- `FundAutoTraderDaily` — disabled, retained for historical reference.
 
 ## Operational scripts
 
