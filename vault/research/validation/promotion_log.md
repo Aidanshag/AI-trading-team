@@ -102,3 +102,8 @@
 - ❌ DEMOTE narrow_range_break × MNQ × London × long  (reason: 3_consecutive_fails, last OOS E=+0.09R)
 - ❌ DEMOTE inside_bar_break × 6A × London × long  (reason: 3_consecutive_fails, last OOS E=+0.21R)
 - ❌ DEMOTE fair_value_gap_tuned × 6A × London × short  (reason: 3_consecutive_fails, last OOS E=+0.60R)
+
+## 2026-05-11
+
+- ❌ DEMOTE keltner_breakout × 6B × Asian × short  (reason: 3_consecutive_fails, last OOS E=+0.39R)
+- ❌ DEMOTE liquidity_sweep_tuned × 6B × Asian × short  (reason: 3_consecutive_fails, last OOS E=+0.12R)

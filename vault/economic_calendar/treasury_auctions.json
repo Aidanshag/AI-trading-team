@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-08T10:00:13.605609+00:00",
+  "generated_at": "2026-05-11T12:32:13.007869+00:00",
   "source": "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions?fields=record_date,security_type,security_term,auction_date,issue_date,offering_amt,announcemt_date,reopening&page[size]=100",
   "auctions": [
     {
@@ -109,6 +109,125 @@
       "affected_primary": [
         "ZB"
       ],
+      "affected_basis": []
+    },
+    {
+      "auction_date": "2026-05-13",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-13T11:30",
+      "announcement_date": "2026-05-12",
+      "issue_date": "2026-05-19",
+      "security_type": "Bill",
+      "security_term": "17-Week",
+      "reopening": "No",
+      "offering_amt_usd": null,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
+    },
+    {
+      "auction_date": "2026-05-14",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-14T11:30",
+      "announcement_date": "2026-05-12",
+      "issue_date": "2026-05-19",
+      "security_type": "Bill",
+      "security_term": "4-Week",
+      "reopening": "Yes",
+      "offering_amt_usd": null,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
+    },
+    {
+      "auction_date": "2026-05-14",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-14T11:30",
+      "announcement_date": "2026-05-12",
+      "issue_date": "2026-05-19",
+      "security_type": "Bill",
+      "security_term": "8-Week",
+      "reopening": "Yes",
+      "offering_amt_usd": null,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
+    },
+    {
+      "auction_date": "2026-05-18",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-18T11:30",
+      "announcement_date": "2026-05-14",
+      "issue_date": "2026-05-21",
+      "security_type": "Bill",
+      "security_term": "13-Week",
+      "reopening": "Yes",
+      "offering_amt_usd": null,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
+    },
+    {
+      "auction_date": "2026-05-18",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-18T11:30",
+      "announcement_date": "2026-05-14",
+      "issue_date": "2026-05-21",
+      "security_type": "Bill",
+      "security_term": "26-Week",
+      "reopening": "No",
+      "offering_amt_usd": null,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
+    },
+    {
+      "auction_date": "2026-05-19",
+      "auction_time_et": "11:30",
+      "auction_dt_et": "2026-05-19T11:30",
+      "announcement_date": "2026-05-14",
+      "issue_date": "2026-05-21",
+      "security_type": "Bill",
+      "security_term": "6-Week",
+      "reopening": "Yes",
+      "offering_amt_usd": null,
+      "affected_futures": [],
+      "affected_primary": [],
+      "affected_basis": []
+    },
+    {
+      "auction_date": "2026-05-20",
+      "auction_time_et": "13:00",
+      "auction_dt_et": "2026-05-20T13:00",
+      "announcement_date": "2026-05-14",
+      "issue_date": "2026-06-01",
+      "security_type": "Bond",
+      "security_term": "20-Year",
+      "reopening": "No",
+      "offering_amt_usd": null,
+      "affected_futures": [
+        "ZB"
+      ],
+      "affected_primary": [
+        "ZB"
+      ],
+      "affected_basis": [
+        "ZN",
+        "ZB"
+      ]
+    },
+    {
+      "auction_date": "2026-05-21",
+      "auction_time_et": "13:00",
+      "auction_dt_et": "2026-05-21T13:00",
+      "announcement_date": "2026-05-14",
+      "issue_date": "2026-05-29",
+      "security_type": "Note",
+      "security_term": "9-Year 8-Month",
+      "reopening": "Yes",
+      "offering_amt_usd": null,
+      "affected_futures": [],
+      "affected_primary": [],
       "affected_basis": []
     }
   ]
