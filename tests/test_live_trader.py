@@ -288,6 +288,80 @@ def test_wait_for_entry_fill_returns_false_on_timeout():
     assert filled is False
 
 
+def test_cell_passes_regime_filter_no_filter():
+    """A cell without regime_filter passes regardless of regime."""
+    cell = {"strategy": "fair_value_gap", "symbol": "MNQ"}
+    regime = {"vol_regime": "low"}
+    ok, _ = lt.cell_passes_regime_filter(cell, regime)
+    assert ok is True
+
+
+def test_cell_passes_regime_filter_match():
+    """Cell with vol_regime=['high'] passes when regime is high."""
+    cell = {"regime_filter": {"vol_regime": ["high"]}}
+    ok, _ = lt.cell_passes_regime_filter(cell, {"vol_regime": "high"})
+    assert ok is True
+
+
+def test_cell_passes_regime_filter_mismatch():
+    """Cell with vol_regime=['high'] fails when regime is med or low."""
+    cell = {"regime_filter": {"vol_regime": ["high"]}}
+    for r in ["low", "med"]:
+        ok, reason = lt.cell_passes_regime_filter(cell, {"vol_regime": r})
+        assert ok is False
+        assert "vol_regime" in reason
+
+
+def test_cell_passes_regime_filter_multikey_all_must_match():
+    """Multi-key filter: all keys must match."""
+    cell = {"regime_filter": {"vol_regime": ["high"], "trend_regime": ["trending"]}}
+    assert lt.cell_passes_regime_filter(cell, {"vol_regime": "high", "trend_regime": "trending"})[0] is True
+    # One mismatch fails
+    assert lt.cell_passes_regime_filter(cell, {"vol_regime": "high", "trend_regime": "ranging"})[0] is False
+    assert lt.cell_passes_regime_filter(cell, {"vol_regime": "med",  "trend_regime": "trending"})[0] is False
+
+
+def test_cell_passes_regime_filter_unknown_regime_fail_closed():
+    """If we couldn't compute regime (empty dict), restricted cells fail.
+    Non-restricted cells still pass."""
+    restricted = {"regime_filter": {"vol_regime": ["high"]}}
+    open_cell = {"strategy": "x"}
+    assert lt.cell_passes_regime_filter(restricted, {})[0] is False
+    assert lt.cell_passes_regime_filter(open_cell,  {})[0] is True
+
+
+def test_current_regime_returns_empty_on_short_bars():
+    """Too few bars to classify -> empty dict so gate fails closed."""
+    import pandas as pd
+    n = 50  # less than ref_window+lookback (100+14)
+    bars = pd.DataFrame(
+        {"Open": list(range(n)), "High": [x+1 for x in range(n)],
+         "Low": [x-1 for x in range(n)], "Close": list(range(n)),
+         "Volume": [1]*n},
+        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
+    )
+    regime = lt.current_regime(bars)
+    assert regime == {}
+
+
+def test_current_regime_returns_dict_on_full_bars():
+    """Enough bars -> regime dict with vol_regime + trend_regime."""
+    import pandas as pd
+    import numpy as np
+    np.random.seed(7)
+    n = 200
+    rets = np.random.randn(n) * 0.001
+    close = 100 * np.exp(np.cumsum(rets))
+    bars = pd.DataFrame(
+        {"Open": close, "High": close + 0.1, "Low": close - 0.1,
+         "Close": close, "Volume": [1]*n},
+        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
+    )
+    regime = lt.current_regime(bars)
+    assert "vol_regime" in regime and regime["vol_regime"] in ("low", "med", "high")
+    assert "trend_regime" in regime and regime["trend_regime"] in ("trending", "ranging")
+
+
 def test_wait_for_entry_fill_returns_true_when_signature_changes():
     """When position appears (signature changes from baseline), wait
     returns True so caller proceeds to place protective legs."""

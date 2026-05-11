@@ -183,6 +183,75 @@ def fetch_bars(client, symbol: str, minutes: int = 5, lookback: int = 200):
     return _fetch_bars_impl(client, symbol, minutes, lookback, log_fn=_log)
 
 
+def current_regime(bars: pd.DataFrame,
+                    vol_lookback: int = 14, vol_ref_window: int = 100,
+                    trend_lookback: int = 14, trend_ref_window: int = 100) -> dict:
+    """Compute the current vol+trend regime of the latest bar.
+
+    Mirrors `scripts/regime_classifier.py` logic but computes inline so
+    the trader doesn't need to read a stale per-day tag file.
+
+    Returns:
+        {'vol_regime': 'low'|'med'|'high', 'trend_regime': 'trending'|'ranging'}
+    Returns {} if bars too short to classify.
+    """
+    if len(bars) < max(vol_ref_window, trend_ref_window) + vol_lookback:
+        return {}
+    try:
+        # Vol regime: 14-bar realized vol vs 100-bar median
+        returns = bars["Close"].pct_change()
+        realized = returns.rolling(vol_lookback).std() * (252 * 78) ** 0.5
+        median = realized.rolling(vol_ref_window, min_periods=20).median()
+        last_realized = float(realized.iloc[-1])
+        last_median = float(median.iloc[-1])
+        if pd.isna(last_realized) or pd.isna(last_median) or last_median == 0:
+            vol_regime = "med"
+        elif last_realized < 0.7 * last_median:
+            vol_regime = "low"
+        elif last_realized > 1.4 * last_median:
+            vol_regime = "high"
+        else:
+            vol_regime = "med"
+        # Trend regime: 14-bar range vs 100-bar mean range
+        rng = (bars["High"] - bars["Low"]).rolling(trend_lookback).mean()
+        mean_rng = rng.rolling(trend_ref_window, min_periods=20).mean()
+        last_rng = float(rng.iloc[-1])
+        last_mean = float(mean_rng.iloc[-1])
+        if pd.isna(last_rng) or pd.isna(last_mean) or last_mean == 0:
+            trend_regime = "ranging"
+        elif last_rng > 1.3 * last_mean:
+            trend_regime = "trending"
+        else:
+            trend_regime = "ranging"
+    except Exception:
+        return {}
+    return {"vol_regime": vol_regime, "trend_regime": trend_regime}
+
+
+def cell_passes_regime_filter(cell: dict, regime: dict) -> tuple[bool, str]:
+    """Check if current regime matches the cell's optional regime_filter.
+
+    Cells can declare a `regime_filter` dict like:
+        {"vol_regime": ["high"], "trend_regime": ["trending", "ranging"]}
+    A cell passes iff EVERY declared key matches one of its allowed values.
+    Cells with no `regime_filter` always pass (backward-compatible).
+
+    2026-05-11: enables surgical deployment of volatility-aware strategies
+    (keltner_breakout, vol_spike_fade) so they fire only in their target
+    regime, not on every signal.
+    """
+    cell_filter = cell.get("regime_filter")
+    if not cell_filter:
+        return True, ""
+    if not regime:
+        # If we couldn't compute regime, fail-closed: don't fire restricted cells
+        return False, "regime unknown"
+    for key, allowed in cell_filter.items():
+        if regime.get(key) not in allowed:
+            return False, f"{key}={regime.get(key)} not in {allowed}"
+    return True, ""
+
+
 def signal_passes_min_r_gate(sig: dict, symbol: str,
                               min_r_ticks: int = MIN_SIGNAL_R_TICKS,
                               ) -> tuple[bool, str]:
@@ -697,12 +766,22 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
         if bars is None or len(bars) < 30:
             continue
 
+        # Current vol+trend regime from these bars (cell-level gate uses it)
+        regime = current_regime(bars)
+
         # For each cell, check session+side match and try to fire
         fired_for_symbol = False
         for cell in cells_by_symbol[symbol]:
             if fired_for_symbol:
                 break
             if cell.get("session") != sess_now:
+                continue
+            # Regime filter (2026-05-11): cells with `regime_filter` only fire
+            # when current regime matches. No filter → cell always passes.
+            ok_regime, regime_reason = cell_passes_regime_filter(cell, regime)
+            if not ok_regime:
+                summary.setdefault("skipped_regime", 0)
+                summary["skipped_regime"] += 1
                 continue
             strat_name = cell.get("strategy")
             strat_fn = getattr(strats, strat_name, None)
