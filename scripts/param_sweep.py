@@ -138,7 +138,19 @@ def run_strategy(strategy_fn, bars, symbol: str, params: dict) -> list[dict]:
 
     Slippage-adjusted columns are computed at summary time per slip level.
     """
+    import inspect
     from tools.backtest.engine import backtest_strategy
+    # Inject tick_size into params for strategies that accept it (e.g.
+    # gap_fill_wide uses tick_size to activate its min_stop_ticks floor;
+    # without it, the floor is a no-op and backtest stops collapse to
+    # sub-tick distances that don't survive live execution). 2026-05-11.
+    try:
+        sig = inspect.signature(strategy_fn)
+        if "tick_size" in sig.parameters and "tick_size" not in params:
+            tick_size_, _ = TICK_ECONOMICS.get(symbol, (0.01, 1.0))
+            params = {**params, "tick_size": tick_size_}
+    except (TypeError, ValueError):
+        pass
     try:
         result = backtest_strategy(strategy_fn, bars, symbol=symbol, params=params)
     except Exception as e:
