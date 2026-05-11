@@ -179,9 +179,13 @@ def run_strategy(strategy_fn, bars, symbol: str, params: dict) -> list[dict]:
         except Exception:
             gross_usd = 0.0
         # Risk distance in ticks (for sanity / "is the stop 1 tick or 100?")
+        # 2026-05-11: was reading `t.stop_price` which doesn't exist on
+        # the Trade dataclass (attribute is `t.stop`). The AttributeError
+        # was silently caught -> risk_ticks always 0 -> param sweeps
+        # produced unreliable stop-distance reports.
         risk_ticks = 0.0
         try:
-            entry = float(t.entry_price); stop = float(t.stop_price)
+            entry = float(t.entry_price); stop = float(t.stop)
             risk_ticks = abs(entry - stop) / tick_size
         except Exception:
             pass

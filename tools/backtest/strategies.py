@@ -818,16 +818,36 @@ def gap_fill(
     bars: pd.DataFrame,
     min_gap_atr: float = 0.75,
     rr_target: float = 1.5,
+    min_stop_ticks: int = 3,
+    tick_size: float | None = None,
 ) -> Iterator[Signal]:
     """Open gap > min_gap_atr × ATR → fade back toward prior close.
 
     Use case: overnight gaps that don't have a strong news driver tend
     to fill within the first 1–2 hours. Defined risk: stop beyond gap
     extreme; target = prior close (the gap fill).
+
+    2026-05-11: added `min_stop_ticks` / `tick_size` parameters. When
+    `tick_size` is provided, the stop distance is floored at
+    `min_stop_ticks × tick_size`. This prevents the strategy from
+    emitting degenerate signals during low-vol sessions where
+    `0.5 × ATR < 1 tick` collapses stop to the same price as entry
+    (which then guarantees a sub-buffer loss on any live fill and
+    creates orphan-leg conditions). When `tick_size` is None the floor
+    is inactive (backwards-compatible). The trader layer also has a
+    redundant `MIN_SIGNAL_R_TICKS` gate as defense-in-depth.
+    See `vault/research/analysis/2026-05-11_*.md` for full incident
+    diagnosis and `gap_fill_wide` for the same logic pre-existing in
+    a sibling variant.
     """
     o, c, h, l = bars["Open"], bars["Close"], bars["High"], bars["Low"]
     prev_c = c.shift(1)
     atr = _atr(bars, 14)
+
+    # Hard min stop in price (active only when tick_size known). Mirrors
+    # the gap_fill_wide pattern so plain gap_fill no longer emits
+    # sub-tick-stop signals when tick_size is passed.
+    min_stop_price = (min_stop_ticks * tick_size) if tick_size else 0.0
 
     for i in range(20, len(bars)):
         date = bars.index[i]
@@ -837,10 +857,12 @@ def gap_fill(
         gap = float(o.iloc[i] - prev_c.iloc[i])
         if abs(gap) < min_gap_atr * a:
             continue
+        # Stop distance with floor (gap_fill kept 0.5×ATR shape, just adds floor)
+        stop_dist = max(0.5 * a, min_stop_price)
         if gap > 0:
             # Gap up → fade short, target prior close
             entry = float(o.iloc[i])
-            stop = entry + 0.5 * a
+            stop = entry + stop_dist
             target = float(prev_c.iloc[i])
             if (entry - target) / max(stop - entry, 1e-9) >= rr_target:
                 yield Signal.entry(
@@ -850,7 +872,7 @@ def gap_fill(
         else:
             # Gap down → fade long, target prior close
             entry = float(o.iloc[i])
-            stop = entry - 0.5 * a
+            stop = entry - stop_dist
             target = float(prev_c.iloc[i])
             if (target - entry) / max(entry - stop, 1e-9) >= rr_target:
                 yield Signal.entry(

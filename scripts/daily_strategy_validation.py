@@ -144,9 +144,38 @@ def fetch_bars(ticker: str, period: str = "60d", interval: str = "5m"):
     return df
 
 
+def _tick_size_for_symbol(sym: str) -> float | None:
+    """Lookup tick size for a symbol. Returns None if unknown (strategy
+    falls back to ATR-only behavior). 2026-05-11: added so strategies
+    with min_stop_ticks floors (gap_fill, gap_fill_wide) are validated
+    with the floor active, matching live execution constraints."""
+    table = {
+        "ZN": 0.015625, "ZB": 0.03125, "ZT": 0.0078125, "ZF": 0.0078125,
+        "NG": 0.001, "GC": 0.10, "SI": 0.005, "HG": 0.0005,
+        "MES": 0.25, "MNQ": 0.25, "ES": 0.25, "NQ": 0.25,
+        "MCL": 0.01, "CL": 0.01,
+        "6E": 0.00005, "6B": 0.0001, "6J": 0.0000005, "6A": 0.0001, "6C": 0.0001,
+    }
+    return table.get(sym)
+
+
 def collect_trades(strat_name: str, fn, bars, sym: str) -> list[dict]:
+    import inspect
+    params: dict = {}
+    # Inject tick_size for strategies that declare it (e.g. gap_fill,
+    # gap_fill_wide). Without this the min_stop_ticks floor stays
+    # inactive and walk-forward stops collapse to sub-tick in low-vol
+    # bars -- inflating apparent R-multiples beyond what's reachable live.
     try:
-        result = backtest_strategy(fn, bars, symbol=sym, params={})
+        sig = inspect.signature(fn)
+        if "tick_size" in sig.parameters:
+            ts = _tick_size_for_symbol(sym)
+            if ts is not None:
+                params["tick_size"] = ts
+    except (TypeError, ValueError):
+        pass
+    try:
+        result = backtest_strategy(fn, bars, symbol=sym, params=params)
     except Exception:
         return []
     rows = []
