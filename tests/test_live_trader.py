@@ -191,6 +191,113 @@ def test_constants_align_with_v1_intent():
     assert lt.LOOKBACK_BARS == 6              # 30 min on 5m bars
     assert lt.SCAN_INTERVAL_SEC == 300        # 5 min
     assert lt.PER_TRADE_LOSS_CAP_USD == 150.0  # tightened for first night
+    assert lt.MIN_SIGNAL_R_TICKS >= 6          # must exceed 5-tick marketable buffer
+
+
+# ─── degenerate-R signal gate (2026-05-10 incident) ────────────────
+
+def test_min_r_gate_rejects_stop_equals_entry():
+    """The 2026-05-10 incident shape: ATR collapses to <1 tick in low-vol
+    session, so the strategy emits a signal whose stop is rounded to the
+    same price as entry. Must reject."""
+    sig = {"price": 110.53125, "stop": 110.53125, "target": 110.546875}
+    ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
+    assert ok is False
+    assert "stop too close" in reason
+
+
+def test_min_r_gate_rejects_one_tick_target():
+    """A signal with adequate stop but a target only one tick from entry
+    can't survive the 5-tick marketable-limit buffer. Reject."""
+    sig = {"price": 110.50, "stop": 110.38, "target": 110.515625}  # target ~1 tick
+    ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
+    assert ok is False
+    assert "target too close" in reason
+
+
+def test_min_r_gate_passes_normal_signal():
+    """A signal with comfortable R-distance on both sides passes."""
+    sig = {"price": 110.50, "stop": 110.30, "target": 110.80}
+    ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
+    assert ok is True
+    assert reason == ""
+
+
+def test_min_r_gate_rejects_missing_stop():
+    sig = {"price": 110.50, "stop": None, "target": 110.80}
+    ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
+    assert ok is False
+
+
+def test_min_r_gate_no_target_uses_stop_only():
+    """Some strategies emit signals without a target. Gate should pass
+    if stop-distance is adequate."""
+    sig = {"price": 110.50, "stop": 110.30, "target": None}
+    ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
+    assert ok is True
+
+
+# ─── orphan-leg fix (2026-05-10 incident) ───────────────────────────
+
+class _FakeBrokerNoPosition:
+    def get_positions(self, account_id):
+        return []
+
+
+class _FakeBrokerWithPosition:
+    def __init__(self, contract_id, type_, size):
+        self._cid, self._type, self._size = contract_id, type_, size
+
+    def get_positions(self, account_id):
+        return [{"contractId": self._cid, "type": self._type, "size": self._size}]
+
+
+def test_position_signature_returns_zero_when_flat():
+    sig = lt._position_signature(_FakeBrokerNoPosition(), 1, "CON.F.US.USA.M26")
+    assert sig == (0, 0)
+
+
+def test_position_signature_returns_type_and_size():
+    broker = _FakeBrokerWithPosition("CON.F.US.USA.M26", 1, 1)
+    sig = lt._position_signature(broker, 1, "CON.F.US.USA.M26")
+    assert sig == (1, 1)
+
+
+def test_position_signature_ignores_other_contracts():
+    broker = _FakeBrokerWithPosition("CON.OTHER", 2, 3)
+    sig = lt._position_signature(broker, 1, "CON.F.US.USA.M26")
+    assert sig == (0, 0)
+
+
+def test_position_signature_handles_broker_exception():
+    class Bad:
+        def get_positions(self, account_id):
+            raise RuntimeError("boom")
+    sig = lt._position_signature(Bad(), 1, "CON.F.US.USA.M26")
+    assert sig == (0, 0)  # fail-closed: report flat on error
+
+
+def test_wait_for_entry_fill_returns_false_on_timeout():
+    """When the position signature doesn't change, wait returns False
+    (entry is treated as unfilled; caller must cancel it)."""
+    broker = _FakeBrokerNoPosition()
+    filled = lt._wait_for_entry_fill(
+        broker, 1, "CON.F.US.USA.M26",
+        baseline_sig=(0, 0), timeout_s=1, poll_s=1,
+    )
+    assert filled is False
+
+
+def test_wait_for_entry_fill_returns_true_when_signature_changes():
+    """When position appears (signature changes from baseline), wait
+    returns True so caller proceeds to place protective legs."""
+    broker = _FakeBrokerWithPosition("CON.F.US.USA.M26", 1, 1)
+    # baseline says flat; current broker shows position -> change detected
+    filled = lt._wait_for_entry_fill(
+        broker, 1, "CON.F.US.USA.M26",
+        baseline_sig=(0, 0), timeout_s=2, poll_s=1,
+    )
+    assert filled is True
 
 
 # ─── orphan-bracket cleanup ─────────────────────────────────────

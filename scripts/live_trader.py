@@ -72,6 +72,11 @@ LOOKBACK_BARS = 6                 # find_latest_signal cutoff (30 min on 5m bars
 PER_TRADE_LOSS_CAP_USD = 150.0    # force-close if unrealized < -this
 SAME_SYMBOL_COOLDOWN_MIN = 45     # don't re-fire same symbol within window
 MAX_TRADES_PER_DAY = 8            # hard cap on entries per UTC day
+MIN_SIGNAL_R_TICKS = 6            # reject signals whose stop OR target distance is < N ticks
+                                  # (rationale: place_bracket adds a 5-tick marketable-limit
+                                  # buffer; if the strategy R-distance is smaller than the buffer,
+                                  # the trade can't escape the buffer for a profit and may
+                                  # degenerate into an orphan-leg fill. 2026-05-10 incident.)
 LIVE_ALLOWLIST_PATH = _HERE / "state" / "strategy_validation.json"
 HALT_FILE = _HERE / "state" / "live_trader_halt"   # touch to halt; remove to resume
 
@@ -171,6 +176,40 @@ def fetch_bars(client, symbol: str, minutes: int = 5, lookback: int = 200):
     return _fetch_bars_impl(client, symbol, minutes, lookback, log_fn=_log)
 
 
+def signal_passes_min_r_gate(sig: dict, symbol: str,
+                              min_r_ticks: int = MIN_SIGNAL_R_TICKS,
+                              ) -> tuple[bool, str]:
+    """Reject signals whose stop-distance OR target-distance is below
+    min_r_ticks. Returns (passes, reason). On reject, reason is a
+    human-readable diagnostic string.
+
+    Rationale (2026-05-10 incident): place_bracket() places the entry
+    as a marketable limit with a 5-tick slippage buffer. When the
+    strategy's R-distance is smaller than the buffer, the trade can't
+    escape the buffer for a profit; worse, when the strategy stop is
+    closer than the buffer's full range to entry, a single tick of
+    adverse movement can fire the stop leg alone (entry limit never
+    fills), opening an unintended reversed position via the orphan-leg
+    pathway. Block both before placement.
+    """
+    if sig.get("price") is None or sig.get("stop") is None:
+        return False, "missing price or stop"
+    tick = _tick_size(symbol)
+    if tick <= 0:
+        return False, f"invalid tick size for {symbol}"
+    sig_price = float(sig["price"])
+    sig_stop = float(sig["stop"])
+    stop_ticks = abs(sig_price - sig_stop) / tick
+    target_val = sig.get("target")
+    target_ticks = (abs(sig_price - float(target_val)) / tick
+                    if target_val is not None else float("inf"))
+    if stop_ticks < min_r_ticks:
+        return False, (f"stop too close ({stop_ticks:.1f}t < {min_r_ticks}t min)")
+    if target_ticks < min_r_ticks:
+        return False, (f"target too close ({target_ticks:.1f}t < {min_r_ticks}t min)")
+    return True, ""
+
+
 def find_latest_signal(bars: pd.DataFrame, strategy_fn) -> dict | None:
     """Run strategy on bars, return the most recent entry signal in
     the last LOOKBACK_BARS bars (ignore stale)."""
@@ -206,10 +245,57 @@ def find_latest_signal(bars: pd.DataFrame, strategy_fn) -> dict | None:
 from tools.trader_utils import _tick_size, _round_to_tick  # noqa: E402
 
 
+FILL_WAIT_TIMEOUT_S = 30          # how long to wait for entry to fill before cancelling
+FILL_WAIT_POLL_S = 2              # polling cadence while waiting
+
+
+def _position_signature(client, account_id, contract_id: str) -> tuple[int, int]:
+    """(type, size) for the contract, or (0, 0) if flat. Used to detect
+    entry fills without trusting any single API field."""
+    try:
+        for p in client.get_positions(account_id):
+            if p.get("contractId") == contract_id:
+                size = int(p.get("size", 0))
+                if size != 0:
+                    return (int(p.get("type", 0)), size)
+    except Exception:
+        pass
+    return (0, 0)
+
+
+def _wait_for_entry_fill(client, account_id, contract_id: str,
+                          baseline_sig: tuple[int, int],
+                          timeout_s: int = FILL_WAIT_TIMEOUT_S,
+                          poll_s: int = FILL_WAIT_POLL_S) -> bool:
+    """Poll until the position signature changes (= entry filled) or
+    timeout. Returns True iff a change was detected. Default-deny:
+    timeout → not filled → caller cancels entry."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if _position_signature(client, account_id, contract_id) != baseline_sig:
+            return True
+        time.sleep(poll_s)
+    return False
+
+
 def place_bracket(client, account_id, symbol: str, signal: dict,
                   qty: int = 1, dry_run: bool = False) -> dict:
-    """Place entry-limit + stop-limit + target-limit. Each leg is its
-    own broker order tagged with a related customTag."""
+    """Place entry-limit; on confirmed fill, place stop + target.
+
+    Sequence (orphan-leg-safe, 2026-05-10):
+      1. Snapshot the position signature for this contract.
+      2. Place entry as marketable-limit.
+      3. Poll positions; if the signature changes within FILL_WAIT_TIMEOUT_S
+         seconds, the entry filled -> place protective stop and target.
+      4. If the timeout expires with no signature change, cancel the
+         entry. NO protective legs are placed.
+
+    Rationale: the prior implementation placed all three legs back-to-back.
+    When the entry limit never filled but the stop-trigger price was close
+    enough to be hit by routine price movement, the stop leg would fire
+    alone and OPEN an unintended reversed position. The 2026-05-10
+    incident cost $137.89 via this exact pathway. See
+    project_alerting_infrastructure.md and the bracket OCO history."""
     side = "buy" if signal["side"] == "long" else "sell"
     cid = f"live_{uuid.uuid4().hex[:12]}"
     db = get_db()
@@ -246,7 +332,10 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
     )
     db.connect().commit()
 
-    # 1. Entry as marketable-limit
+    # 1. Snapshot baseline position for fill detection (must precede placement)
+    baseline_sig = _position_signature(client, account_id, contract_id)
+
+    # 2. Entry as marketable-limit
     try:
         result = client.place_order(
             account_id=account_id, contract_id=contract_id,
@@ -270,7 +359,29 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
     )
     db.connect().commit()
 
-    # 2. Stop-limit (1-tick offset for Topstep's tight-limit rule)
+    # 3. WAIT for fill confirmation before placing protective legs.
+    # Without this gate the protective stop/target can fire alone when
+    # the entry limit never fills, opening an unintended reversed
+    # position (2026-05-10 incident).
+    _log(f"  {symbol} entry placed, polling fill (timeout {FILL_WAIT_TIMEOUT_S}s)")
+    filled = _wait_for_entry_fill(client, account_id, contract_id, baseline_sig)
+    if not filled:
+        _log(f"  {symbol} entry {cid} UNFILLED after {FILL_WAIT_TIMEOUT_S}s -- "
+              f"cancelling; no protective legs placed")
+        try:
+            if broker_oid is not None:
+                client.cancel_order(account_id, broker_oid)
+        except Exception as e:
+            _log(f"  entry cancel failed (will remain working): {e}")
+        db.connect().execute(
+            "UPDATE orders SET status=?, ts_cancelled=? WHERE client_order_id=?",
+            ("cancelled_unfilled", _utcnow_iso(), cid),
+        )
+        db.connect().commit()
+        return {"status": "cancelled_unfilled", "client_order_id": cid}
+    _log(f"  {symbol} entry FILLED; placing protective legs")
+
+    # 4. Stop-limit (1-tick offset for Topstep's tight-limit rule)
     opp = "sell" if side == "buy" else "buy"
     stop_limit_px = (stop_px - tick) if opp == "sell" else (stop_px + tick)
     stop_limit_px = _round_to_tick(stop_limit_px, tick)
@@ -575,6 +686,11 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
             # Side must match the cell
             sig_side = str(sig.get("side", "")).lower()
             if sig_side != cell.get("side"):
+                continue
+            ok, reason = signal_passes_min_r_gate(sig, symbol)
+            if not ok:
+                _log(f"  {symbol} {strat_name} {sig_side} signal rejected: {reason}")
+                summary["blocked"] += 1
                 continue
             summary["triggers"] += 1
             # Place bracket
