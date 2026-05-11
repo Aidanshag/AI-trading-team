@@ -77,6 +77,15 @@ MIN_SIGNAL_R_TICKS = 6            # reject signals whose stop OR target distance
                                   # buffer; if the strategy R-distance is smaller than the buffer,
                                   # the trade can't escape the buffer for a profit and may
                                   # degenerate into an orphan-leg fill. 2026-05-10 incident.)
+SKIP_TARGET_LEG = False           # workaround for 2026-05-11 broker behavior where target
+                                  # LIMIT orders auto-fill within ~100ms of placement at
+                                  # next-available market price (target limit is essentially
+                                  # ignored; position closes immediately at 1 tick adverse).
+                                  # When True: place_bracket places ONLY entry + stop, no target.
+                                  # Position then runs until stop fires OR per-trade loss cap
+                                  # OR manual flatten. See
+                                  # `vault/research/analysis/2026-05-11_broker_target_fill_anomaly.md`.
+                                  # Default OFF -- requires explicit user enable after review.
 LIVE_ALLOWLIST_PATH = _HERE / "state" / "strategy_validation.json"
 HALT_FILE = _HERE / "state" / "live_trader_halt"   # touch to halt; remove to resume
 
@@ -404,6 +413,8 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
     _log(f"  {symbol} entry FILLED; placing protective legs")
 
     # 4. Stop-limit (1-tick offset for Topstep's tight-limit rule)
+    # NOTE: when SKIP_TARGET_LEG is True (broker target-fill anomaly workaround),
+    # we place only the stop and skip the target leg below.
     opp = "sell" if side == "buy" else "buy"
     stop_limit_px = (stop_px - tick) if opp == "sell" else (stop_px + tick)
     stop_limit_px = _round_to_tick(stop_limit_px, tick)
@@ -430,8 +441,8 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
         _log(f"  stop placement failed: {e}")
         # Continue — target may still place; verification will catch missing stop
 
-    # 3. Target as limit (only if target price provided)
-    if target_px is not None:
+    # 3. Target as limit (only if target price provided AND target legs not skipped)
+    if target_px is not None and not SKIP_TARGET_LEG:
         target_cid = cid + "_target"
         try:
             tr = client.place_order(
