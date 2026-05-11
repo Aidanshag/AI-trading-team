@@ -210,16 +210,38 @@ def signal_passes_min_r_gate(sig: dict, symbol: str,
     return True, ""
 
 
-def find_latest_signal(bars: pd.DataFrame, strategy_fn) -> dict | None:
+def find_latest_signal(bars: pd.DataFrame, strategy_fn,
+                        symbol: str | None = None) -> dict | None:
     """Run strategy on bars, return the most recent entry signal in
-    the last LOOKBACK_BARS bars (ignore stale)."""
+    the last LOOKBACK_BARS bars (ignore stale).
+
+    2026-05-11: when `symbol` is provided AND the strategy accepts a
+    `tick_size` keyword, the symbol's tick_size is auto-injected. This
+    activates floor-the-stop logic (min_stop_ticks) inside strategies
+    like `gap_fill` / `gap_fill_wide` so they refuse to emit degenerate
+    sub-tick-stop signals at the strategy layer. The trader-side
+    MIN_SIGNAL_R_TICKS gate remains as defense-in-depth.
+    """
+    import inspect
     if len(bars) < 30:
         return None
     cutoff_idx = max(0, len(bars) - LOOKBACK_BARS)
     cutoff = bars.index[cutoff_idx]
+    # Build a callable that optionally injects tick_size for strategies
+    # that accept it. Cheap to do per-call; no state side effects.
+    call = strategy_fn
+    if symbol is not None:
+        try:
+            sig_params = inspect.signature(strategy_fn).parameters
+            if "tick_size" in sig_params:
+                tick = _tick_size(symbol)
+                if tick > 0:
+                    call = lambda b, _f=strategy_fn, _t=tick: _f(b, tick_size=_t)
+        except (TypeError, ValueError):
+            pass
     latest = None
     try:
-        for sig in strategy_fn(bars):
+        for sig in call(bars):
             if sig.kind != "entry":
                 continue
             if sig.date >= cutoff:
@@ -677,7 +699,7 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
             strat_fn = getattr(strats, strat_name, None)
             if strat_fn is None:
                 continue
-            sig = find_latest_signal(bars, strat_fn)
+            sig = find_latest_signal(bars, strat_fn, symbol=symbol)
             summary["scanned"] += 1
             if sig is None:
                 continue

@@ -300,6 +300,77 @@ def test_wait_for_entry_fill_returns_true_when_signature_changes():
     assert filled is True
 
 
+# ─── find_latest_signal tick_size injection (2026-05-11) ───────────
+
+def test_find_latest_signal_injects_tick_size():
+    """When the strategy accepts tick_size and symbol is given, the
+    real tick_size for that symbol should be passed in. The strategy
+    receives it and can use it for floor logic."""
+    import pandas as pd
+    n = 50
+    bars = pd.DataFrame(
+        {"Open": list(range(n)), "High": list(range(n)),
+         "Low": list(range(n)), "Close": list(range(n)),
+         "Volume": [1] * n},
+        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
+    )
+    received: dict = {}
+
+    def fake_strategy(bars, tick_size=None):
+        received["tick_size"] = tick_size
+        # Return nothing; we only care about what got passed in
+        return iter([])
+
+    lt.find_latest_signal(bars, fake_strategy, symbol="ZN")
+    assert received["tick_size"] is not None
+    # ZN tick = 1/64; should be 0.015625
+    assert abs(received["tick_size"] - 0.015625) < 1e-9
+
+
+def test_find_latest_signal_does_not_inject_when_strategy_lacks_param():
+    """Strategies without a tick_size param should be called without it
+    (backwards-compat: existing strategies that take only `bars`)."""
+    import pandas as pd
+    n = 50
+    bars = pd.DataFrame(
+        {"Open": list(range(n)), "High": list(range(n)),
+         "Low": list(range(n)), "Close": list(range(n)),
+         "Volume": [1] * n},
+        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
+    )
+    calls = {"n": 0}
+
+    def old_strategy(bars):  # no tick_size kwarg
+        calls["n"] += 1
+        return iter([])
+
+    # If injection were unconditional, this would raise TypeError.
+    # Confirming it doesn't.
+    lt.find_latest_signal(bars, old_strategy, symbol="ZN")
+    assert calls["n"] == 1
+
+
+def test_find_latest_signal_no_symbol_skips_injection():
+    """When symbol is None (the legacy call shape), no injection
+    happens even if the strategy accepts tick_size."""
+    import pandas as pd
+    n = 50
+    bars = pd.DataFrame(
+        {"Open": list(range(n)), "High": list(range(n)),
+         "Low": list(range(n)), "Close": list(range(n)),
+         "Volume": [1] * n},
+        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
+    )
+    received: dict = {"tick_size": "untouched"}
+
+    def fake_strategy(bars, tick_size=None):
+        received["tick_size"] = tick_size
+        return iter([])
+
+    lt.find_latest_signal(bars, fake_strategy)  # no symbol
+    assert received["tick_size"] is None  # default used, not injected
+
+
 # ─── orphan-bracket cleanup ─────────────────────────────────────
 
 class _FakeClient:
