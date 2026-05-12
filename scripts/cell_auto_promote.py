@@ -63,6 +63,128 @@ DEFAULT_LOSING_STREAK = 3   # consecutive losers triggering demotion
 DEFAULT_WINDOW_DAYS = 30
 
 
+# ── helper: session bucket from ET hour ────────────────────────
+
+def _session_from_et_hour(hour_et: float) -> str:
+    """Mirrors scripts/live_trader.py session bucketing."""
+    if 9.5 <= hour_et < 16:    return "RTH"
+    if 4 <= hour_et < 9.5:     return "London"
+    if 16 <= hour_et < 20:     return "PostClose"
+    return "Asian"
+
+
+# ── shadow evidence reader (2026-05-12) ────────────────────────
+
+def load_shadow_evidence_per_cell(window_days: int = DEFAULT_WINDOW_DAYS) -> dict:
+    """Read resolved shadow trades from DB, group by cell, compute realistic
+    R-multiples (with slippage + fees deducted).
+
+    Returns {cell_key: {"n": int, "live_mean_r": float}} in the same
+    shape as live_vs_oos.by_cell so it can be combined cleanly.
+
+    Uses tools/shadow_realism for per-trade friction conversion. The
+    "realistic" R = idealized_R - (slippage_usd + fees_usd) / risk_usd.
+    """
+    if not DB_PATH.exists():
+        return {}
+    try:
+        from tools.shadow_realism import (slippage_cost_usd,
+                                            fees_round_trip_usd)
+    except Exception:
+        return {}
+    cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=window_days)
+              ).isoformat(timespec="seconds")
+    try:
+        c = sqlite3.connect(DB_PATH)
+        c.row_factory = sqlite3.Row
+        rows = c.execute(
+            """SELECT symbol, strategy, side, pnl_r, risk_usd, ts_signal
+                 FROM shadow_trades
+                WHERE outcome IS NOT NULL
+                  AND ts_signal >= ?
+                  AND pnl_r IS NOT NULL""",
+            (cutoff,),
+        ).fetchall()
+        c.close()
+    except Exception:
+        return {}
+
+    # Aggregate per (strategy|symbol|session|side)
+    per_cell: dict[str, list[float]] = {}
+    for r in rows:
+        sym = str(r["symbol"] or "")
+        strat = str(r["strategy"] or "")
+        side = str(r["side"] or "").lower()
+        if not sym or not strat or side not in ("long", "short"):
+            continue
+        # Derive session from ts_signal hour ET
+        try:
+            ts = datetime.fromisoformat(str(r["ts_signal"]).replace("Z", "+00:00"))
+            # Convert UTC to ET (approximate — UTC-4 in DST)
+            et_hour = (ts.hour - 4) % 24 + ts.minute / 60
+            sess = _session_from_et_hour(et_hour)
+        except Exception:
+            continue
+        risk_usd = r["risk_usd"]
+        pnl_r = r["pnl_r"]
+        if risk_usd is None or risk_usd <= 0 or pnl_r is None:
+            continue
+        # Apply friction in R units
+        friction_usd = slippage_cost_usd(sym) + fees_round_trip_usd(sym)
+        realistic_r = float(pnl_r) - friction_usd / float(risk_usd)
+        key = f"{strat}|{sym}|{sess}|{side}"
+        per_cell.setdefault(key, []).append(realistic_r)
+
+    # Build output dict
+    out: dict = {}
+    for key, rs in per_cell.items():
+        if not rs:
+            continue
+        out[key] = {
+            "n": len(rs),
+            "live_mean_r": sum(rs) / len(rs),
+            "source": "shadow",  # tag so we can tell where data came from
+        }
+    return out
+
+
+def combine_evidence(live_by_cell: dict, shadow_by_cell: dict) -> dict:
+    """Merge live + shadow evidence by cell. Live trades are weighted
+    equally to shadow trades (per cell). Sample size adds; mean is a
+    weighted-by-n combination.
+
+    If both have data for a cell, the combined record carries n=live_n+shadow_n
+    and live_mean_r = weighted_avg(live, shadow).
+    """
+    combined: dict = {}
+    all_keys = set(live_by_cell) | set(shadow_by_cell)
+    for key in all_keys:
+        live = live_by_cell.get(key)
+        shadow = shadow_by_cell.get(key)
+        if live and shadow:
+            n_l = int(live.get("n") or 0)
+            n_s = int(shadow.get("n") or 0)
+            e_l = float(live.get("live_mean_r") or 0)
+            e_s = float(shadow.get("live_mean_r") or 0)
+            total_n = n_l + n_s
+            if total_n == 0:
+                continue
+            combined[key] = {
+                "n": total_n,
+                "live_mean_r": (e_l * n_l + e_s * n_s) / total_n,
+                "n_live": n_l,
+                "n_shadow": n_s,
+                "live_mean_r_live": e_l,
+                "live_mean_r_shadow": e_s,
+                "source": "combined",
+            }
+        elif live:
+            combined[key] = {**live, "source": "live"}
+        else:
+            combined[key] = shadow
+    return combined
+
+
 # ── live data sources ──────────────────────────────────────────
 
 def latest_live_vs_oos() -> tuple[Path, dict] | None:
@@ -369,16 +491,38 @@ def main() -> int:
     p.add_argument("--window", type=int, default=DEFAULT_WINDOW_DAYS,
                    help=f"Days of orders for streak detection "
                         f"(default {DEFAULT_WINDOW_DAYS}).")
+    p.add_argument("--no-shadows", action="store_true",
+                   help="Disable shadow-trade evidence (live trades only).")
     args = p.parse_args()
 
     # Load live evidence
     live = latest_live_vs_oos()
     if live is None:
         print("No live_r_comparison.json found — nothing to evaluate.")
-        return 0
-    live_path, live_data = live
-    print(f"Live evidence: {live_path.name} "
-          f"({live_data.get('trades_evaluated', '?')} trades)")
+        # 2026-05-12: if no live data, fall back to shadow-only evaluation.
+        # Don't return early so the cycle can still learn from shadows.
+        live_data: dict = {"by_cell": {}, "trades_evaluated": 0}
+        live_path = None
+    else:
+        live_path, live_data = live
+        print(f"Live evidence: {live_path.name} "
+              f"({live_data.get('trades_evaluated', '?')} trades)")
+
+    # 2026-05-12: include shadow-trade evidence (with realistic friction
+    # applied via tools/shadow_realism). Combined live + shadow data
+    # feeds the same promotion/demotion logic. See module docstring +
+    # vault/research/analysis/2026-05-12_shadow_realism.md.
+    if not args.no_shadows:
+        shadow_by_cell = load_shadow_evidence_per_cell(window_days=args.window)
+        if shadow_by_cell:
+            print(f"Shadow evidence: {len(shadow_by_cell)} cell(s) "
+                  f"with resolved shadows (friction-adjusted)")
+            live_by_cell = live_data.get("by_cell") or {}
+            combined = combine_evidence(live_by_cell, shadow_by_cell)
+            live_data = {**live_data, "by_cell": combined}
+            print(f"Combined evidence: {len(combined)} cell(s)")
+        else:
+            print("No resolved shadow trades found — using live-only evidence")
 
     # Load validation
     if not VALIDATION_PATH.exists():
