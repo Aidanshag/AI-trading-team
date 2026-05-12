@@ -132,54 +132,90 @@ def main() -> int:
         print(f"ERROR: ProjectX client unavailable: {e}", file=sys.stderr)
         return 2
 
-    resolved = 0
+    # Group rows by symbol so we only fetch the contract id + bars once per
+    # symbol. Per-row fetches hit ProjectX 429 rate limits quickly (the v1
+    # implementation did ~2 API calls per shadow row → 100+ rows = throttled).
+    by_symbol: dict[str, list[dict]] = {}
     for row in pending:
-        sym = row["symbol"]
+        by_symbol.setdefault(row["symbol"], []).append(row)
+
+    resolved = 0
+    for sym, rows in by_symbol.items():
         try:
             cid = _front_contract_id(client, sym)
         except ProjectXError as e:
-            print(f"  skip {sym}: contract lookup failed ({e})")
+            print(f"  skip {sym} (x{len(rows)}): contract lookup failed ({e})")
             continue
         if not cid:
-            print(f"  skip {sym}: no front-month contract")
-            db.resolve_shadow_trade(
-                row["id"], outcome="invalidated", pnl_r=0.0,
-                notes="no front-month contract found",
-            )
+            print(f"  skip {sym} (x{len(rows)}): no front-month contract")
+            if not args.dry_run:
+                for row in rows:
+                    db.resolve_shadow_trade(
+                        row["id"], outcome="invalidated", pnl_r=0.0,
+                        notes="no front-month contract found",
+                    )
             continue
 
-        signal_ts = datetime.fromisoformat(row["ts_signal"].replace("Z", "+00:00"))
-        end_ts = signal_ts + timedelta(hours=args.max_window_hours)
-        # Don't fetch bars from the future
+        # One bars fetch covering ALL signals for this symbol
+        min_signal = min(
+            datetime.fromisoformat(r["ts_signal"].replace("Z", "+00:00"))
+            for r in rows
+        )
+        max_signal = max(
+            datetime.fromisoformat(r["ts_signal"].replace("Z", "+00:00"))
+            for r in rows
+        )
+        end_ts = max_signal + timedelta(hours=args.max_window_hours)
         if end_ts > datetime.now(tz=timezone.utc):
             end_ts = datetime.now(tz=timezone.utc)
 
         try:
-            bars = client.get_bars(
+            all_bars = client.get_bars(
                 contract_id=cid,
-                start_time=signal_ts.isoformat(),
+                start_time=min_signal.isoformat(),
                 end_time=end_ts.isoformat(),
-                unit=2, unit_number=1, limit=1000, live=False,
+                unit=2, unit_number=1, limit=5000, live=False,
             )
         except ProjectXError as e:
-            print(f"  skip {sym} #{row['id']}: bars failed ({e})")
+            print(f"  skip {sym} (x{len(rows)}): bars failed ({e})")
             continue
 
-        outcome, pnl_r, note = _evaluate_path(
-            bars,
-            side=row["side"],
-            entry=float(row["entry_price"]),
-            stop=float(row["stop_price"]),
-            target=float(row["target_price"]),
-        )
+        if not all_bars:
+            print(f"  skip {sym} (x{len(rows)}): empty bars")
+            continue
 
-        print(f"  {sym} #{row['id']} {row['strategy']:25s} "
-              f"{row['side']:5s} → {outcome:14s} {pnl_r:+.2f}R  ({note})")
+        # Bars come ordered by time; walk per-row through the slice >= signal_ts
+        # Pre-parse bar timestamps once
+        def _bar_ts(b: dict) -> datetime:
+            ts = b.get("t") or b.get("ts") or b.get("time")
+            if isinstance(ts, str):
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return ts  # already datetime
 
-        if not args.dry_run:
-            db.resolve_shadow_trade(row["id"], outcome=outcome, pnl_r=pnl_r,
-                                    notes=note)
-        resolved += 1
+        parsed_bars = []
+        for b in all_bars:
+            try:
+                parsed_bars.append((_bar_ts(b), b))
+            except Exception:
+                continue
+        parsed_bars.sort(key=lambda p: p[0])
+
+        for row in rows:
+            sig_ts = datetime.fromisoformat(row["ts_signal"].replace("Z", "+00:00"))
+            row_bars = [b for ts, b in parsed_bars if ts >= sig_ts]
+            outcome, pnl_r, note = _evaluate_path(
+                row_bars,
+                side=row["side"],
+                entry=float(row["entry_price"]),
+                stop=float(row["stop_price"]),
+                target=float(row["target_price"]),
+            )
+            print(f"  {sym} #{row['id']} {row['strategy']:25s} "
+                  f"{row['side']:5s} → {outcome:14s} {pnl_r:+.2f}R  ({note})")
+            if not args.dry_run:
+                db.resolve_shadow_trade(row["id"], outcome=outcome, pnl_r=pnl_r,
+                                        notes=note)
+            resolved += 1
 
     print(f"\nResolved {resolved}/{len(pending)} shadow trades.")
     return 0
