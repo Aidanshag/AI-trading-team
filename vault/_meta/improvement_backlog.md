@@ -37,8 +37,8 @@ User target 2026-05-12: pass Combine in ~1 month, then sustain XFA cash flow. Be
 
 ### XFA-readiness items (added 2026-05-12 evening)
 
-- [P0] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [Combine-required: YES]
-  **3:10 PM CT hard time-based flatten** — CORRECTED 2026-05-12: applies in BOTH Combine AND XFA per `vault/_meta/topstep_combine_rules.md`. Holding past 3:10 PM CT = rule violation. NOT just an XFA concern.
+- [P0] [effort: 60min] [risk: low] [status: merged 2026-05-12 (claude_code)] [autonomous-eligible: yes] [Combine-required: YES]
+  **3:10 PM CT hard time-based flatten** — SHIPPED 2026-05-12 evening. `tools/hard_flatten_clock.py` + 14 unit tests + wired into `scripts/live_trader.py:scan_once` BEFORE signal-fire logic. Window logic: 2:55-3:04 CT blocks new entries, 3:05-3:29 CT proactive flatten + cancel working orders, 3:30+ CT overnight session resumes. DST-aware via `zoneinfo`.
   Current state: NOT ENFORCED. `_check_autonomous_rth_window` cuts NEW entries at 14:30 ET = 1:30 PM CT, but existing positions can run through to 3:10 PM CT and beyond. The trader operates 24/5 — a position opened in any earlier session can span into the 3:10 PM CT cutoff if not closed.
   Files: `scripts/live_trader.py` (add `_check_hard_time_flatten`), `hooks/risk_gate.py` (mirror check), tests.
   Acceptance: at 3:05 PM CT (5-min buffer before deadline), all open positions market-closed; new entries blocked from 2:55 PM CT onward. Must handle DST timezone correctly.
@@ -50,22 +50,18 @@ User target 2026-05-12: pass Combine in ~1 month, then sustain XFA cash flow. Be
   Files: `hooks/risk_gate.py:_check_consistency_rule`, `scripts/live_trader.py`, `config/risk_limits.yaml`.
   Acceptance: hard-block (not warn) when projected day P&L > 50% of (cycle_profits + projected_day_pnl). Tests cover edge cases at exactly 50%, just over, and on new cycles.
 
-- [P2] [effort: 45min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
-  **Widen news-event blackout from ±5min to ±15min** — Topstep doc recommends ±15min around high-impact (NFP/FOMC/CPI).
-  Current state: `_check_high_impact_blackout` is ±5min. Code is in `hooks/risk_gate.py`.
-  Acceptance: ±15min for HIGH severity, ±5min preserved for MEDIUM. Test verifies a position attempt at -14min before HIGH event is blocked, at -16min is allowed.
+- [P2] [effort: 45min] [risk: low] [status: merged 2026-05-12 (claude_code)] [autonomous-eligible: yes] [XFA-readiness: required]
+  **Widen news-event blackout from ±5min to ±15min** — SHIPPED 2026-05-12 evening. `config/risk_limits.yaml:high_impact_blackout_minutes` changed from 5 to 15. Code path unchanged (already configurable). NFP/FOMC/CPI windows now properly buffered.
 
-- [P2] [effort: 90min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
-  **Holiday/abbreviated-session schedule check** — Topstep abbreviates hours on some holidays; if 3:10 PM CT flatten isn't adjusted, we'd hold past the real session close.
-  Current state: macro brief pipeline fetches some calendar data but no in-trader gate for holiday hours.
-  Acceptance: trader's scan_once reads a `holiday_schedule.json` (auto-refreshed daily) and if today is abbreviated, uses the shortened hard-flatten time. Test with mocked schedule.
+- [P2] [effort: 90min] [risk: low] [status: merged 2026-05-12 (claude_code)] [autonomous-eligible: yes] [XFA-readiness: required]
+  **Holiday/abbreviated-session schedule check** — SHIPPED 2026-05-12 evening. `tools/holiday_schedule.py` (static 2026 CME calendar) + integration in `tools/hard_flatten_clock.py:current_window`. Memorial Day 2026-05-25 abbreviated 12:00 CT close active. Christmas + Good Friday treated as full-close (no trading). 8 unit tests covering edge cases.
 
 - [P3] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required-for-XFA-only]
   **Post-payout MLL recalibration logic** — not needed in Combine. Required immediately upon XFA promotion. Per Topstep docs, MLL resets to $0 after payout, leaving thin headroom.
   Acceptance: on detecting a payout (account balance jumps + MLL reference resets), trader runs `recalibrate_safety_floors()` which logs new headroom, may pause until manual confirmation. Defer build until XFA transition is imminent.
 
-- [P2] [effort: 30min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: recommended]
-  **Position-protection sweep every scan** — verify each open position STILL has a working broker stop in working_orders. If a stop was cancelled/expired/missing for any reason, either re-place it or emergency-flatten.
+- [P2] [effort: 30min] [risk: low] [status: merged 2026-05-12 (claude_code)] [autonomous-eligible: yes] [XFA-readiness: recommended]
+  **Position-protection sweep every scan** — SHIPPED 2026-05-12 evening. `tools/position_protection.py` + 7 unit tests + wired into `scripts/live_trader.py:scan_once`. Runs after `enforce_loss_cap`. Checks each open position for a matching `live_<cid>_stop` working order. If missing AND past 90s grace period, emergency-flattens.
   Why: tonight's MNQ incident revealed a stop can fail to land. The verify-at-placement check now catches placement failures. A periodic sweep catches LATER cancellations (broker session-end, server cleanup, etc.).
   Files: `scripts/live_trader.py` (add to scan_once next to enforce_loss_cap).
   Acceptance: every scan, for each open position, query working orders, verify a stop with matching `customTag` pattern exists. If not → log critical + emergency-flatten.
@@ -114,12 +110,8 @@ User target 2026-05-12: pass Combine in ~1 month, then sustain XFA cash flow. Be
   decisions after Sunday's fills accumulate to n≥10.
   Remaining: wire into `scripts/preflight.py` as step 9 (CLI agent task).
 
-- [P0] [effort: 45min] [risk: medium] [status: open]
-  **Trim live_trader.py: extract snapshot capture to tools/snapshot_writer.py**
-  Why: trader at 763 lines as of 2026-05-08 after adding cleanup + Sunday-reopen gates. The capture_snapshot + compute_unrealized block is ~100 lines of "broker state observer" logic that is not core execution. Extract to tools/ keeps the knife focused.
-  Files: `scripts/live_trader.py` (lines 131-226 region), NEW `tools/snapshot_writer.py`
-  Acceptance: live_trader imports `capture_snapshot` from `tools.snapshot_writer`; all 25 unit tests still pass; dry-run scan output identical to pre-extraction. Trader < 700 lines.
-  Auto-merge: false (touches the running trader path; user should review PR)
+- [P0] [effort: 45min] [risk: medium] [status: merged (already done — verified 2026-05-12)] [autonomous-eligible: yes]
+  **Trim live_trader.py: extract snapshot capture to tools/snapshot_writer.py** — ALREADY SHIPPED. `tools/snapshot_writer.py` exists and is imported at `scripts/live_trader.py:132` (`from tools.snapshot_writer import capture_snapshot`). Backlog status was stale.
 
 - [P1] [effort: 4h] [risk: low] [status: open — DEMOTED 2026-05-08 from P0]
   **Strategy R&D: target >50% hit rate at heavy slippage**
@@ -166,17 +158,8 @@ User target 2026-05-12: pass Combine in ~1 month, then sustain XFA cash flow. Be
   Acceptance: backtest with post-only fills (estimated fill rate 40-60%) shows net P&L improvement after accounting for missed fills. Live data confirms entry slippage reduction.
   Auto-merge: false (touches order placement code path)
 
-- [P0] [effort: 60min] [risk: low] [status: framework merged 2026-05-08 (cowork); sweep-run still open]
-  **Strategy parameter sweep framework — gap_fill robustness sweep**
-  Framework SHIPPED by cowork: `scripts/param_sweep.py` (commit `ce495bb`).
-  Generic walk-forward sweeper, replaces per-sweep `walk_forward_*.py` pattern.
-  **Still TODO**: actually run the gap_fill robustness sweep:
-    `python -m scripts.param_sweep --strategy gap_fill \
-      --params 'min_gap_atr=0.5,0.75,1.0,1.5;rr_target=1.0,1.25,1.5,2.0' \
-      --symbols ZN,ZT,ZB,ZF`
-  Output: `vault/research/param_sweeps/gap_fill_<date>.csv`. Goal: find
-  params with enough per-trade R to absorb 0.25-0.5 tick slippage.
-  Auto-merge: true (offline analysis only)
+- [P0] [effort: 60min] [risk: low] [status: merged 2026-05-11 (claude_code) — sweep run + revealed broken pipeline]
+  **Strategy parameter sweep framework — gap_fill robustness sweep** — SHIPPED 2026-05-11 night. Multiple sweeps run on gap_fill + gap_fill_wide; output in `vault/research/param_sweeps/`. The sweep run REVEALED a deeper bug: param_sweep wasn't passing tick_size to the strategy. Patched (also surfaced the t.stop_price typo bug). After fixes, NEITHER gap_fill NOR gap_fill_wide qualified — leading to gap_fill removal from `live_strategies_filter` and a diversified 23-cell deployment of non-gap_fill strategies. See `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`.
 
 ### Cowork shipped 2026-05-08 (status: merged)
 

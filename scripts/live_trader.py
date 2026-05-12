@@ -956,9 +956,30 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
             _log(f"DLL BREACH: {why}")
             return {"status": "dll_halt", "reason": why}
 
+    # 3:10 PM CT hard-flatten enforcement (Topstep Combine + XFA rule).
+    # Must run BEFORE entry/exit logic so the deadline is honored even
+    # if signals fire. See tools/hard_flatten_clock.py for window logic.
+    if not dry_run and not paper:
+        from tools.hard_flatten_clock import (enforce_hard_flatten,
+                                                should_block_new_entries)
+        _hf_result = enforce_hard_flatten(client, account_id, log_fn=_log)
+        if _hf_result["flattened"] or _hf_result["cancelled"]:
+            _log(f"  HARD_FLATTEN window={_hf_result['window']}: "
+                  f"flattened {len(_hf_result['flattened'])} position(s), "
+                  f"cancelled {_hf_result['cancelled']} order(s)")
+        if should_block_new_entries():
+            _log(f"  Within 3:10 PM CT closing window — blocking new entries this scan")
+            return {"status": "hard_flatten_window", **_hf_result}
+
     # Per-trade loss-cap enforcement + trailing-profit-lock + daily cap
     if not dry_run and not paper:
         enforce_loss_cap(client, account_id)
+        # 2026-05-12: periodic protection sweep — verify each open position
+        # still has a working broker stop. Catches stops that the broker
+        # cancelled mid-session (session-end cleanup, server error, etc.).
+        # Complements `_verify_stop_landed` which only checks at placement.
+        from tools.position_protection import sweep as _protection_sweep
+        _protection_sweep(client, account_id, log_fn=_log)
         # 2026-05-11 evening: with SKIP_TARGET_LEG=True, the broker doesn't
         # auto-take profit (no target leg). This call provides software-side
         # take-profit via the trailing-profit-lock + hard-cap rules in

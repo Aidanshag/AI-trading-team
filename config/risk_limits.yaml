@@ -521,7 +521,10 @@ sessions:
   block_first_n_minutes_after_globex_reopen: 30
   # Pre/post blackout around high-impact events. Reads
   # vault/economic_calendar/today.json. 0 disables the check.
-  high_impact_blackout_minutes: 5
+  # 2026-05-12: widened from 5 to 15 min per Topstep recommendation
+  # (vault/_meta/topstep_combine_rules.md). NFP/FOMC/CPI volatility
+  # spikes regularly exceed the prior 5-min window.
+  high_impact_blackout_minutes: 15
   # 24/5 trading enabled per user 2026-04-28. Globex futures trade Sun 17:00 CT
   # through Fri 16:00 CT with brief daily break ~16:00-17:00 CT.
   no_new_positions_after_local_time: "15:55"   # America/Chicago — only blocks the last 5 min before daily Globex maintenance break
