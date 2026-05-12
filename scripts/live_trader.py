@@ -845,9 +845,15 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
             _log(f"DLL BREACH: {why}")
             return {"status": "dll_halt", "reason": why}
 
-    # Per-trade loss-cap enforcement
+    # Per-trade loss-cap enforcement + trailing-profit-lock
     if not dry_run and not paper:
         enforce_loss_cap(client, account_id)
+        # 2026-05-11 evening: with SKIP_TARGET_LEG=True, the broker doesn't
+        # auto-take profit (no target leg). This call provides software-side
+        # take-profit via the trailing-profit-lock + hard-cap rules in
+        # tools/profit_protect.py. See module docstring for tier definitions.
+        from tools.profit_protect import check_and_close as _profit_lock_check
+        _profit_lock_check(client, account_id, log_fn=_log)
         cleanup_orphan_brackets(client, account_id)
 
     # Cells to scan
