@@ -20,9 +20,16 @@ Production today operates differently:
   * Hard-flatten clock — every intraday position closes by 3:10 PM CT
     (or earlier on abbreviated holidays).
 
-This module simulates that ladder against shadow signal bars, so we get
-an apples-to-apples "what would production have realized" number
-(`exec_mirror_pnl_r`) alongside the theoretical pnl_r.
+FRICTION (v2 — added 2026-05-12):
+The simulator now subtracts realistic execution costs from every
+outcome:
+  * Round-trip slippage = 1.5 ticks (entry + normal exit, 0.75 each side)
+  * Fees per `tools/shadow_realism.FEES_PER_ROUND_TRIP`
+  * Additional stop-slippage = 1.0 tick when `outcome=stop_hit`
+    (broker stops slip past trigger price in fast tape)
+This makes `exec_mirror_pnl_r` the closest we can get to what
+production would actually realize on a fill-for-fill basis. The two
+slippage constants are conservative — biased toward under-promising.
 
 Built 2026-05-12 in response to the user's request to make shadow data
 match production reality.
@@ -39,12 +46,22 @@ from tools.profit_protect import (
     decide,
     _TICK_ECONOMICS,
 )
+from tools.shadow_realism import (
+    slippage_cost_usd,
+    fees_round_trip_usd,
+    DEFAULT_SLIPPAGE_TICKS_ROUND_TRIP,
+)
 
 # How long to walk before time-stopping (mirrors theoretical resolver default).
 DEFAULT_TIMEOUT_HOURS = 8
 
 # Hard-flatten time CT (mirrors tools/hard_flatten_clock.DEADLINE_TIME_CT).
 HARD_FLATTEN_TIME_CT = dtime(15, 10)
+
+# Default extra slippage when broker stop fires. Stops convert to market on
+# touch and tend to slip past trigger price by 1-2 ticks in fast tape.
+# Conservative default = 1.0 tick.
+DEFAULT_STOP_SLIPPAGE_TICKS: float = 1.0
 
 
 def _bar_ts(b: dict) -> Optional[datetime]:
@@ -67,7 +84,6 @@ def _is_past_hard_flatten(ts_utc: datetime) -> bool:
         ts_ct = ts_utc.astimezone(ZoneInfo("America/Chicago"))
     except Exception:
         from datetime import timedelta as _td
-        # Rough fallback: UTC-5
         ts_ct = ts_utc - _td(hours=5)
     try:
         from tools.holiday_schedule import hard_flatten_time_ct
@@ -75,6 +91,44 @@ def _is_past_hard_flatten(ts_utc: datetime) -> bool:
     except Exception:
         deadline = HARD_FLATTEN_TIME_CT
     return ts_ct.time() >= deadline and ts_ct.weekday() < 5
+
+
+def _apply_friction(
+    outcome: str,
+    gross_r: float,
+    symbol: str,
+    risk_usd: float,
+    qty: int,
+    *,
+    round_trip_slippage_ticks: float,
+    stop_slippage_ticks: float,
+    apply_friction: bool,
+) -> tuple[float, str]:
+    """Convert idealized R to realized R after slippage + fees + optional
+    stop-slippage. Returns (net_r, friction_breakdown_str)."""
+    if not apply_friction:
+        return gross_r, ""
+    if risk_usd <= 0:
+        return gross_r, " | friction_skipped(zero_risk)"
+
+    gross_usd = gross_r * risk_usd
+    slip_usd = slippage_cost_usd(symbol, round_trip_slippage_ticks, qty)
+    fees_usd = fees_round_trip_usd(symbol, qty)
+    stop_slip_usd = 0.0
+    if outcome == "stop_hit" and stop_slippage_ticks > 0:
+        _, tick_value = _TICK_ECONOMICS.get(symbol, (0.0, 0.0))
+        stop_slip_usd = stop_slippage_ticks * tick_value * qty
+
+    net_usd = gross_usd - slip_usd - fees_usd - stop_slip_usd
+    net_r = net_usd / risk_usd
+    breakdown = (
+        f" | friction: gross=${gross_usd:+.2f} "
+        f"slip=-${slip_usd:.2f} fees=-${fees_usd:.2f}"
+    )
+    if stop_slip_usd > 0:
+        breakdown += f" stop_slip=-${stop_slip_usd:.2f}"
+    breakdown += f" net=${net_usd:+.2f} ({net_r:+.2f}R)"
+    return net_r, breakdown
 
 
 def evaluate_exec_mirror(
@@ -90,20 +144,28 @@ def evaluate_exec_mirror(
     loss_cap_usd: float = LOSS_TIER_HARD_CAP_USD,
     gain_cap_usd: Optional[float] = GAIN_TIER_HARD_CAP_USD,
     qty: int = 1,
+    apply_friction: bool = True,
+    round_trip_slippage_ticks: float = DEFAULT_SLIPPAGE_TICKS_ROUND_TRIP,
+    stop_slippage_ticks: float = DEFAULT_STOP_SLIPPAGE_TICKS,
 ) -> tuple[str, float, str]:
     """Replay bars under production exit logic.
 
     Returns (outcome, exec_mirror_pnl_r, notes).
 
     Outcome codes:
-      stop_hit        — broker stop hit first
-      profit_lock     — trailing-profit-lock tier triggered (the typical winner path)
+      stop_hit        — broker stop hit first (adds stop-slippage)
+      profit_lock     — trailing-profit-lock tier triggered (typical winner path)
       loss_cap        — LOSS_TIER_HARD_CAP_USD floor (belt-and-suspenders)
       gain_cap        — GAIN_TIER_HARD_CAP_USD ceiling (if set)
       hard_flatten    — 3:10 PM CT enforcement
       time_stopped    — ran the timeout without any exit; mark-to-market
       no_fill         — entry never tagged within fill window
       invalidated     — missing bars / risk_usd / tick economics
+
+    Friction (applied by default, set apply_friction=False to disable):
+      * round-trip slippage = 1.5 ticks (0.75 entry + 0.75 exit)
+      * per-symbol fees = tools/shadow_realism.FEES_PER_ROUND_TRIP
+      * additional stop-slippage = 1.0 tick when outcome=stop_hit
     """
     side = (side or "").lower()
     if not bars or side not in ("long", "short"):
@@ -119,14 +181,11 @@ def evaluate_exec_mirror(
     if tick_size <= 0 or tick_value <= 0:
         return "invalidated", 0.0, f"no tick economics for {symbol}"
 
-    # Risk in USD (R-denominator). Prefer the row's recorded risk_usd; if
-    # missing, compute from tick economics + qty.
     if risk_usd is None or risk_usd <= 0:
         risk_usd = (risk_per_unit / tick_size) * tick_value * qty
     if risk_usd <= 0:
         return "invalidated", 0.0, "could not compute risk_usd"
 
-    # Pre-parse bars: keep only those after entry-fill window.
     parsed: list[tuple[Optional[datetime], float, float, float]] = []
     for b in bars:
         try:
@@ -140,10 +199,8 @@ def evaluate_exec_mirror(
     if not parsed:
         return "invalidated", 0.0, "no parseable bars"
 
-    # Sort by ts (some feeds return newest-first)
     parsed.sort(key=lambda p: p[0] if p[0] else datetime.min.replace(tzinfo=timezone.utc))
 
-    # Find entry-fill: first bar that tags entry price.
     entry_filled_idx: Optional[int] = None
     entry_ts: Optional[datetime] = None
     for i, (ts, hi, lo, cl) in enumerate(parsed):
@@ -154,46 +211,48 @@ def evaluate_exec_mirror(
     if entry_filled_idx is None:
         return "no_fill", 0.0, "entry not tagged in shadow window"
 
-    # Walk forward from entry. Track peak unrealized $.
     peak_unrealized = 0.0
     timeout_ts: Optional[datetime] = None
     if entry_ts is not None:
         timeout_ts = entry_ts + timedelta(hours=timeout_hours)
 
-    def _to_r(usd: float) -> float:
-        return usd / float(risk_usd)
+    def _finalize(outcome: str, gross_r: float, note: str) -> tuple[str, float, str]:
+        net_r, breakdown = _apply_friction(
+            outcome, gross_r, symbol, risk_usd, qty,
+            round_trip_slippage_ticks=round_trip_slippage_ticks,
+            stop_slippage_ticks=stop_slippage_ticks,
+            apply_friction=apply_friction,
+        )
+        return outcome, net_r, (note + breakdown)[:240]
 
     for i in range(entry_filled_idx, len(parsed)):
         ts, hi, lo, cl = parsed[i]
 
-        # 1) Stop-hit check (matches broker stop logic — lo for long, hi for short).
-        #    If hit on the entry bar, conservative same-bar tie: assume stop fires
-        #    before tier checks.
         if side == "long" and lo <= stop:
-            return "stop_hit", -1.0, f"stop @ {stop} bar={ts.isoformat() if ts else '?'}"
+            return _finalize("stop_hit", -1.0, f"stop @ {stop} bar={ts.isoformat() if ts else '?'}")
         if side == "short" and hi >= stop:
-            return "stop_hit", -1.0, f"stop @ {stop} bar={ts.isoformat() if ts else '?'}"
+            return _finalize("stop_hit", -1.0, f"stop @ {stop} bar={ts.isoformat() if ts else '?'}")
 
-        # 2) Hard-flatten clock: if past 3:10 PM CT, close at this bar's close.
         if ts is not None and _is_past_hard_flatten(ts):
             move = (cl - entry) if side == "long" else (entry - cl)
             usd = (move / tick_size) * tick_value * qty
-            return "hard_flatten", _to_r(usd), (
-                f"3:10 PM CT enforcement, close=${cl} pnl=${usd:+.2f}")
+            gross_r = usd / risk_usd
+            return _finalize("hard_flatten", gross_r,
+                              f"3:10 PM CT close={cl} pnl=${usd:+.2f}")
 
-        # 3) Tier evaluation against this bar's extreme (high for long, low for short).
-        #    Peak is the most favorable point yet reached. We approximate by
-        #    using the bar's most favorable extreme — which is what production
-        #    would have seen as the position's high-water.
         favorable = hi if side == "long" else lo
         move_fav = (favorable - entry) if side == "long" else (entry - favorable)
         fav_usd = (move_fav / tick_size) * tick_value * qty
         if fav_usd > peak_unrealized:
             peak_unrealized = fav_usd
 
-        # Decide on this bar's UNFAVORABLE extreme (low for long, high for short).
-        # If the close-or-retrace within this bar fell below an active floor,
-        # production would have market-closed mid-bar at that floor (or worse).
+        # Skip profit-protect / loss-cap evaluation on the entry bar itself.
+        # In production the position has just opened; profit_protect runs on
+        # subsequent scans. Checking it on the entry bar's unfavorable extreme
+        # creates a false same-bar close that production wouldn't produce.
+        if i == entry_filled_idx:
+            continue
+
         unfavorable = lo if side == "long" else hi
         move_unfav = (unfavorable - entry) if side == "long" else (entry - unfavorable)
         unfav_usd = (move_unfav / tick_size) * tick_value * qty
@@ -202,36 +261,33 @@ def evaluate_exec_mirror(
                                        tiers=tiers, gain_cap=gain_cap_usd,
                                        loss_cap=loss_cap_usd)
         if should_close:
-            # The realized exit isn't necessarily at unfav_usd — for a trailing
-            # lock close, the bot fires at the floor. Estimate exit usd:
             if "trailing_lock" in reason:
-                # Pull floor out of the reason string. Cheap parse; we know the
-                # decide() format.
                 import re as _re
                 m = _re.search(r"floor \$(-?\d+(?:\.\d+)?)", reason)
                 exit_usd = float(m.group(1)) if m else unfav_usd
+                outcome = "profit_lock"
             elif "loss_hard_cap" in reason:
                 exit_usd = -float(loss_cap_usd)
+                outcome = "loss_cap"
             elif "hard_cap" in reason:
                 exit_usd = float(gain_cap_usd) if gain_cap_usd else unfav_usd
+                outcome = "gain_cap"
             else:
                 exit_usd = unfav_usd
+                outcome = "exit_unknown"
+            gross_r = exit_usd / risk_usd
+            return _finalize(outcome, gross_r, reason[:120])
 
-            outcome = ("profit_lock" if "trailing_lock" in reason
-                        else "loss_cap" if "loss_hard_cap" in reason
-                        else "gain_cap" if "hard_cap" in reason
-                        else "exit_unknown")
-            return outcome, _to_r(exit_usd), reason[:160]
-
-        # 4) Timeout
         if timeout_ts is not None and ts is not None and ts >= timeout_ts:
             move = (cl - entry) if side == "long" else (entry - cl)
             usd = (move / tick_size) * tick_value * qty
-            return "time_stopped", _to_r(usd), (
-                f"timeout {timeout_hours}h, close=${cl} pnl=${usd:+.2f}")
+            gross_r = usd / risk_usd
+            return _finalize("time_stopped", gross_r,
+                              f"timeout {timeout_hours}h close={cl} pnl=${usd:+.2f}")
 
-    # Ran out of bars without a clean exit. Mark-to-market against last close.
     _, _, _, last_close = parsed[-1]
     move = (last_close - entry) if side == "long" else (entry - last_close)
     usd = (move / tick_size) * tick_value * qty
-    return "time_stopped", _to_r(usd), f"end-of-bars mtm @ {last_close} pnl=${usd:+.2f}"
+    gross_r = usd / risk_usd
+    return _finalize("time_stopped", gross_r,
+                      f"end-of-bars mtm @ {last_close} pnl=${usd:+.2f}")

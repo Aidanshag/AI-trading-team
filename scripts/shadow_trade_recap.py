@@ -57,7 +57,12 @@ def _build_report(rows: list[dict], days: int) -> tuple[str, list[dict]]:
         "",
         "## Per-(symbol, strategy) performance",
         "",
-        "| Symbol | Strategy | n | Wins | Hit-rate | Avg R | Min R | Max R | Tier |",
+        "`Theo R` = idealized stop-vs-target outcome (research view).",
+        "`Exec R` = what production would actually realize after "
+        "slippage + fees + profit_lock + hard_flatten "
+        "(see `tools/exec_mirror.py`). Promotion tier uses `Exec R`.",
+        "",
+        "| Symbol | Strategy | n | Wins | HR | Theo R | Exec R | Gap | Tier |",
         "|---|---|---:|---:|---:|---:|---:|---:|:---:|",
     ]
     candidates: list[dict] = []
@@ -67,15 +72,22 @@ def _build_report(rows: list[dict], days: int) -> tuple[str, list[dict]]:
         n = int(r["n"]); wins = int(r["wins"] or 0)
         hr = wins / n if n else 0.0
         avg_r = float(r["avg_r"] or 0.0)
-        tier = _classify(n, hr, avg_r)
+        exec_r = float(r["exec_avg_r"] or 0.0) if r.get("exec_avg_r") is not None else None
+        # Tier uses exec_mirror if available (more conservative); falls back
+        # to theoretical if not yet populated.
+        tier_input = exec_r if exec_r is not None else avg_r
+        tier = _classify(n, hr, tier_input)
+        gap_str = f"{(exec_r - avg_r):+.2f}" if exec_r is not None else "_n/a_"
+        exec_str = f"{exec_r:+.2f}" if exec_r is not None else "_n/a_"
         lines.append(
             f"| {r['symbol']} | {r['strategy']} | {n} | {wins} | "
-            f"{hr:.0%} | {avg_r:+.2f} | {float(r['min_r'] or 0):+.2f} | "
-            f"{float(r['max_r'] or 0):+.2f} | **{tier}** |"
+            f"{hr:.0%} | {avg_r:+.2f} | {exec_str} | {gap_str} | **{tier}** |"
         )
         candidates.append({
             "symbol": r["symbol"], "strategy": r["strategy"],
-            "n": n, "win_rate": hr, "avg_r": avg_r, "tier": tier,
+            "n": n, "win_rate": hr,
+            "avg_r": avg_r, "exec_avg_r": exec_r,
+            "tier": tier,
         })
 
     greens = [c for c in candidates if c["tier"] == "GREEN"]

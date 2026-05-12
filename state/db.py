@@ -315,8 +315,13 @@ class Database:
     def shadow_trade_stats(self, *, days: int = 14) -> list[dict[str, Any]]:
         """Per-(symbol, strategy) hit-rate + avg R over the last N days.
 
-        Only counts resolved trades. Used by shadow_trade_recap.py to
-        recommend candidates for promotion to the active universe.
+        Only counts resolved trades. Returns BOTH theoretical R (`avg_r`)
+        and execution-mirror R (`exec_avg_r`) — the latter is what
+        production would actually realize after slippage + fees +
+        profit_lock + hard_flatten. See tools/exec_mirror.py.
+
+        Wins counted across both resolver vocabularies:
+          target_hit (ProjectX resolver) + win (yfinance resolver)
         """
         from datetime import datetime, timedelta, timezone
         cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=days)
@@ -324,10 +329,16 @@ class Database:
         rows = self.connect().execute(
             """SELECT symbol, strategy,
                       COUNT(*)                                   AS n,
-                      SUM(CASE WHEN outcome='target_hit' THEN 1 ELSE 0 END) AS wins,
+                      SUM(CASE WHEN outcome IN ('target_hit','win')
+                                 THEN 1 ELSE 0 END)               AS wins,
                       AVG(pnl_r)                                 AS avg_r,
                       MIN(pnl_r)                                 AS min_r,
-                      MAX(pnl_r)                                 AS max_r
+                      MAX(pnl_r)                                 AS max_r,
+                      AVG(exec_mirror_pnl_r)                     AS exec_avg_r,
+                      MIN(exec_mirror_pnl_r)                     AS exec_min_r,
+                      MAX(exec_mirror_pnl_r)                     AS exec_max_r,
+                      SUM(CASE WHEN exec_mirror_pnl_r > 0
+                                 THEN 1 ELSE 0 END)               AS exec_wins
                  FROM shadow_trades
                 WHERE outcome IS NOT NULL
                   AND ts_signal >= ?

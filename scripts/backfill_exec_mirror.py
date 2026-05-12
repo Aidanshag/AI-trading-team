@@ -36,18 +36,23 @@ def main() -> int:
     p.add_argument("--limit", type=int, default=2000)
     p.add_argument("--max-window-hours", type=int, default=8)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--force", action="store_true",
+                   help="recompute even rows that already have exec_mirror set")
     args = p.parse_args()
 
     db = get_db()
     conn = db.connect()
+    where_clause = (
+        "outcome IS NOT NULL" if args.force
+        else "outcome IS NOT NULL AND exec_mirror_outcome IS NULL"
+    )
     rows = conn.execute(
-        """SELECT id, ts_signal, symbol, strategy, side,
-                  entry_price, stop_price, target_price, risk_usd
-             FROM shadow_trades
-            WHERE outcome IS NOT NULL
-              AND exec_mirror_outcome IS NULL
-            ORDER BY ts_signal DESC
-            LIMIT ?""",
+        f"""SELECT id, ts_signal, symbol, strategy, side,
+                   entry_price, stop_price, target_price, risk_usd
+              FROM shadow_trades
+             WHERE {where_clause}
+             ORDER BY ts_signal DESC
+             LIMIT ?""",
         (args.limit,),
     ).fetchall()
     pending = [dict(r) for r in rows]
