@@ -37,12 +37,12 @@ User target 2026-05-12: pass Combine in ~1 month, then sustain XFA cash flow. Be
 
 ### XFA-readiness items (added 2026-05-12 evening)
 
-- [P1] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
-  **3:10 PM CT hard time-based flatten** — XFA hard rule. Holding past 3:10 PM CT = rule violation = account closure risk.
-  Current state: NOT ENFORCED. `_check_autonomous_rth_window` cuts NEW entries at 14:30 ET = 1:30 PM CT, but existing positions can run through.
+- [P0] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [Combine-required: YES]
+  **3:10 PM CT hard time-based flatten** — CORRECTED 2026-05-12: applies in BOTH Combine AND XFA per `vault/_meta/topstep_combine_rules.md`. Holding past 3:10 PM CT = rule violation. NOT just an XFA concern.
+  Current state: NOT ENFORCED. `_check_autonomous_rth_window` cuts NEW entries at 14:30 ET = 1:30 PM CT, but existing positions can run through to 3:10 PM CT and beyond. The trader operates 24/5 — a position opened in any earlier session can span into the 3:10 PM CT cutoff if not closed.
   Files: `scripts/live_trader.py` (add `_check_hard_time_flatten`), `hooks/risk_gate.py` (mirror check), tests.
-  Acceptance: at 15:05 PM CT (5-min buffer before deadline), all open positions market-closed; new entries blocked from 14:55 PM CT onward.
-  Auto-merge: yes once tests cover (a) 15:00 CT scan with open position triggers close, (b) 14:00 CT scan does not, (c) timezone-aware (UTC↔CT conversion).
+  Acceptance: at 3:05 PM CT (5-min buffer before deadline), all open positions market-closed; new entries blocked from 2:55 PM CT onward. Must handle DST timezone correctly.
+  Auto-merge: yes. Tests cover (a) 3:00 CT scan with open position triggers close, (b) 12:00 CT scan does not, (c) UTC↔CT conversion, (d) holiday schedule integration.
 
 - [P1] [effort: 90min] [risk: medium] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
   **Consistency-rule enforcement (50% single-day profit cap)** — currently advisory only per CLAUDE.md `_check_consistency_rule warn-tier`. Today's +$2,948 GC day will trip this in <5 days unless we dilute or cap.

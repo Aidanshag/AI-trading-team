@@ -198,7 +198,14 @@ Already-encoded defenses: `STRATEGY_CELL_ALLOWLIST` (cell-level granularity), `l
 
 If applying either pattern surfaces a real risk in the proposed change, the change should either be modified to address it OR the analysis piece (`2026-05-07_lesson_meta_patterns.md`) updated with a note explaining why this case is OK to merge as-is. Don't silently ship around the pattern.
 
-If a third real-world incident matching either pattern emerges despite this checklist, escalate to hard-encoding the check as a CI test that fails the build.
+### n=3 escalation — CI tests (landed 2026-05-11 evening)
+
+The 2026-05-10/11 incidents — both already-known patterns recurring despite the checklist — hit n=3 (calibration breakdown = Pattern B; orphan-leg regression = Pattern A). Hard-encoded CI tests now guard the regression surface:
+
+- `tests/test_pattern_regressions.py::test_pattern_a_unfilled_entry_does_not_place_protective_legs` — fails the build if `scripts/live_trader.place_bracket()` regresses to placing protective stop/target before entry-fill confirmation. Uses a mock broker that never reports a fill; asserts exactly one entry order placed, exactly one cancel, no protective legs, status='cancelled_unfilled'.
+- `tests/test_pattern_regressions.py::test_pattern_b_gap_fill_floor_active_emits_no_sub_floor_signals` (+ companion for `gap_fill_wide` + a non-vacuous sanity check) — fails the build if ATR-based-stop strategies regress to emitting sub-floor stops when `tick_size`/`min_stop_ticks` params are supplied. Uses synthetic low-vol bars where ATR≈1tick.
+
+Standard test run (`python -m pytest tests/ -q --ignore=tests/test_overnight_fixes.py`) picks these up automatically. If a future incident (n=4) recurs that doesn't fit either existing pattern signature, add a new test in the same file and reference it here.
 
 ## What success looks like
 
