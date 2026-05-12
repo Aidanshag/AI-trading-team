@@ -135,6 +135,36 @@ switch ($Verb.ToLower()) {
     "resume" {
         & $Python -m scripts.halt clear
     }
+    "stage" {
+        # Show or set account stage (combine | xfa | live)
+        # When stage transitions away from 'combine', the daily profit cap
+        # auto-disables (config/account_stage.yaml controls it).
+        if (-not $Args -or $Args.Count -eq 0) {
+            # Use python -m to read the YAML cleanly without shell quoting issues
+            $stageCfg = Get-Content (Join-Path $ProjectRoot "config\account_stage.yaml") -Raw
+            if ($stageCfg -match '(?m)^stage:\s*(\S+)') { Write-Host "stage = $($Matches[1])" }
+            if ($stageCfg -match '(?m)^combine_daily_profit_cap_usd:\s*(\S+)') { Write-Host "combine_daily_profit_cap_usd = $($Matches[1])" }
+        } else {
+            $newStage = $Args[0].ToString().ToLower()
+            if ($newStage -notin @("combine", "xfa", "live")) {
+                Write-Host "Invalid stage: $newStage. Must be combine | xfa | live." -ForegroundColor Red
+                exit 1
+            }
+            $cfg = Join-Path $ProjectRoot "config\account_stage.yaml"
+            $content = Get-Content $cfg -Raw
+            $content = $content -replace '(?m)^stage:\s*\S+', "stage: $newStage"
+            Set-Content -Path $cfg -Value $content -Encoding utf8
+            Write-Host "Account stage set to: $newStage" -ForegroundColor Green
+            if ($newStage -ne "combine") {
+                Write-Host "Daily profit cap is now DISABLED (combine-only safety)." -ForegroundColor Yellow
+            } else {
+                Write-Host "Daily profit cap remains active." -ForegroundColor Yellow
+            }
+            Write-Host ""
+            Write-Host "Restart the trader for changes to take effect:" -ForegroundColor Cyan
+            Write-Host "  fund stop && fund start" -ForegroundColor Cyan
+        }
+    }
 
     # ?? Reports ????????????????????????????????????????????
     "eod" {

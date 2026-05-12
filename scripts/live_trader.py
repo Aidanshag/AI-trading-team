@@ -942,7 +942,7 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
             _log(f"DLL BREACH: {why}")
             return {"status": "dll_halt", "reason": why}
 
-    # Per-trade loss-cap enforcement + trailing-profit-lock
+    # Per-trade loss-cap enforcement + trailing-profit-lock + daily cap
     if not dry_run and not paper:
         enforce_loss_cap(client, account_id)
         # 2026-05-11 evening: with SKIP_TARGET_LEG=True, the broker doesn't
@@ -951,6 +951,24 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
         # tools/profit_protect.py. See module docstring for tier definitions.
         from tools.profit_protect import check_and_close as _profit_lock_check
         _profit_lock_check(client, account_id, log_fn=_log)
+        # 2026-05-12: daily-profit cap (Combine-only). Caps a single day's
+        # gains to keep the 50% consistency rule satisfied. Auto-disabled
+        # when account_stage != combine (see config/account_stage.yaml).
+        from tools.account_stage import (combine_daily_profit_cap_usd,
+                                          daily_window_reset_hour_ct)
+        from tools.daily_profit_cap import check_and_enforce as _profit_cap_check
+        _cap = combine_daily_profit_cap_usd()
+        if _cap is not None:
+            def _set_halt_to(dt_utc):
+                # Use the same halt mechanism as scripts/halt.py: text-edits
+                # config/risk_limits.yaml's trading_halt_until line (preserving
+                # comments). _write_halt is module-private but we use it here
+                # to avoid duplicating the regex-edit logic.
+                from scripts.halt import _write_halt
+                _write_halt(dt_utc, reason="daily_profit_cap")
+            _profit_cap_check(client, account_id, cap_usd=_cap,
+                               reset_hour_ct=daily_window_reset_hour_ct(),
+                               log_fn=_log, halt_setter=_set_halt_to)
         cleanup_orphan_brackets(client, account_id)
 
     # Cells to scan

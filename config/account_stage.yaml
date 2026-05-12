@@ -1,0 +1,21 @@
+# Account stage — controls which Combine-specific safety rules apply.
+#
+# Manually update this when transitioning between stages:
+#   combine  → Trading Combine (current — has 50% consistency rule)
+#   xfa      → Express Funded Account (real payouts begin)
+#   live     → Live Funded Account (Stage 3, real money)
+#
+# Easy way to flip: `fund stage xfa` (see scripts/fund.ps1)
+
+stage: combine
+
+# Combine-specific: daily profit ceiling to dilute consistency rule
+# Best-day < 50% of cycle profits is required to pass. A $600 cap at the
+# $50K Combine means today can be at most $600, so 5+ days of profit hit
+# the $3K target with today at 20% (well under 50%). Auto-disabled when
+# stage != combine.
+combine_daily_profit_cap_usd: 600
+
+# Combine-specific: hour at which the daily cap window resets.
+# Topstep's DLL resets at 5:00 PM CT — we mirror that.
+daily_window_reset_hour_ct: 17

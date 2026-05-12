@@ -1,0 +1,6 @@
+{
+  "day_key": "2026-05-11_after17ct",
+  "start_balance": 49254.14,
+  "recorded_at": "2026-05-12T01:30:55.976464+00:00",
+  "bootstrap_reason": "manual: capture today/_2026-05-11/_after17ct window correctly so the daily cap recognizes the +$2948 GC accumulation as today_pnl"
+}
