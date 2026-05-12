@@ -424,6 +424,50 @@ def test_current_regime_returns_dict_on_full_bars():
     assert "trend_regime" in regime and regime["trend_regime"] in ("trending", "ranging")
 
 
+def test_position_avg_price_returns_value_when_position_exists():
+    """_position_avg_price returns averagePrice float when position is open."""
+    class _Broker:
+        def get_positions(self, _aid):
+            return [{"contractId": "CON.F.US.MNQ.M26", "size": 1,
+                     "type": 1, "averagePrice": 29409.25}]
+    avg = lt._position_avg_price(_Broker(), 1, "CON.F.US.MNQ.M26")
+    assert avg == 29409.25
+
+
+def test_position_avg_price_returns_none_when_flat():
+    """_position_avg_price returns None when no matching position."""
+    class _Broker:
+        def get_positions(self, _aid):
+            return []
+    assert lt._position_avg_price(_Broker(), 1, "CON.F.US.MNQ.M26") is None
+
+
+def test_position_avg_price_returns_none_on_broker_error():
+    """_position_avg_price fails closed on broker exceptions."""
+    class _Bad:
+        def get_positions(self, _aid):
+            raise RuntimeError("broker down")
+    assert lt._position_avg_price(_Bad(), 1, "X") is None
+
+
+def test_verify_stop_landed_finds_order():
+    """_verify_stop_landed returns True when stop_cid is in working orders."""
+    class _Broker:
+        def get_working_orders(self, _aid):
+            return [{"customTag": "live_abc_stop", "id": 1}]
+    assert lt._verify_stop_landed(_Broker(), 1, "X", "live_abc_stop",
+                                    poll_attempts=1, poll_s=0) is True
+
+
+def test_verify_stop_landed_returns_false_when_missing():
+    """_verify_stop_landed returns False after polling attempts exhausted."""
+    class _Broker:
+        def get_working_orders(self, _aid):
+            return []  # never shows up
+    assert lt._verify_stop_landed(_Broker(), 1, "X", "live_missing",
+                                    poll_attempts=2, poll_s=0) is False
+
+
 def test_wait_for_entry_fill_returns_true_when_signature_changes():
     """When position appears (signature changes from baseline), wait
     returns True so caller proceeds to place protective legs."""

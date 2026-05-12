@@ -483,6 +483,60 @@ def _position_signature(client, account_id, contract_id: str) -> tuple[int, int]
     return (0, 0)
 
 
+def _position_avg_price(client, account_id, contract_id: str) -> float | None:
+    """Return the averagePrice for the open position on this contract,
+    or None if flat. 2026-05-11: needed to recalculate the stop AFTER
+    fill — see place_bracket comment on the MNQ 39-point-favorable-fill
+    bug that left the position unprotected."""
+    try:
+        for p in client.get_positions(account_id):
+            if p.get("contractId") == contract_id and int(p.get("size", 0)) != 0:
+                px = p.get("averagePrice")
+                if px is not None:
+                    return float(px)
+    except Exception:
+        pass
+    return None
+
+
+def _verify_stop_landed(client, account_id, contract_id: str,
+                        stop_cid: str, poll_attempts: int = 3,
+                        poll_s: float = 1.0) -> bool:
+    """Confirm the stop order shows up in working orders after placement.
+    Polls a few times with short delay because brokers can lag in
+    surfacing newly-placed orders. Returns True iff the order is found.
+    2026-05-11."""
+    for _ in range(poll_attempts):
+        try:
+            for o in client.get_working_orders(account_id) or []:
+                if str(o.get("customTag") or "") == stop_cid:
+                    return True
+        except Exception:
+            pass
+        time.sleep(poll_s)
+    return False
+
+
+def _emergency_flatten_position(client, account_id, contract_id: str,
+                                 side_to_close: str, qty: int,
+                                 reason: str) -> bool:
+    """Market-close a position that has no working protective stop.
+    2026-05-11: belt-and-suspenders for stop-placement failures."""
+    import uuid as _uuid
+    cid = f"emergency_flat_{_uuid.uuid4().hex[:8]}"
+    try:
+        client.place_order(
+            account_id=account_id, contract_id=contract_id,
+            side=side_to_close, qty=int(qty), order_type="market",
+            time_in_force="ioc", client_order_id=cid,
+        )
+        _log(f"  EMERGENCY FLATTEN: {contract_id} {side_to_close} x{qty} -- {reason}")
+        return True
+    except Exception as e:
+        _log(f"  EMERGENCY FLATTEN FAILED for {contract_id}: {e}")
+        return False
+
+
 def _wait_for_entry_fill(client, account_id, contract_id: str,
                           baseline_sig: tuple[int, int],
                           timeout_s: int = FILL_WAIT_TIMEOUT_S,
@@ -599,7 +653,20 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
         )
         db.connect().commit()
         return {"status": "cancelled_unfilled", "client_order_id": cid}
-    _log(f"  {symbol} entry FILLED; placing protective legs")
+    # 3a. Recalculate stop relative to ACTUAL fill price.
+    # 2026-05-11 MNQ incident: signal entry was 29448.5, marketable-limit fill
+    # was 29409.25 (39 pts favorable slippage). Original signal stop at 29437.75
+    # ended up on the wrong side of the actual fill -> broker rejected -> position
+    # ran unprotected. Fix: keep the signal's RISK DISTANCE but anchor it to the
+    # fill price instead of the signal's expected entry.
+    actual_fill = _position_avg_price(client, account_id, contract_id) or entry_price
+    signal_risk = abs(entry_price - float(signal["stop"]))
+    if side == "buy":
+        stop_px = _round_to_tick(actual_fill - signal_risk, tick)
+    else:
+        stop_px = _round_to_tick(actual_fill + signal_risk, tick)
+    _log(f"  {symbol} entry FILLED @ {actual_fill}; "
+          f"stop recalculated to {stop_px} (risk={signal_risk:.4f} from fill)")
 
     # 4. Stop-limit (1-tick offset for Topstep's tight-limit rule)
     # NOTE: when SKIP_TARGET_LEG is True (broker target-fill anomaly workaround),
@@ -608,6 +675,7 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
     stop_limit_px = (stop_px - tick) if opp == "sell" else (stop_px + tick)
     stop_limit_px = _round_to_tick(stop_limit_px, tick)
     stop_cid = cid + "_stop"
+    stop_placed_ok = False
     try:
         sr = client.place_order(
             account_id=account_id, contract_id=contract_id,
@@ -616,18 +684,47 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
             time_in_force="gtc", client_order_id=stop_cid,
         )
         sboid = (sr.get("orderId") or sr.get("id")) if isinstance(sr, dict) else None
-        db.connect().execute(
-            """INSERT INTO orders (client_order_id, agent, ts_proposed, ts_submitted,
-                                     symbol, side, order_type, qty, stop_price,
-                                     status, risk_verdict, broker_order_id)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (stop_cid, "live_trader", _utcnow_iso(), _utcnow_iso(),
-             symbol, opp, "stop", int(qty), stop_px,
-             "submitted", "allow", str(sboid) if sboid else None),
-        )
-        db.connect().commit()
+        # Detect broker-side rejection of the stop (returns success=False).
+        sr_ok = (not isinstance(sr, dict)) or sr.get("success") is not False
+        if not sr_ok:
+            err = sr.get("errorMessage") or "rejected"
+            _log(f"  stop placement REJECTED by broker: {err}")
+        else:
+            db.connect().execute(
+                """INSERT INTO orders (client_order_id, agent, ts_proposed, ts_submitted,
+                                         symbol, side, order_type, qty, stop_price,
+                                         status, risk_verdict, broker_order_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (stop_cid, "live_trader", _utcnow_iso(), _utcnow_iso(),
+                 symbol, opp, "stop", int(qty), stop_px,
+                 "submitted", "allow", str(sboid) if sboid else None),
+            )
+            db.connect().commit()
+            # 4a. VERIFY the stop is actually working at the broker.
+            # 2026-05-11: rejection returned success=False but in earlier
+            # implementations rejection still slipped past silently. Belt:
+            # poll working orders for the stop_cid. If absent, emergency-flatten.
+            stop_placed_ok = _verify_stop_landed(client, account_id, contract_id, stop_cid)
+            if not stop_placed_ok:
+                _log(f"  CRITICAL: stop {stop_cid} not visible in working orders "
+                      f"after placement; emergency-flattening position")
+                _emergency_flatten_position(
+                    client, account_id, contract_id,
+                    side_to_close=opp, qty=int(qty),
+                    reason=f"stop {stop_cid} did not land at broker",
+                )
+                return {"status": "stop_placement_failed_flattened",
+                        "client_order_id": cid}
     except ProjectXError as e:
         _log(f"  stop placement failed: {e}")
+        # No stop at broker -> emergency-flatten the now-unprotected position
+        _emergency_flatten_position(
+            client, account_id, contract_id,
+            side_to_close=opp, qty=int(qty),
+            reason=f"stop place_order raised: {e}",
+        )
+        return {"status": "stop_placement_failed_flattened",
+                "client_order_id": cid}
         # Continue — target may still place; verification will catch missing stop
 
     # 3. Target as limit (only if target price provided AND target legs not skipped)
