@@ -45,12 +45,24 @@ from typing import Callable
 
 TRAILING_PROFIT_TIERS: tuple[tuple[float, float], ...] = (
     # (peak_threshold_usd, floor_usd) — order doesn't matter, decide()
-    # picks the highest-active tier. 2026-05-11 evening expansion: added
-    # runner-zone tiers (>$400 peak) after the +$2,616 GC trade revealed
-    # the prior cap was clipping runners. Floors at 50-65% of peak in
-    # the runner zone.
+    # picks the highest-active floor. Trades stack: as peak grows, tighter
+    # higher-floor tiers progressively replace looser low-floor tiers.
+    #
+    # 2026-05-12: added MICRO tiers below $30 after exec_mirror analysis
+    # showed cells with target=$30-50 were getting clipped at $0 (break-
+    # even minus friction) instead of locking a small positive. The
+    # (15, 5) and (25, 12) tiers force closes to lock a small positive
+    # on retrace from low peaks. (30, 0) is retained for clarity but is
+    # dominated by (25, 12) above $25 peak. The user's "let runners run"
+    # is preserved — once peak >= $80 the original tier ladder takes
+    # over and the micro tiers become irrelevant.
+    # --- micro tiers (NEW 2026-05-12) — lock small wins, don't clip runners
+    ( 15.0,     5.0),    # peak $15 → lock $5 (small-quick-win protection)
+    ( 25.0,    12.0),    # peak $25 → lock $12 (closes the $30-$79 gap zone)
+    # --- 2026-05-11 expansion: runner-zone tiers (>$400 peak) after the
+    # +$2,616 GC trade revealed the prior cap was clipping runners.
     # --- tight tiers (small/medium winners — never give back too much)
-    ( 30.0,     0.0),    # never let a +$30 gain become a loss
+    ( 30.0,     0.0),    # original "never let +$30 become a loss"
     ( 80.0,    20.0),
     (150.0,    50.0),
     (250.0,   100.0),

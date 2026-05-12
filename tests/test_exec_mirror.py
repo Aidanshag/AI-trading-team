@@ -122,6 +122,53 @@ def test_stop_slippage_is_additional_on_top_of_round_trip():
         f"with={r_stop} without={r_stop_no_extra}")
 
 
+def test_micro_tier_15_5_locks_small_win_on_retrace():
+    """A trade that peaks just above $15 and retraces below $5 must close
+    at the (15, 5) tier floor — NOT run to stop. Added 2026-05-12 to lock
+    the new micro-tier behavior.
+    GC tick economics: $10/tick × 1.5 ticks favorable = $15 peak.
+    Then $0.5 ticks retrace = $5 unrealized = at floor → close."""
+    from datetime import datetime, timedelta, timezone
+    ts0 = datetime(2026, 5, 12, 14, 0, tzinfo=timezone.utc)
+    bars = [
+        _bar(ts0,                       h=4000.5, l=3999.5, c=4000),    # entry tags
+        _bar(ts0 + timedelta(minutes=1), h=4001.5, l=4000.5, c=4001.2),  # peak +$15
+        _bar(ts0 + timedelta(minutes=2), h=4001,   l=4000.3, c=4000.4),  # retrace
+        _bar(ts0 + timedelta(minutes=3), h=4000.4, l=4000.1, c=4000.2),  # below $5 floor
+    ]
+    outcome, _, _ = evaluate_exec_mirror(
+        bars, symbol="GC", side="long", entry=4000, stop=3990, qty=1,
+    )
+    # Should NOT be stop_hit (stop never touched)
+    assert outcome == "profit_lock", f"expected profit_lock, got {outcome}"
+
+
+def test_micro_tier_does_not_clip_runner_above_150_peak():
+    """A trade that runs to peak $200 uses the (150, 50) tier, not micro
+    tiers. Micro tiers must not affect runner behavior.
+
+    GC math: 1 GC point = 10 ticks × $10/tick = $100 of P&L. So h=4002 is
+    +$200 unrealized from entry 4000."""
+    from datetime import datetime, timedelta, timezone
+    ts0 = datetime(2026, 5, 12, 14, 0, tzinfo=timezone.utc)
+    bars = [
+        # Entry bar: contained range, peak +$50 only
+        _bar(ts0,                       h=4000.5, l=3999.5, c=4000),
+        # Bar 1: peak surges to +$200, unfav at +$150 (above $50 floor)
+        _bar(ts0 + timedelta(minutes=1), h=4002,   l=4001.5, c=4001.8),
+        # Bar 2: unfav retraces to +$40 — below (150,50) floor of $50 → close
+        _bar(ts0 + timedelta(minutes=2), h=4001.8, l=4000.4, c=4000.5),
+    ]
+    outcome, _, note = evaluate_exec_mirror(
+        bars, symbol="GC", side="long", entry=4000, stop=3990, qty=1,
+        apply_friction=False,
+    )
+    assert outcome == "profit_lock"
+    # The (150, 50) tier's $50 floor must dominate the micro tiers' lower
+    # floors once peak >= $150.
+    assert "floor $50" in note, f"expected (150,50) tier active, got: {note}"
+
+
 def test_friction_components_match_shadow_realism():
     """The friction $ subtracted by exec_mirror should equal the components
     from shadow_realism (round-trip slippage + fees) plus the explicit
