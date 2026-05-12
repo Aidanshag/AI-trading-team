@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Callable
 
 # ── Configuration ──────────────────────────────────────────────
@@ -85,6 +86,15 @@ LOSS_TIER_HARD_CAP_USD: float = 150.0   # belt-and-suspenders for broker stop
 # Per-position high-water mark (process-local; resets on trader restart).
 # Key: "SYMBOL_SIDE". Value: peak unrealized $ seen this session.
 _position_high_water: dict[str, float] = {}
+
+# Per-position agent-veto state (process-local).
+# `_position_consecutive_holds`: how many times the agent has held this position
+# in a row. Resets on close or on a CLOSE decision.
+# `_position_entry_ts_seen`: first time we saw this position in this process.
+# Used as a proxy for entry_ts (we don't have the real fill time without an
+# extra DB lookup). Resets on close.
+_position_consecutive_holds: dict[str, int] = {}
+_position_entry_ts_seen: dict[str, datetime] = {}
 
 
 # ── Symbol parsing helpers ────────────────────────────────────
@@ -170,10 +180,108 @@ def _unrealized_usd(side: str, size: int, avg_price: float,
     return ticks * tick_value * abs(size)
 
 
+# ── Agent-veto helpers ────────────────────────────────────────
+
+_EXIT_REASONER_CONFIG_PATH = "config/exit_reasoner.yaml"
+
+
+def _load_exit_reasoner_config() -> dict:
+    """Return the feature-flag config. Disabled-everything on any error."""
+    try:
+        import yaml
+        from pathlib import Path
+        path = Path(__file__).resolve().parent.parent / _EXIT_REASONER_CONFIG_PATH
+        with open(path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {"enabled": False}
+
+
+def _is_agent_enabled_for_cell(symbol: str, side: str,
+                                 strategy: str | None) -> bool:
+    """True iff this (strategy, symbol, side) is routed through the agent."""
+    cfg = _load_exit_reasoner_config()
+    if not cfg.get("enabled"):
+        return False
+    cell_key = f"{strategy or '*'}/{symbol}/{side}"
+    denied = cfg.get("denied_cells") or []
+    for d in denied:
+        if d == cell_key or d == "*":
+            return False
+    enabled_cells = cfg.get("enabled_cells") or []
+    if "*" in enabled_cells:
+        return True
+    for c in enabled_cells:
+        if c == cell_key:
+            return True
+        # Allow "*/SYMBOL/side" wildcard
+        if "*" in c and _wildcard_match(c, cell_key):
+            return True
+    return False
+
+
+def _wildcard_match(pattern: str, key: str) -> bool:
+    """Simple wildcard match — '*' matches a whole segment."""
+    p_parts = pattern.split("/")
+    k_parts = key.split("/")
+    if len(p_parts) != len(k_parts):
+        return False
+    return all(p == "*" or p == k for p, k in zip(p_parts, k_parts))
+
+
+def _parse_trailing_lock_floor(reason: str) -> float | None:
+    """Extract the `floor $X` value from decide()'s reason string. Returns
+    None if not a trailing_lock reason or parse fails."""
+    if "trailing_lock" not in reason:
+        return None
+    import re
+    m = re.search(r"floor \$(-?\d+(?:\.\d+)?)", reason)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def _bars_df_to_dicts(bars_df) -> list[dict]:
+    """Convert the pandas DataFrame returned by fetch_bars to a list of
+    dicts suitable for the agent prompt. Last 20 bars, oldest first."""
+    if bars_df is None or len(bars_df) == 0:
+        return []
+    out = []
+    tail = bars_df.tail(20)
+    for ts, row in tail.iterrows():
+        try:
+            ts_iso = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+            out.append({
+                "t": ts_iso,
+                "o": float(row.get("Open") or row.get("open") or 0),
+                "h": float(row.get("High") or row.get("high") or 0),
+                "l": float(row.get("Low") or row.get("low") or 0),
+                "c": float(row.get("Close") or row.get("close") or 0),
+            })
+        except Exception:
+            continue
+    return out
+
+
+def _open_db_connection():
+    """Open a connection to fund.db for agent_exit_vetoes logging."""
+    try:
+        import sqlite3
+        from pathlib import Path
+        path = Path(__file__).resolve().parent.parent / "state" / "fund.db"
+        return sqlite3.connect(str(path), timeout=5.0)
+    except Exception:
+        return None
+
+
 # ── Main entrypoint ───────────────────────────────────────────
 
 def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = None,
-                     fetch_bars_fn: Callable | None = None) -> list[dict]:
+                     fetch_bars_fn: Callable | None = None,
+                     strategy_lookup_fn: Callable | None = None) -> list[dict]:
     """For each open position, check trailing-profit-lock + hard caps. If a
     rule triggers, market-close the position at the broker.
 
@@ -235,9 +343,79 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
 
             should_close, reason = decide(unrealized, prev_peak)
             if not should_close:
+                # Reset consecutive_holds when the rule no longer wants to close
+                _position_consecutive_holds.pop(key, None)
                 continue
 
-            # Market-close
+            # ── Agent veto layer (Phase 1b 2026-05-12) ──
+            # ONLY trailing_lock reasons route through the agent. Loss caps,
+            # gain caps, and any unknown reason remain mechanical.
+            tier_floor = _parse_trailing_lock_floor(reason)
+            strategy = None
+            if strategy_lookup_fn is not None:
+                try:
+                    strategy = strategy_lookup_fn(symbol, side, contract_id)
+                except Exception:
+                    strategy = None
+
+            if tier_floor is not None and _is_agent_enabled_for_cell(
+                    symbol, side, strategy):
+                # Mark / refresh entry-ts proxy
+                if key not in _position_entry_ts_seen:
+                    _position_entry_ts_seen[key] = datetime.now(tz=timezone.utc)
+
+                cfg = _load_exit_reasoner_config()
+                report_only = bool(cfg.get("report_only", True))
+
+                try:
+                    from tools.exit_reasoner import (
+                        decide_exit_with_agent, TradeContext,
+                    )
+                    bar_dicts = _bars_df_to_dicts(bars)
+                    ctx = TradeContext(
+                        symbol=symbol, side=side, strategy=strategy,
+                        contract_id=contract_id,
+                        entry_price=avg_price,
+                        entry_ts=_position_entry_ts_seen[key],
+                        avg_fill_price=avg_price,
+                        current_price=last_close,
+                        peak_unrealized_usd=prev_peak,
+                        current_unrealized_usd=unrealized,
+                        tier_floor_usd=tier_floor,
+                        risk_usd=0.0,        # not used in prompt-only flow
+                        recent_bars=bar_dicts,
+                        regime={},           # filled by caller if available
+                        consecutive_holds=_position_consecutive_holds.get(key, 0),
+                    )
+                    db = _open_db_connection()
+                    try:
+                        decision = decide_exit_with_agent(
+                            ctx, db_conn=db, log_fn=log, enabled=True,
+                        )
+                    finally:
+                        if db is not None:
+                            try: db.close()
+                            except Exception: pass
+
+                    if decision.action == "HOLD" and not report_only:
+                        _position_consecutive_holds[key] = (
+                            _position_consecutive_holds.get(key, 0) + 1
+                        )
+                        log(f"  AGENT_HOLD: {symbol} {side} peak=${prev_peak:.0f} "
+                             f"cur=${unrealized:+.0f} -- {decision.reason} "
+                             f"(holds={_position_consecutive_holds[key]})")
+                        continue   # skip close this iteration
+                    elif decision.action == "HOLD" and report_only:
+                        log(f"  AGENT_HOLD (report-only, closing anyway): {symbol} "
+                             f"{side} peak=${prev_peak:.0f} -- {decision.reason}")
+                    # else: CLOSE or FALLBACK_CLOSE → proceed to market close
+                    _position_consecutive_holds.pop(key, None)
+                except Exception as e:
+                    log(f"  exit_reasoner threw — falling back to rigid close: "
+                         f"{type(e).__name__}: {e}")
+                    # Fall through to mechanical close below
+
+            # ── Mechanical market-close ──
             opposite = "sell" if side == "long" else "buy"
             cid = f"profitlock_{int(time.time())}_{uuid.uuid4().hex[:6]}"
             try:
@@ -250,6 +428,8 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                      f"unrealized=${unrealized:+.2f} peak=${prev_peak:+.2f} "
                      f"-- {reason}")
                 _position_high_water.pop(key, None)
+                _position_consecutive_holds.pop(key, None)
+                _position_entry_ts_seen.pop(key, None)
                 closed.append({"symbol": symbol, "side": side, "size": size,
                                 "unrealized": unrealized, "peak": prev_peak,
                                 "reason": reason})

@@ -1,0 +1,21 @@
+Sampled 65 profit_lock shadow trades from 2026-05-01 onward
+
+  [1/65] 6E   #6037 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [2/65] 6E   #6043 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [3/65] 6B   #6017 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [4/65] MES  #5997 pivot_reversal         ctrl=profit_lock +0.48R  agent=profit_lock +0.48R  Δ=+0.00R
+  [5/65] NG   #6062 inside_bar_break       ctrl=profit_lock +1.07R  agent=profit_lock +1.07R  Δ=+0.00R
+  [6/65] MNQ  #6008 fair_value_gap         ctrl=profit_lock +0.42R  agent=stop_hit    -1.08R  Δ=-1.50R
+  [7/65] 6B   #6049 order_block_d1         ctrl=profit_lock -0.06R  agent=profit_lock -0.06R  Δ=+0.00R
+  [8/65] 6E   #5998 keltner_breakout       ctrl=profit_lock -0.12R  agent=profit_lock -0.12R  Δ=+0.00R
+  [9/65] 6E   #6050 liquidity_sweep_tuned  ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [10/65] MES  #6010 pivot_reversal         ctrl=profit_lock +0.48R  agent=profit_lock +0.48R  Δ=+0.00R
+  [11/65] 6E   #5994 fair_value_gap_tuned   ctrl=profit_lock -0.01R  agent=profit_lock -0.01R  Δ=+0.00R
+  [12/65] 6E   #6052 liquidity_sweep_tuned  ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [13/65] MES  #6007 pivot_reversal         ctrl=profit_lock +0.48R  agent=profit_lock +0.48R  Δ=+0.00R
+  [14/65] NG   #6023 inside_bar_break       ctrl=profit_lock -0.04R  agent=profit_lock +0.20R  Δ=+0.24R
+  [15/65] MNQ  #6013 fair_value_gap         ctrl=profit_lock +0.42R  agent=stop_hit    -1.08R  Δ=-1.50R
+  [16/65] MES  #5999 pivot_reversal         ctrl=profit_lock +0.48R  agent=profit_lock +0.48R  Δ=+0.00R
+  [17/65] 6B   #6053 order_block_d1         ctrl=profit_lock -0.06R  agent=profit_lock -0.06R  Δ=+0.00R
+  [18/65] GC   #6006 narrow_range_break     ctrl=profit_lock +0.08R  agent=profit_lock +0.08R  Δ=+0.00R
+  [19/65] MNQ  #6011 fair_value_gap         ctrl=profit_lock +0.42R  agent=stop_hit    -1.08R  Δ=-1.50R

@@ -136,6 +136,40 @@ CREATE TABLE IF NOT EXISTS costs (
     UNIQUE(day, agent, model)
 );
 
+-- ── Agent exit vetoes (LLM-based reasoning over tier-driven closes) ─
+-- When profit_lock's mechanical tier rules want to close a position,
+-- the exit_reasoner agent (tools/exit_reasoner.py) inspects recent bar
+-- action, regime, and trade lifecycle, then decides CLOSE or HOLD.
+-- This table records every veto decision with full agent reasoning
+-- for retrospective audit ("did the agent's call work out?").
+--
+-- Built 2026-05-12 per user direction toward reasoning-over-rules exits.
+CREATE TABLE IF NOT EXISTS agent_exit_vetoes (
+    id INTEGER PRIMARY KEY,
+    ts TEXT NOT NULL,
+    contract_id TEXT,
+    symbol TEXT NOT NULL,
+    side TEXT NOT NULL CHECK (side IN ('long','short')),
+    strategy TEXT,
+    tier_floor_usd REAL NOT NULL,
+    peak_unrealized_usd REAL NOT NULL,
+    current_unrealized_usd REAL NOT NULL,
+    time_in_trade_seconds INTEGER NOT NULL,
+    consecutive_holds INTEGER NOT NULL DEFAULT 0,
+    decision TEXT NOT NULL CHECK (decision IN ('CLOSE','HOLD','FALLBACK_CLOSE')),
+    confidence TEXT,
+    reason TEXT NOT NULL,
+    agent_model TEXT,
+    agent_response_ms INTEGER,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    actual_exit_usd REAL,                  -- filled in when position actually closes
+    actual_exit_ts TEXT,
+    agent_verdict TEXT                     -- correct | wrong | inconclusive
+);
+CREATE INDEX IF NOT EXISTS idx_agent_vetoes_ts ON agent_exit_vetoes(ts);
+CREATE INDEX IF NOT EXISTS idx_agent_vetoes_symbol ON agent_exit_vetoes(symbol);
+
 -- ── Shadow trades (hypothetical signals for cross-ticker screening) ──
 -- Records every TRIGGER the team finds, even ones that fail the focus
 -- universe gate or were skipped for other reasons. Outcomes are filled

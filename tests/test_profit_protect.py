@@ -44,13 +44,16 @@ def test_decide_hard_loss_cap_closes():
 
 
 def test_decide_lowest_tier_breakeven_protection():
-    """Peak crossed $30, current dropped below $0 (negative) -> close
-    (the 'never let a gain become a loss' rule)."""
+    """Peak crossed $50 (crosses (15,5), (25,12), (30,0)). Among crossed
+    tiers, the highest floor wins → (25, 12) → floor $12.
+    Current $-5 < $12 → close.
+    Updated 2026-05-12 after micro-tiers (15, 5) and (25, 12) were added —
+    the new tightest floor at peak $50 is $12, not $0."""
     should, reason = pp.decide(unrealized=-5.0, prev_peak=50.0)
     assert should is True
     assert "trailing_lock" in reason
-    assert "$50" in reason  # peak shown
-    assert "$30" in reason  # tier threshold
+    assert "$50" in reason   # peak shown
+    assert "floor $12" in reason  # active floor from (25, 12) tier
 
 
 def test_decide_mid_tier_protection():
@@ -61,10 +64,12 @@ def test_decide_mid_tier_protection():
 
 
 def test_decide_peak_below_lowest_tier_no_lock():
-    """Peak only reached $20 -- below the $30 tier threshold. No lock.
-    Even if current drops to negative, no close (loss cap still applies)."""
-    should, reason = pp.decide(unrealized=-10.0, prev_peak=20.0)
-    assert should is False  # tier doesn't engage; loss cap not breached
+    """Peak only reached $10 -- below the (15, 5) micro-tier threshold.
+    No lock. Current can drop to small negative without triggering close.
+    Updated 2026-05-12 after micro-tiers were added — the new lowest
+    tier threshold is $15 (was $30)."""
+    should, reason = pp.decide(unrealized=-3.0, prev_peak=10.0)
+    assert should is False  # below lowest tier threshold, loss cap not breached
 
 
 def test_decide_picks_highest_active_tier():

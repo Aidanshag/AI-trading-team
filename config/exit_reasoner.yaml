@@ -1,0 +1,36 @@
+# Feature flag config for tools/exit_reasoner.py — the LLM-based exit
+# veto layer over profit_protect's mechanical tier rules.
+#
+# Built 2026-05-12. Until shadow-replay validation (Phase 2) confirms
+# positive expected value, this stays disabled by default.
+
+# Master enable. False = always defer to mechanical tier (the current
+# behavior). True = check `enabled_cells` per-trade.
+enabled: false
+
+# Report-only mode. When true, the agent IS called and its decision is
+# LOGGED to agent_exit_vetoes, but the trader still acts on the mechanical
+# tier outcome. Use this as a "shadow" deployment — gather agent data
+# without trusting it yet. After two weeks of report-only data, you can
+# audit how the agent's calls would have performed before flipping
+# `enabled: true` with non-empty `enabled_cells`.
+report_only: true
+
+# Per-cell allowlist (only these cells route through the agent).
+# Format: "<strategy>/<symbol>/<side>". Use ['*'] to enable for all cells.
+# Until Phase 2 validation passes, leave this list empty.
+enabled_cells: []
+
+# Per-cell denylist — these never go through the agent regardless of
+# enabled_cells. Used to surgically EXCLUDE cells while keeping the
+# rest under agent control. Format same as enabled_cells.
+denied_cells:
+  - 'rsi2_extreme_reversion/MNQ/long'  # PostClose experimental; rule-only
+
+# Override of agent authority limits (see tools/exit_reasoner.py).
+# Increase these only if shadow-replay shows the agent benefits from
+# longer holds. Default values are deliberately conservative.
+max_consecutive_holds: 3
+max_agent_hold_minutes: 30
+min_peak_usd: 15.0
+max_peak_usd: 750.0

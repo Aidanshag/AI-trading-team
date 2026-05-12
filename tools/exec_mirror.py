@@ -147,6 +147,13 @@ def evaluate_exec_mirror(
     apply_friction: bool = True,
     round_trip_slippage_ticks: float = DEFAULT_SLIPPAGE_TICKS_ROUND_TRIP,
     stop_slippage_ticks: float = DEFAULT_STOP_SLIPPAGE_TICKS,
+    # 2026-05-12: agent veto callback for shadow-replay (scripts/shadow_replay_agent.py).
+    # Signature: (peak_usd, current_unrealized_usd, floor_usd, holds_so_far,
+    #             bar_index, bar_ts) -> "CLOSE" | "HOLD"
+    # Returning HOLD skips the close and continues the simulation; the
+    # number of HOLD overrides is capped at max_agent_holds.
+    exit_decision_fn: Optional[callable] = None,
+    max_agent_holds: int = 3,
 ) -> tuple[str, float, str]:
     """Replay bars under production exit logic.
 
@@ -215,6 +222,7 @@ def evaluate_exec_mirror(
     timeout_ts: Optional[datetime] = None
     if entry_ts is not None:
         timeout_ts = entry_ts + timedelta(hours=timeout_hours)
+    holds_so_far = 0   # counter for agent HOLD overrides this trade
 
     def _finalize(outcome: str, gross_r: float, note: str) -> tuple[str, float, str]:
         net_r, breakdown = _apply_friction(
@@ -266,6 +274,22 @@ def evaluate_exec_mirror(
                 m = _re.search(r"floor \$(-?\d+(?:\.\d+)?)", reason)
                 exit_usd = float(m.group(1)) if m else unfav_usd
                 outcome = "profit_lock"
+                # Agent veto for trailing_lock only — never overrides
+                # loss_cap or gain_cap (those stay mechanical).
+                # NOTE: unfav_usd here is the close-or-extreme of the bar,
+                # which is what decide() saw. We pass it as current_unrealized.
+                if (exit_decision_fn is not None
+                        and holds_so_far < max_agent_holds):
+                    try:
+                        decision = exit_decision_fn(
+                            peak_unrealized, unfav_usd, exit_usd,
+                            holds_so_far, i, ts,
+                        )
+                    except Exception:
+                        decision = "CLOSE"
+                    if decision == "HOLD":
+                        holds_so_far += 1
+                        continue   # skip this close, walk forward
             elif "loss_hard_cap" in reason:
                 exit_usd = -float(loss_cap_usd)
                 outcome = "loss_cap"
