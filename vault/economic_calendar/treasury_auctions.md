@@ -1,7 +1,7 @@
 ---
 type: treasury_auction_calendar
-generated_at: 2026-05-11T12:32:13.007869+00:00
-count: 15
+generated_at: 2026-05-12T10:00:10.959937+00:00
+count: 12
 ---
 
 # Treasury auction calendar — upcoming
@@ -10,9 +10,6 @@ Risk-relevant for gap_fill on ZN/ZT/ZB/ZF. Concession days (typically the tradin
 
 | Auction date | Time ET | Type | Term | Amt ($B) | Reopen | Primary | Basis |
 |---|---|---|---|---:|---|---|---|
-| 2026-05-11 | 13:00 | Note | 3-Year | 58.0 |  | — | ZT, ZF |
-| 2026-05-11 | 11:30 | Bill | 13-Week | 89.0 |  | — | — |
-| 2026-05-11 | 11:30 | Bill | 26-Week | 77.0 |  | — | — |
 | 2026-05-12 | 11:30 | Bill | 6-Week | 80.0 |  | — | — |
 | 2026-05-12 | 13:00 | Note | 10-Year | 42.0 |  | ZN | — |
 | 2026-05-12 | 11:30 | Bill | 52-Week | 50.0 |  | — | — |
