@@ -20,9 +20,18 @@ def test_decide_no_action_below_first_tier():
     assert reason == ""
 
 
-def test_decide_hard_gain_cap_closes():
-    """Unrealized >= GAIN_TIER_HARD_CAP_USD -> close."""
+def test_decide_no_hard_gain_cap_by_default():
+    """2026-05-11: hard cap removed by default (None). Big peaks should
+    not auto-close just because they're big — trailing tier governs."""
+    # unrealized $500, peak $500 → tier (750, 400) NOT crossed,
+    # tier (400, 200) crossed → floor $200, $500 > $200, no close
     should, reason = pp.decide(unrealized=500.0, prev_peak=500.0)
+    assert should is False
+
+
+def test_decide_hard_gain_cap_when_explicitly_set():
+    """Caller can still opt into a hard cap by passing gain_cap value."""
+    should, reason = pp.decide(unrealized=500.0, prev_peak=500.0, gain_cap=400.0)
     assert should is True
     assert "hard_cap" in reason
 
@@ -72,6 +81,38 @@ def test_decide_above_active_floor_no_close():
     assert should is False
 
 
+# ── Runner-zone tiers (2026-05-11 expansion) ──────────────────
+
+def test_decide_runner_tier_2500_locks_1500():
+    """Peak $2700 crosses (2500, 1500) tier. Current $1400 < $1500 → close."""
+    should, reason = pp.decide(unrealized=1400.0, prev_peak=2700.0)
+    assert should is True
+    assert "$1500" in reason  # floor
+
+
+def test_decide_runner_tier_5000_locks_3000():
+    """Peak $5500 crosses (5000, 3000) tier. Current $2900 < $3000 → close."""
+    should, reason = pp.decide(unrealized=2900.0, prev_peak=5500.0)
+    assert should is True
+    assert "$3000" in reason
+
+
+def test_decide_giant_winner_can_run():
+    """Today's GC trade peaked at +$2,616. With current $2,000 (still
+    >$1500 floor for the $2500 tier), no close — let it run."""
+    should, reason = pp.decide(unrealized=2000.0, prev_peak=2616.0)
+    assert should is False
+
+
+def test_decide_giant_winner_closes_on_proper_retracement():
+    """Same GC peak ($2616). Current drops to $1200 < $1500 → close
+    on the (2500, 1500) tier. Tightest active floor wins even when
+    multiple tiers are crossed."""
+    should, reason = pp.decide(unrealized=1200.0, prev_peak=2616.0)
+    assert should is True
+    assert "$1500" in reason
+
+
 # ── check_and_close() — end-to-end with fake broker ───────────
 
 class _FakeBars:
@@ -112,21 +153,37 @@ def test_check_and_close_no_positions_returns_empty():
     assert client.placed == []
 
 
-def test_check_and_close_closes_runaway_winner():
-    """GC long at 4750. Price now 4790 = +40 pts × $10 = +$400 unrealized.
-    Hits GAIN_TIER_HARD_CAP_USD -> market close."""
+def test_check_and_close_lets_big_winner_run():
+    """2026-05-11: hard cap removed. GC long at 4750, now 4790 = +$4000.
+    Without hard cap, position should NOT auto-close — trailing tier
+    floor at $1500 is well below current. Let it run."""
     client = _FakeClient(
         positions=[{"contractId": "CON.F.US.GCE.M26", "size": 1, "type": 1,
                     "averagePrice": 4750.0}],
         bars_by_symbol={"GC": _FakeBars([4790.0])},
     )
     closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert closed == []  # no close: $4000 unrealized > $1500 floor
+    assert client.placed == []
+    # Peak captured for next-scan trailing logic
+    assert pp._position_high_water.get("GC_long", 0) == pytest.approx(4000, abs=1)
+
+
+def test_check_and_close_closes_runaway_after_retracement():
+    """Same setup but two scans: first push to $4000 peak, then drop to
+    $1000 — below the (2500, 1500) tier floor → close."""
+    client = _FakeClient(
+        positions=[{"contractId": "CON.F.US.GCE.M26", "size": 1, "type": 1,
+                    "averagePrice": 4750.0}],
+        bars_by_symbol={"GC": _FakeBars([4790.0])},  # +$4000
+    )
+    pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert pp._position_high_water["GC_long"] >= 3999
+    client._bars["GC"] = _FakeBars([4760.0])  # +10 pts = +$1000
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
     assert len(closed) == 1
-    assert closed[0]["symbol"] == "GC"
-    assert closed[0]["side"] == "long"
-    assert closed[0]["unrealized"] >= 400
-    assert "hard_cap" in closed[0]["reason"]
-    assert client.placed[0]["side"] == "sell"
+    assert closed[0]["unrealized"] <= 1100
+    assert "trailing_lock" in closed[0]["reason"]
     assert client.placed[0]["order_type"] == "market"
 
 

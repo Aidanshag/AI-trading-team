@@ -44,15 +44,30 @@ from typing import Callable
 # ── Configuration ──────────────────────────────────────────────
 
 TRAILING_PROFIT_TIERS: tuple[tuple[float, float], ...] = (
-    # (peak_threshold_usd, floor_usd) — sorted descending by threshold
-    (400.0, 200.0),
-    (250.0, 100.0),
-    (150.0,  50.0),
-    ( 80.0,  20.0),
-    ( 30.0,   0.0),
+    # (peak_threshold_usd, floor_usd) — order doesn't matter, decide()
+    # picks the highest-active tier. 2026-05-11 evening expansion: added
+    # runner-zone tiers (>$400 peak) after the +$2,616 GC trade revealed
+    # the prior cap was clipping runners. Floors at 50-65% of peak in
+    # the runner zone.
+    # --- tight tiers (small/medium winners — never give back too much)
+    ( 30.0,     0.0),    # never let a +$30 gain become a loss
+    ( 80.0,    20.0),
+    (150.0,    50.0),
+    (250.0,   100.0),
+    (400.0,   200.0),
+    # --- runner zone (allow big winners to breathe)
+    (750.0,   400.0),
+    (1500.0,  900.0),
+    (2500.0, 1500.0),
+    (5000.0, 3000.0),
+    (10000.0, 6500.0),
 )
 
-GAIN_TIER_HARD_CAP_USD: float = 400.0   # unconditional take-profit
+# 2026-05-11: hard cap REMOVED (set to None) per user direction. The old
+# $400 cap would have force-closed today's GC trade at $400 instead of
+# letting it run to +$2,616. With expanded runner-zone tiers above,
+# trailing-lock is sufficient protection without a fixed ceiling.
+GAIN_TIER_HARD_CAP_USD: float | None = None
 LOSS_TIER_HARD_CAP_USD: float = 150.0   # belt-and-suspenders for broker stop
 
 # Per-position high-water mark (process-local; resets on trader restart).
@@ -101,21 +116,37 @@ _TICK_ECONOMICS: dict[str, tuple[float, float]] = {
 
 def decide(unrealized: float, prev_peak: float,
             tiers: tuple[tuple[float, float], ...] = TRAILING_PROFIT_TIERS,
-            gain_cap: float = GAIN_TIER_HARD_CAP_USD,
+            gain_cap: float | None = GAIN_TIER_HARD_CAP_USD,
             loss_cap: float = LOSS_TIER_HARD_CAP_USD,
             ) -> tuple[bool, str]:
     """Pure decision function — returns (should_close, reason).
-    No broker IO; easy to unit-test."""
-    if unrealized >= gain_cap:
+    No broker IO; easy to unit-test.
+
+    Closure rules (checked in order):
+      1. Loss hard cap: unrealized <= -loss_cap → close (backstop)
+      2. Gain hard cap: unrealized >= gain_cap → close (if cap is not None)
+      3. Trailing tiers: among tiers whose peak_threshold the position
+         has crossed, the TIGHTEST floor (highest floor) wins. Close iff
+         current unrealized < that floor.
+    """
+    if gain_cap is not None and unrealized >= gain_cap:
         return True, f"hard_cap: unrealized ${unrealized:.2f} >= ${gain_cap:.0f}"
     if unrealized <= -loss_cap:
         return True, (f"loss_hard_cap: unrealized ${unrealized:.2f} "
                        f"<= -${loss_cap:.0f} (broker stop backstop)")
+    # Among crossed tiers, pick the one with the highest floor (tightest
+    # protection wins).
+    active_floor: float | None = None
+    active_peak: float | None = None
     for peak_threshold, floor in tiers:
-        if prev_peak >= peak_threshold and unrealized < floor:
-            return True, (f"trailing_lock: peak ${prev_peak:.2f} crossed "
-                           f"${peak_threshold:.0f}, current ${unrealized:.2f} "
-                           f"fell below floor ${floor:.0f}")
+        if prev_peak >= peak_threshold:
+            if active_floor is None or floor > active_floor:
+                active_floor = floor
+                active_peak = peak_threshold
+    if active_floor is not None and unrealized < active_floor:
+        return True, (f"trailing_lock: peak ${prev_peak:.2f} crossed "
+                       f"${active_peak:.0f}, current ${unrealized:.2f} "
+                       f"fell below floor ${active_floor:.0f}")
     return False, ""
 
 
