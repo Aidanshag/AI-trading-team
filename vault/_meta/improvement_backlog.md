@@ -33,6 +33,27 @@ Priority logic going forward:
 
 ## P0 — critical (do first)
 
+- [P2] [effort: 90min] [risk: medium] [status: open] [autonomous-eligible: when triggers met]
+  **Win/loss-conditional cooldown** — replace flat `SAME_SYMBOL_COOLDOWN_MIN=45`
+  with outcome-aware cooldown table per user direction 2026-05-11 evening.
+  Why: today's GC trades (+$2,616 then +$380) suggest trending symbols benefit
+  from tighter re-entry after winners. Flat 45-min blocks follow-on
+  opportunities. After losses, keep 45-min anti-tilt window (4/29 lesson).
+  Proposed table:
+    after_win:       15-20 min   (allow follow-on momentum)
+    after_breakeven: 30 min
+    after_loss:      45 min      (anti-tilt, current default)
+  Files: `scripts/live_trader.py`, `tools/trade_state.py`, `tests/test_live_trader.py`
+  Acceptance: 3 unit tests covering each branch + `recent_thesis_for(symbol)`
+  returns the outcome-appropriate window. Auto-merge ok once triggers met.
+  Triggers for autonomous ship (ALL must be true):
+  1. Orders.ts_filled / avg_fill_price reliably populated (broken per cowork
+     2026-05-06; without it we can't read realized P&L per symbol).
+  2. ≥10 live trades accumulated with mixed outcomes (need baseline data
+     before relaxing safety) — currently at ~6 trades total.
+  3. GC has fired ≥3 times with consistent positive expectancy under the
+     new SKIP_TARGET_LEG architecture (the user's specific motivation).
+
 - [P0] [effort: 90min] [risk: low] [status: merged 2026-05-08 (cowork)]
   **Auto-promote/demote cells from live evidence** — SHIPPED by cowork
   `scripts/cell_auto_promote.py` (commit `834852f`) + 17 unit tests (commit `b3a1f75`).
