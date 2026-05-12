@@ -31,6 +31,58 @@ Priority logic going forward:
 - Each change must specify: prediction → measurement plan → variance trigger
 - If a P0 item below adds complexity without enabling validation, demote it
 
+## 🎯 XFA-readiness checklist (target: ~30 days from 2026-05-12)
+
+User target 2026-05-12: pass Combine in ~1 month, then sustain XFA cash flow. Before XFA transition, all `XFA-readiness: required` items below MUST be resolved. The mistakes that bled tonight (orphan-leg, broker target-fill, stop on wrong side of fill, profit-take gap) must NOT recur in a real-payout context.
+
+### XFA-readiness items (added 2026-05-12 evening)
+
+- [P1] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
+  **3:10 PM CT hard time-based flatten** — XFA hard rule. Holding past 3:10 PM CT = rule violation = account closure risk.
+  Current state: NOT ENFORCED. `_check_autonomous_rth_window` cuts NEW entries at 14:30 ET = 1:30 PM CT, but existing positions can run through.
+  Files: `scripts/live_trader.py` (add `_check_hard_time_flatten`), `hooks/risk_gate.py` (mirror check), tests.
+  Acceptance: at 15:05 PM CT (5-min buffer before deadline), all open positions market-closed; new entries blocked from 14:55 PM CT onward.
+  Auto-merge: yes once tests cover (a) 15:00 CT scan with open position triggers close, (b) 14:00 CT scan does not, (c) timezone-aware (UTC↔CT conversion).
+
+- [P1] [effort: 90min] [risk: medium] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
+  **Consistency-rule enforcement (50% single-day profit cap)** — currently advisory only per CLAUDE.md `_check_consistency_rule warn-tier`. Today's +$2,948 GC day will trip this in <5 days unless we dilute or cap.
+  Why: 50% single-day rule applies to BOTH Combine and XFA. Today's day P&L is 100% of cycle profits → currently failing the advisory check. Need to either: (a) hard-block trades that would push single-day >50% of total cycle, or (b) implement a daily profit-cap that auto-flattens when day P&L exceeds a configured ceiling (e.g., $400-$600 for $50K account per Topstep rules doc).
+  Files: `hooks/risk_gate.py:_check_consistency_rule`, `scripts/live_trader.py`, `config/risk_limits.yaml`.
+  Acceptance: hard-block (not warn) when projected day P&L > 50% of (cycle_profits + projected_day_pnl). Tests cover edge cases at exactly 50%, just over, and on new cycles.
+
+- [P2] [effort: 45min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
+  **Widen news-event blackout from ±5min to ±15min** — Topstep doc recommends ±15min around high-impact (NFP/FOMC/CPI).
+  Current state: `_check_high_impact_blackout` is ±5min. Code is in `hooks/risk_gate.py`.
+  Acceptance: ±15min for HIGH severity, ±5min preserved for MEDIUM. Test verifies a position attempt at -14min before HIGH event is blocked, at -16min is allowed.
+
+- [P2] [effort: 90min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required]
+  **Holiday/abbreviated-session schedule check** — Topstep abbreviates hours on some holidays; if 3:10 PM CT flatten isn't adjusted, we'd hold past the real session close.
+  Current state: macro brief pipeline fetches some calendar data but no in-trader gate for holiday hours.
+  Acceptance: trader's scan_once reads a `holiday_schedule.json` (auto-refreshed daily) and if today is abbreviated, uses the shortened hard-flatten time. Test with mocked schedule.
+
+- [P3] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: required-for-XFA-only]
+  **Post-payout MLL recalibration logic** — not needed in Combine. Required immediately upon XFA promotion. Per Topstep docs, MLL resets to $0 after payout, leaving thin headroom.
+  Acceptance: on detecting a payout (account balance jumps + MLL reference resets), trader runs `recalibrate_safety_floors()` which logs new headroom, may pause until manual confirmation. Defer build until XFA transition is imminent.
+
+- [P2] [effort: 30min] [risk: low] [status: open] [autonomous-eligible: yes] [XFA-readiness: recommended]
+  **Position-protection sweep every scan** — verify each open position STILL has a working broker stop in working_orders. If a stop was cancelled/expired/missing for any reason, either re-place it or emergency-flatten.
+  Why: tonight's MNQ incident revealed a stop can fail to land. The verify-at-placement check now catches placement failures. A periodic sweep catches LATER cancellations (broker session-end, server cleanup, etc.).
+  Files: `scripts/live_trader.py` (add to scan_once next to enforce_loss_cap).
+  Acceptance: every scan, for each open position, query working orders, verify a stop with matching `customTag` pattern exists. If not → log critical + emergency-flatten.
+
+### XFA-readiness summary table
+
+| Item | Priority | Effort | Auto-mergeable | Trigger to ship |
+|---|---|---|---|---|
+| 3:10 PM CT hard flatten | P1 | 60min | ✓ | anytime |
+| Consistency rule hard-block | P1 | 90min | ✓ | anytime (today is already advisory failing) |
+| News blackout ±15min | P2 | 45min | ✓ | anytime |
+| Holiday schedule | P2 | 90min | ✓ | anytime |
+| Post-payout recalibration | P3 | 60min | ✓ | defer until XFA transition imminent |
+| Position-protection sweep | P2 | 30min | ✓ | anytime |
+
+---
+
 ## P0 — critical (do first)
 
 - [P2] [effort: 90min] [risk: medium] [status: open] [autonomous-eligible: when triggers met]
