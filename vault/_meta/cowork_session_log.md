@@ -458,3 +458,103 @@ is fine — none of the changes are HIGH_RISK_FILES.
 
 User logged off mid-session ("finish all of this autonomously i have
 to log") — closing out cleanly with this entry.
+
+---
+
+## 2026-05-11 evening — Session catch-up + cloud routine fix
+
+**Context.** User returned after my 5/9 work. ~2 days of activity to
+catch up on. User flagged: "the cloud routine appears at least from
+claude codes perspective that it is not [working] and im hoping you
+can fix this."
+
+### Catch-up findings (delta since 5/9)
+
+1. **gap_fill / gap_fill_wide removed from live filter** as of 2026-05-11.
+   Three compounding validation bugs found:
+   - missing tick_size injection
+   - `t.stop_price` typo
+   - silent division-by-tiny-epsilon (rr-check divides by 1e-9 → every
+     signal passes when ATR is ≤1 tick on 5m treasury bars in low-vol)
+   The Tier-3 t-stats of +7.95 to +11.76 were artifacts. See
+   `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`.
+2. **Sunday-night orphan-leg incident** ($137.89 net loss). Same OCO
+   race as 2026-05-01, fix was incomplete/regressed. CC has re-encoded
+   `place_bracket()` with poll-for-fill before placing protective legs;
+   `tests/test_live_trader.py` has 6 new unit tests. Defense-in-depth:
+   `MIN_SIGNAL_R_TICKS=6` in live_trader, `min_stop_ticks=3` in the
+   strategy code, `tick_size` plumbed through validation + sweep paths.
+3. **Live allowlist now 23 cells across 11 strategies** —
+   fair_value_gap, fair_value_gap_tuned, narrow_range_break,
+   vol_spike_fade (regime-gated), inside_bar_break, order_block_d1,
+   pivot_reversal, cross_asset_divergence_zn, liquidity_sweep_tuned,
+   keltner_breakout (regime-gated), rsi2_extreme_reversion.
+   See CLAUDE.md "Strategic focus — diversified mix" section.
+4. **Broker target-fill anomaly** documented in
+   `vault/research/analysis/2026-05-11_broker_target_fill_anomaly.md`.
+   ProjectX treats protective LIMIT orders as immediately marketable
+   (NG/6B 2026-05-11 closed within ~100ms). Workaround:
+   `SKIP_TARGET_LEG=True` in live_trader. Positions exit via stop /
+   per-trade cap / manual flatten only.
+5. **Today's P&L: +$2,453.15** (window-realized). Balance $51,869.89 →
+   later $52,200.79 by end-of-window. New strategy mix works.
+
+### Implications for my prior work
+
+- **The 4 Treasury theses I reconciled on 5/9** now describe a strategy
+  that's been removed from production. They need a DEMOTED header
+  pointing at the 2026-05-11 validation finding, OR full re-write
+  against the new 23-cell mix. Queueing this as a separate task —
+  user's priority tonight was the cloud routine.
+- **The dollar-metric sweep request I queued for CC** is obsolete.
+  CC already ran the corrected gap_fill_wide sweeps Monday morning
+  (0400/0406/0440 UTC) and concluded neither produces a deployable
+  parameter set under the corrected pipeline. The queued request doc
+  should be marked SUPERSEDED.
+- **Pattern A/B canon got an n=3 incident.** Both Sunday failure modes
+  fit the existing patterns:
+  - Calibration breakdown = Pattern B (wrong-context validation —
+    R-multiples computed where the metric was meaningless)
+  - Orphan-leg regression = Pattern A (fail-silent — protective legs
+    placed before entry-fill confirmation, the "fix" never actually
+    enforced the ordering)
+  Per CLAUDE.md's Pattern A/B escalation rule: a third real-world
+  incident escalates to hard-encoding as a CI test that fails the
+  build. CC has done the encoded-floor work; CI test bar to escalate
+  to is still open.
+
+### Cloud routine — diagnosis + fix
+
+**User finding (resolved this session):** The routine
+`trig_011w6DUmXbojsfkjKtCaJfBa` was simply **DISABLED** on the
+claude.ai/code/routines page. User flipped it to active. Not a code
+bug, not an auth bug, not a schedule misconfiguration — just the
+toggle being off.
+
+**Evidence the routine was silent before the fix:**
+- `vault/journal/2026-05-09.md` line 81 explicitly flagged "the cloud
+  routine ... appears silent today"
+- `vault/journal/2026-05-10.md` is just the auto-stub from
+  `daily_summary.py`; cloud routine never filled it
+- `vault/journal/2026-05-11.md` doesn't exist
+- `vault/_meta/daily_summaries/2026-05-11.md` doesn't exist
+- No commits with "routine" / "improve-fund" message prefix since 5/9
+
+**Next fire:** tomorrow (Tuesday 5/12) ~09:00 UTC = 05:00 ET.
+
+**Verification plan for next Cowork session-open:**
+```
+git log --since='5 hours ago' --oneline | grep -i 'routine\|improve-fund'
+ls -la vault/_meta/daily_summaries/2026-05-12.md  # should exist
+diff vault/_meta/improvement_backlog.md HEAD~10  # any items move to merged?
+```
+If the routine fired clean: note success here, mark task complete.
+If it fired but errored: surface the error and dig.
+If it didn't fire at all: that's the real "not just disabled" problem.
+
+**Related but not the same thing:** The two paste-ready routines in
+`vault/_meta/claude_ai_routine_instructions.md` (Morning Brief +
+Evening Journal) are SEPARATE. Whether they're set up at claude.ai is
+unknown from this side. User could add them whenever — cost expectation
+~$10-15/day combined per the doc, which only makes sense once trading
+P&L covers it. Today's +$2,453 puts us comfortably above that breakeven.
