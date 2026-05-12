@@ -84,6 +84,12 @@ SKIP_TARGET_LEG = True            # 2026-05-11 evening: enabled per user directi
                                   # place ONLY entry + stop. Position runs until stop fires,
                                   # per-trade loss cap ($150), or manual flatten.
                                   # See vault/research/analysis/2026-05-11_broker_target_fill_anomaly.md
+SHADOW_ON_HALT = True             # 2026-05-12: when halt is active, continue scanning + record
+                                  # what would have been placed as shadow trades. Lets us collect
+                                  # validation data during the daily-profit-cap halt window
+                                  # (~21h) instead of going dark. Shadow trades land in the
+                                  # `shadow_trades` table and get resolved by
+                                  # scripts/shadow_trade_resolver.py at next preflight.
 LIVE_ALLOWLIST_PATH = _HERE / "state" / "strategy_validation.json"
 HALT_FILE = _HERE / "state" / "live_trader_halt"   # touch to halt; remove to resume
 
@@ -909,13 +915,21 @@ def recent_thesis_for(symbol: str, minutes: int = SAME_SYMBOL_COOLDOWN_MIN) -> b
 # ────────────────────────────────────────────────────────────────
 
 def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
-    """One scan pass: snapshot, gates, signal-detect, place."""
+    """One scan pass: snapshot, gates, signal-detect, place.
+
+    2026-05-12: when halt is active AND `SHADOW_ON_HALT=True`, continue
+    scanning and record what would have been placed as shadow trades.
+    No broker calls; just validation-data accumulation."""
     summary = {"scanned": 0, "triggers": 0, "placed": 0, "blocked": 0,
-               "skipped_in_trade": 0, "skipped_cooldown": 0, "errors": 0}
+               "skipped_in_trade": 0, "skipped_cooldown": 0, "errors": 0,
+               "shadow": 0}
     halted, reason = is_halted()
-    if halted:
+    shadow_only = halted and SHADOW_ON_HALT and not paper
+    if halted and not shadow_only:
         _log(f"HALTED: {reason}")
         return {"status": "halted", "reason": reason}
+    if shadow_only:
+        _log(f"HALTED (shadow mode active — no broker writes): {reason}")
 
     # Sunday-reopen first-30-min blackout: skip new entries when spreads are widest.
     # Snapshots + cleanup still run; we just don't place new trades.
@@ -958,7 +972,9 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
                                           daily_window_reset_hour_ct)
         from tools.daily_profit_cap import check_and_enforce as _profit_cap_check
         _cap = combine_daily_profit_cap_usd()
-        if _cap is not None:
+        # Skip cap check under shadow_only — halt is already active that
+        # was caused by the cap; re-running would just spam the log.
+        if _cap is not None and not shadow_only:
             def _set_halt_to(dt_utc):
                 # Use the same halt mechanism as scripts/halt.py: text-edits
                 # config/risk_limits.yaml's trading_halt_until line (preserving
@@ -966,9 +982,18 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
                 # to avoid duplicating the regex-edit logic.
                 from scripts.halt import _write_halt
                 _write_halt(dt_utc, reason="daily_profit_cap")
-            _profit_cap_check(client, account_id, cap_usd=_cap,
-                               reset_hour_ct=daily_window_reset_hour_ct(),
-                               log_fn=_log, halt_setter=_set_halt_to)
+            _cap_result = _profit_cap_check(
+                client, account_id, cap_usd=_cap,
+                reset_hour_ct=daily_window_reset_hour_ct(),
+                log_fn=_log, halt_setter=_set_halt_to,
+            )
+            # 2026-05-12 hotfix: if the cap triggered THIS scan, the halt was
+            # just set but is_halted() at the top of scan_once already ran
+            # before the halt was written. Short-circuit the rest of this
+            # scan so we don't accidentally place new entries between the
+            # cap firing and the next scan's halt-check.
+            if _cap_result.get("triggered"):
+                return {"status": "daily_profit_cap_hit", **_cap_result}
         cleanup_orphan_brackets(client, account_id)
 
     # Cells to scan
@@ -1046,9 +1071,42 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
                 summary["blocked"] += 1
                 continue
             summary["triggers"] += 1
-            # Place bracket
+            # Place bracket — OR record shadow if halted/paper
             try:
-                if paper:
+                if shadow_only:
+                    # Halted but shadow-mode active: record the trigger to the
+                    # shadow_trades table so we can validate hypothetical
+                    # performance during the halt window. Resolved later by
+                    # scripts/shadow_trade_resolver.py.
+                    try:
+                        tick_v = _tick_size(symbol)
+                        risk_usd = None
+                        if sig.get("stop") is not None:
+                            risk_ticks = abs(float(sig["price"]) - float(sig["stop"])) / tick_v
+                            risk_usd = risk_ticks * (
+                                {"GC": 10.0, "NG": 10.0, "ZN": 15.625, "ZB": 31.25,
+                                 "ZT": 15.625, "ZF": 7.8125, "MNQ": 0.5, "MES": 1.25,
+                                 "MCL": 1.0, "6E": 6.25, "6B": 6.25, "6C": 10.0
+                                }.get(symbol, 1.0)
+                            )
+                        get_db().record_shadow_trade(
+                            agent="live_trader",
+                            symbol=symbol, strategy=strat_name, side=sig_side,
+                            entry_price=float(sig["price"]),
+                            stop_price=float(sig["stop"]),
+                            target_price=float(sig.get("target") or sig["price"]),
+                            shadow_reason="halt_active",
+                            risk_usd=risk_usd,
+                            notes=f"halt_reason={reason}",
+                        )
+                        _log(f"  SHADOW recorded: {symbol} {strat_name} {sig_side} "
+                              f"@ {sig['price']} stop={sig['stop']} "
+                              f"target={sig.get('target')} risk≈${risk_usd}")
+                        summary["shadow"] += 1
+                    except Exception as e:
+                        _log(f"  shadow record failed: {e}")
+                        summary["errors"] += 1
+                elif paper:
                     _log(f"  PAPER: would place {symbol} {strat_name} {sig_side} "
                           f"@ {sig['price']} stop={sig['stop']} target={sig.get('target')}")
                     summary["placed"] += 1
