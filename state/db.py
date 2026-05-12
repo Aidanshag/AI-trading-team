@@ -286,15 +286,30 @@ class Database:
         outcome: str,
         pnl_r: float,
         notes: str | None = None,
+        exec_mirror_outcome: str | None = None,
+        exec_mirror_pnl_r: float | None = None,
+        exec_mirror_notes: str | None = None,
     ) -> None:
-        """Set outcome on a shadow trade. outcome ∈
-        target_hit | stop_hit | time_stopped | invalidated"""
+        """Set outcome on a shadow trade.
+
+        outcome ∈ target_hit | stop_hit | time_stopped | invalidated (theoretical)
+        exec_mirror_outcome ∈ stop_hit | profit_lock | loss_cap | gain_cap |
+                              hard_flatten | time_stopped | no_fill | invalidated
+                              (what production would have realized — see
+                              tools/exec_mirror.py)
+        """
         with self.tx() as c:
             c.execute(
                 """UPDATE shadow_trades
-                      SET ts_resolved=?, outcome=?, pnl_r=?, notes=COALESCE(?, notes)
+                      SET ts_resolved=?,
+                          outcome=?, pnl_r=?, notes=COALESCE(?, notes),
+                          exec_mirror_outcome=COALESCE(?, exec_mirror_outcome),
+                          exec_mirror_pnl_r=COALESCE(?, exec_mirror_pnl_r),
+                          exec_mirror_notes=COALESCE(?, exec_mirror_notes)
                     WHERE id=?""",
-                (utcnow_iso(), outcome, pnl_r, notes, shadow_id),
+                (utcnow_iso(), outcome, pnl_r, notes,
+                 exec_mirror_outcome, exec_mirror_pnl_r, exec_mirror_notes,
+                 shadow_id),
             )
 
     def shadow_trade_stats(self, *, days: int = 14) -> list[dict[str, Any]]:

@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 
 from state.db import get_db
 from tools.projectx_client import ProjectXError, get_client
+from tools.exec_mirror import evaluate_exec_mirror
 
 
 def _front_contract_id(client, symbol: str) -> str | None:
@@ -210,11 +211,31 @@ def main() -> int:
                 stop=float(row["stop_price"]),
                 target=float(row["target_price"]),
             )
+            # Also compute the execution-mirror outcome (what production
+            # would have actually realized given SKIP_TARGET_LEG + profit_lock
+            # tiers + hard-flatten clock). Same bars; different exit logic.
+            try:
+                em_outcome, em_pnl_r, em_note = evaluate_exec_mirror(
+                    row_bars,
+                    symbol=sym,
+                    side=row["side"],
+                    entry=float(row["entry_price"]),
+                    stop=float(row["stop_price"]),
+                    risk_usd=(float(row["risk_usd"]) if row["risk_usd"] else None),
+                )
+            except Exception as e:
+                em_outcome, em_pnl_r, em_note = "invalidated", 0.0, f"exec_mirror err: {e}"
+
             print(f"  {sym} #{row['id']} {row['strategy']:25s} "
-                  f"{row['side']:5s} → {outcome:14s} {pnl_r:+.2f}R  ({note})")
+                  f"{row['side']:5s} → theo={outcome:12s} {pnl_r:+.2f}R "
+                  f"| exec={em_outcome:13s} {em_pnl_r:+.2f}R")
             if not args.dry_run:
-                db.resolve_shadow_trade(row["id"], outcome=outcome, pnl_r=pnl_r,
-                                        notes=note)
+                db.resolve_shadow_trade(
+                    row["id"], outcome=outcome, pnl_r=pnl_r, notes=note,
+                    exec_mirror_outcome=em_outcome,
+                    exec_mirror_pnl_r=em_pnl_r,
+                    exec_mirror_notes=em_note,
+                )
             resolved += 1
 
     print(f"\nResolved {resolved}/{len(pending)} shadow trades.")

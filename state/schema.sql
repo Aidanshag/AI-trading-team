@@ -162,7 +162,17 @@ CREATE TABLE IF NOT EXISTS shadow_trades (
     ts_resolved     TEXT,
     outcome         TEXT,                              -- target_hit | stop_hit | time_stopped | invalidated | unresolved
     pnl_r           REAL,                              -- R-multiple (target = +rr_planned, stop = -1)
-    notes           TEXT
+    notes           TEXT,
+    -- 2026-05-12: execution-mirror columns. Same bars replayed but using
+    -- production exit logic (SKIP_TARGET_LEG=True + profit_protect tiers +
+    -- LOSS_TIER_HARD_CAP_USD=150 + 3:10 PM CT hard flatten). This is what
+    -- the strategy would have ACTUALLY realized in production, not the
+    -- theoretical target-vs-stop edge. Use exec_mirror_pnl_r when feeding
+    -- shadow data into promotion / sizing decisions; use pnl_r for raw
+    -- strategy-edge research.
+    exec_mirror_pnl_r    REAL,
+    exec_mirror_outcome  TEXT,                         -- stop_hit | profit_lock | hard_flatten | loss_cap | time_stopped | invalidated
+    exec_mirror_notes    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_shadow_ts ON shadow_trades(ts_signal);
 CREATE INDEX IF NOT EXISTS idx_shadow_symbol ON shadow_trades(symbol);
