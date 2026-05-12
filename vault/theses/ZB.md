@@ -2,18 +2,47 @@
 type: thesis
 symbol: ZB
 sector: rates
-conviction: high
-direction: intraday (long + short cells both validated)
-timeframe: intraday
+conviction: DEMOTED
+direction: n/a (strategy removed from live)
+timeframe: n/a
 strategy: gap_fill_wide
-status: STANDING_LIVE
-primary_driver: overnight gap mean-reversion on long-end Treasury
+status: DEMOTED_2026-05-11
+primary_driver: (historical) overnight gap mean-reversion on long-end Treasury
 related: [[ZN]], [[ZT]], [[ZF]]
-updated: 2026-05-09T15:00:00Z
+updated: 2026-05-11T22:00:00Z
+demoted_by: vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md
+incident: ZB SHORT orphan-leg, -$137.89 net, 2026-05-10/11
 author: Cowork (Claude)
 ---
 
-# [[ZB]] — gap_fill_wide standing edge (long-end of the curve)
+> ## ⛔ DEMOTED 2026-05-11 — ZB was the incident contract
+>
+> `gap_fill` and `gap_fill_wide` have been **removed from the live filter**
+> as of 2026-05-11 evening. Same root cause as the rest of the curve (see
+> [[ZN]] for the full validation-pipeline writeup), AND the Sunday-night
+> orphan-leg incident **fired on ZB specifically**:
+>
+> - ZB SHORT entry-limit at 113.125 placed 20:37 ET; never filled
+> - Protective BUY-stop at 113.3125 placed anyway (pre-fix `place_bracket`)
+> - Stop fired alone → opened unintended LONG → -$137.89 closed manually
+>
+> Per Pattern A canon (fail-silent defaults): the "fix" from 2026-05-01
+> was supposed to prevent this. It had regressed or was never actually
+> enforcing entry-fill confirmation before placing protective legs.
+> CC's encoded fix poll-for-fill in `place_bracket()` with 6 new unit
+> tests. CI-test escalation is a separate task.
+>
+> **Sources:**
+> - `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`
+> - `vault/lessons/2026-05-11_gap_fill_calibration_and_orphan_leg_incident.md`
+>
+> The live allowlist is now a 23-cell diversified mix. See CLAUDE.md
+> "Strategic focus — diversified mix" for the current state.
+>
+> Content below preserved for historical reference. Do not use as a
+> current trade thesis.
+
+# [[ZB]] — gap_fill_wide standing edge (long-end of the curve) ⛔ DEMOTED
 
 > Standing live edge on the 30Y Treasury Bond future. Same `gap_fill_wide` mechanic as [[ZN]] (≥1.5×ATR gap, 1.5×ATR stop, 3-tick floor), applied to the long end. **Six cells active live** — the most cells of any single Treasury, with all three sessions × both sides represented. Parent-strategy OOS E=+0.98R, t=+10.50, n=382.
 

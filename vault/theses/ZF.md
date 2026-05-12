@@ -2,18 +2,38 @@
 type: thesis
 symbol: ZF
 sector: rates
-conviction: high
-direction: intraday (long + short cells both validated)
-timeframe: intraday
+conviction: DEMOTED
+direction: n/a (strategy removed from live)
+timeframe: n/a
 strategy: gap_fill_wide
-status: STANDING_LIVE
-primary_driver: overnight gap mean-reversion on belly Treasury
+status: DEMOTED_2026-05-11
+primary_driver: (historical) overnight gap mean-reversion on belly Treasury
 related: [[ZN]], [[ZT]], [[ZB]]
-updated: 2026-05-09T15:00:00Z
+updated: 2026-05-11T22:00:00Z
+demoted_by: vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md
 author: Cowork (Claude)
 ---
 
-# [[ZF]] — gap_fill_wide standing edge (5Y belly)
+> ## ⛔ DEMOTED 2026-05-11
+>
+> `gap_fill` and `gap_fill_wide` have been **removed from the live filter**.
+> Same root cause as the rest of the curve — see [[ZN]] for the full
+> writeup. ZF also fired one of the four signals on Sunday night
+> 2026-05-10/11 with sub-tick stops; orphan-leg risk was averted only
+> because the unintended leg didn't trigger (ZB was the one that did).
+>
+> **Footnote on the focus-universe gap from this thesis's body**:
+> The note about ZF being missing from the focus universe until 2026-05-06
+> is still valid as an *operational* observation — focus universe and
+> live allowlist drift apart, and the periodic reconciliation check is
+> still worth doing. Just not for gap_fill specifically anymore.
+>
+> The live allowlist is now a 23-cell diversified mix. See CLAUDE.md.
+>
+> Content below preserved for historical reference. Do not use as a
+> current trade thesis.
+
+# [[ZF]] — gap_fill_wide standing edge (5Y belly) ⛔ DEMOTED
 
 > Standing live edge on the 5Y Treasury Note future. Same `gap_fill_wide` mechanic as [[ZN]] (≥1.5×ATR gap, 1.5×ATR stop, 3-tick floor). ZF was added to the focus universe 2026-05-06 (was blocking 3 validated cells from scanning). Parent-strategy OOS E=+1.16R, t=+7.95, n=239. Smallest cell count of the curve (3).
 

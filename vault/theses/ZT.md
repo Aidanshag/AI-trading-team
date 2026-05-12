@@ -2,18 +2,43 @@
 type: thesis
 symbol: ZT
 sector: rates
-conviction: high
-direction: intraday (long + short cells both validated)
-timeframe: intraday
+conviction: DEMOTED
+direction: n/a (strategy removed from live)
+timeframe: n/a
 strategy: gap_fill_wide
-status: STANDING_LIVE
-primary_driver: overnight gap mean-reversion on short-end Treasury
+status: DEMOTED_2026-05-11
+primary_driver: (historical) overnight gap mean-reversion on short-end Treasury
 related: [[ZN]], [[ZB]], [[ZF]]
-updated: 2026-05-09T15:00:00Z
+updated: 2026-05-11T22:00:00Z
+demoted_by: vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md
 author: Cowork (Claude)
 ---
 
-# [[ZT]] — gap_fill_wide standing edge (strongest signal in the universe)
+> ## ⛔ DEMOTED 2026-05-11
+>
+> `gap_fill` and `gap_fill_wide` have been **removed from the live filter**.
+> The "strongest signal in the universe" framing in the body below (OOS
+> E=+1.41R, t=+11.76) was an artifact of the same three compounding
+> validation bugs that broke the rest of the curve — see [[ZN]] for the
+> full writeup or `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`.
+>
+> Under the corrected pipeline, ZT shows the same failure mode as the
+> other Treasuries: sub-tick stops in low-vol Asian session,
+> degenerate rr-check, no qualifying parameter combination.
+>
+> **Particularly painful here**: I cited ZT's wide-variant
+> `min_gap_atr=1.5, rr_target=1.0` showing OOS E=+2.80R as the
+> strongest wide-variant signal in the curve when I reconciled this
+> thesis on 5/9. That R-multiple was meaningless — the underlying
+> `t.stop_price` typo and missing tick_size injection meant the
+> risk_ticks denominator was wrong.
+>
+> The live allowlist is now a 23-cell diversified mix. See CLAUDE.md.
+>
+> Content below preserved for historical reference. Do not use as a
+> current trade thesis.
+
+# [[ZT]] — gap_fill_wide standing edge (strongest signal in the universe) ⛔ DEMOTED
 
 > Standing live edge on the 2Y Treasury future. Same `gap_fill_wide` mechanic as [[ZN]] (≥1.5×ATR gap, 1.5×ATR stop, 3-tick floor), applied to the short end of the curve. **Tier 3 parent-strategy walk-forward shows ZT is statistically the strongest gap_fill signal across the entire validated universe** — OOS hit 68%, E=+1.41R, t=+11.76 on n=333. If you only had to pick one cell to trade, ZT Asian is the one. Five cells live as of 2026-05-08 promotion.
 

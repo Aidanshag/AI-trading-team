@@ -3,11 +3,43 @@ type: sweep_request
 date: 2026-05-09
 requester: Cowork
 target_runner: Claude Code (trading host)
-status: PENDING_EXECUTION
+status: SUPERSEDED_2026-05-11
 parent_finding: vault/_meta/analysis/2026-05-08_slippage_redirect_and_dollar_metrics.md
+superseded_by: vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md
 ---
 
-# Sweep request — gap_fill_wide × dollar metrics
+> ## ⛔ SUPERSEDED 2026-05-11
+>
+> CC ran the corrected `gap_fill_wide` sweeps Monday morning 2026-05-11
+> at 04:00 / 04:06 / 04:40 UTC and concluded **neither `gap_fill` nor
+> `gap_fill_wide` produces a deployable parameter set** under the
+> corrected pipeline (144 combinations tested; max OOS n=5 on plain
+> gap_fill). The original Tier-3 t-stats this request was built on top
+> of were artifacts of three compounding validation bugs (missing
+> tick_size injection, `t.stop_price` typo, silent divide-by-1e-9).
+>
+> Both `gap_fill` and `gap_fill_wide` have been removed from the live
+> filter. The dollar-metric question this sweep was designed to answer
+> ("which wide-variant parameter combo is slippage-optimal at empirical
+> 0.10-0.15 ticks/side") is no longer relevant — there's no viable
+> wide-variant cell to deploy regardless of slippage.
+>
+> **Sources:**
+> - `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`
+> - `vault/research/param_sweeps/gap_fill_wide_2026-05-11_0400.md`
+> - `vault/research/param_sweeps/gap_fill_wide_2026-05-11_0406.md`
+> - `vault/research/param_sweeps/gap_fill_wide_2026-05-11_0440.md`
+> - `vault/research/param_sweeps/gap_fill_2026-05-11_0443.md`
+>
+> The Pattern C structural lesson (R-multiples are slippage-blind;
+> backtest harness must report dollar metrics natively) **is unchanged
+> and still valid** — the dollar-metric extension to `param_sweep.py`
+> remains the right design. Future sweeps on the diversified 23-cell
+> mix should use it.
+>
+> Content below preserved for historical reference.
+
+# Sweep request — gap_fill_wide × dollar metrics ⛔ SUPERSEDED
 
 Cowork can't run yfinance-backed sweeps from the sandbox (no PyPI, no
 Yahoo). Queueing this for Claude Code on the trading host.

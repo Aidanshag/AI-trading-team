@@ -22,7 +22,7 @@ row here too.
 |---|---|---|---|
 | 2026-05-08 | passive_entry_orders | PROPOSED | Slippage-reduction lever #1; passive limit at favorable side of spread for mean-reversion strategies (gap_fill family). Implementation sketch + OCO interaction notes; needs user/CC sign-off before merge. |
 | 2026-05-08 | setup_confluence_requirement | PROPOSED | Require ≥1 of (vol>1.5×MA, ATR expansion, cross-strategy agreement) before firing in autonomous mode. A/B-friendly flag design; composes with passive entries. |
-| 2026-05-09 | gap_fill_wide_dollar_sweep_request | PENDING_EXECUTION | Sweep request for CC on the trading host (Cowork's Linux sandbox can't run yfinance). gap_fill_wide × 36 combos × 6 symbols = 216 runs. Output paths under vault/research/param_sweeps/. Cowork follows up with analysis read once outputs land. |
+| 2026-05-09 | gap_fill_wide_dollar_sweep_request | SUPERSEDED_2026-05-11 | Sweep request for CC. SUPERSEDED: CC ran the corrected sweeps 2026-05-11 (04:00/04:06/04:40 UTC) and proved neither gap_fill nor gap_fill_wide produces a deployable parameter set under the corrected pipeline. Both strategies removed from live filter. Pattern C structural lesson unchanged. |
 
 ## Priority queue 2026-05-08 — backend brain upgrades (all 4 shipped)
 

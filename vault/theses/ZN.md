@@ -2,18 +2,53 @@
 type: thesis
 symbol: ZN
 sector: rates
-conviction: high
-direction: intraday (long + short cells both validated)
-timeframe: intraday
+conviction: DEMOTED
+direction: n/a (strategy removed from live)
+timeframe: n/a
 strategy: gap_fill_wide
-status: STANDING_LIVE
-primary_driver: overnight gap mean-reversion
+status: DEMOTED_2026-05-11
+primary_driver: (historical) overnight gap mean-reversion
 related: [[ZB]], [[ZT]], [[ZF]]
-updated: 2026-05-09T15:00:00Z
+updated: 2026-05-11T22:00:00Z
+demoted_by: vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md
 author: Cowork (Claude)
 ---
 
-# [[ZN]] — gap_fill_wide standing edge
+> ## ⛔ DEMOTED 2026-05-11
+>
+> `gap_fill` and `gap_fill_wide` have been **removed from the live filter**
+> as of 2026-05-11 evening. CC's autonomous validation found the original
+> Tier-3 t-stats of +7.95 to +11.76 cited throughout this thesis were
+> artifacts of three compounding bugs in the validation pipeline:
+> missing `tick_size` injection, a `t.stop_price` typo, and a
+> silent division-by-`1e-9` in the rr-check when stops collapsed to
+> sub-tick on low-vol 5m treasury bars.
+>
+> Under the **corrected** pipeline, neither `gap_fill` nor
+> `gap_fill_wide` produces a deployable parameter set on 60 days of
+> treasury data across 144 combinations tested.
+>
+> The Sunday-night 2026-05-10/11 live run also revealed an orphan-leg
+> regression in `place_bracket()` (Pattern A — protective legs placed
+> before entry-fill confirmation) that netted -$137.89 on ZB.
+>
+> **Sources:**
+> - `vault/research/analysis/2026-05-11_gap_fill_wide_validation_attempt.md`
+> - `vault/research/analysis/2026-05-11_broker_target_fill_anomaly.md`
+> - `vault/lessons/2026-05-11_gap_fill_calibration_and_orphan_leg_incident.md`
+>
+> The live allowlist is now a 23-cell diversified mix (FVG family,
+> narrow_range_break, vol_spike_fade, inside_bar_break, order_block_d1,
+> pivot_reversal, cross_asset_divergence_zn, liquidity_sweep_tuned,
+> keltner_breakout, rsi2_extreme_reversion). See CLAUDE.md "Strategic
+> focus — diversified mix" for the current state.
+>
+> The content below is **preserved for historical reference**. Do not
+> use as a current trade thesis. If the backtest engine `Trade.stop_price`
+> issue gets fixed and a re-validated gap_fill family emerges, this
+> thesis should be rewritten from scratch, not resurrected.
+
+# [[ZN]] — gap_fill_wide standing edge ⛔ DEMOTED
 
 > Standing live edge on the 10Y Treasury future: fade open gaps ≥ 1.5×ATR back to prior close, with stops at 1.5×ATR (≥3 ticks hard floor) for live tradability. Both long (gap-down fade) and short (gap-up fade) cells validated on Asian and PostClose sessions. ZN is the original walk-forward validated symbol; the rest of the curve ([[ZB]], [[ZT]], [[ZF]]) are extensions.
 
