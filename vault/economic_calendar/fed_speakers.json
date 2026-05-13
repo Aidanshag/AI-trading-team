@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-12T10:00:12.104101+00:00",
+  "generated_at": "2026-05-13T10:00:26.576587+00:00",
   "source": "https://www.federalreserve.gov/calendar/feed.ics",
   "events": [
     {
@@ -27,6 +27,13 @@
       "ts_utc": "2026-05-25T12:00:00+00:00",
       "summary": "Holiday - Memorial Day",
       "description": "&lt;p&gt;The daily and weekly statistical releases scheduled for today will be released on Tuesday, May 26.&lt;/p&gt;",
+      "location": "",
+      "influence": "LOW"
+    },
+    {
+      "ts_utc": "2026-05-26T13:00:00+00:00",
+      "summary": "H.6 - Money Stock Measures",
+      "description": "",
       "location": "",
       "influence": "LOW"
     }

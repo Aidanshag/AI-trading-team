@@ -19,3 +19,58 @@ Sampled 65 profit_lock shadow trades from 2026-05-01 onward
   [17/65] 6B   #6053 order_block_d1         ctrl=profit_lock -0.06R  agent=profit_lock -0.06R  Δ=+0.00R
   [18/65] GC   #6006 narrow_range_break     ctrl=profit_lock +0.08R  agent=profit_lock +0.08R  Δ=+0.00R
   [19/65] MNQ  #6011 fair_value_gap         ctrl=profit_lock +0.42R  agent=stop_hit    -1.08R  Δ=-1.50R
+  [20/65] 6B   #6019 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [21/65] NG   #6044 inside_bar_break       ctrl=profit_lock -0.04R  agent=profit_lock -0.04R  Δ=+0.00R
+  [22/65] 6B   #6033 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [23/65] MNQ  #6005 fair_value_gap         ctrl=profit_lock +0.42R  agent=stop_hit    -1.08R  Δ=-1.50R
+  [24/65] MCL  #5978 keltner_breakout       ctrl=profit_lock +0.09R  agent=profit_lock +0.09R  Δ=+0.00R
+  [25/65] GC   #5961 fair_value_gap_tuned   ctrl=profit_lock +0.03R  agent=profit_lock +0.03R  Δ=+0.00R
+  [26/65] MES  #6004 pivot_reversal         ctrl=profit_lock +0.48R  agent=profit_lock +0.48R  Δ=+0.00R
+  [27/65] MES  #6001 pivot_reversal         ctrl=profit_lock +0.48R  agent=profit_lock +0.48R  Δ=+0.00R
+  [28/65] 6E   #6057 liquidity_sweep_tuned  ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [29/65] 6E   #6031 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [30/65] MCL  #5987 keltner_breakout       ctrl=profit_lock +0.29R  agent=time_stopped +5.20R  Δ=+4.91R
+  [31/65] 6E   #5995 keltner_breakout       ctrl=profit_lock -0.12R  agent=profit_lock -0.12R  Δ=+0.00R
+  [32/65] NG   #6042 inside_bar_break       ctrl=profit_lock -0.04R  agent=profit_lock -0.02R  Δ=+0.02R
+  [33/65] MNQ  #6000 fair_value_gap         ctrl=profit_lock +0.42R  agent=stop_hit    -1.08R  Δ=-1.50R
+  [34/65] 6E   #6045 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock +0.13R  Δ=+0.13R
+  [35/65] 6B   #6036 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [36/65] 6E   #5993 keltner_breakout       ctrl=profit_lock -0.12R  agent=profit_lock -0.12R  Δ=+0.00R
+  [37/65] GC   #5971 fair_value_gap_tuned   ctrl=profit_lock +0.36R  agent=profit_lock +0.36R  Δ=+0.00R
+  [38/65] 6E   #6048 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock +0.07R  Δ=+0.07R
+  [39/65] 6B   #6015 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [40/65] 6B   #6030 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [41/65] MNQ  #6002 fair_value_gap         ctrl=profit_lock +0.42R  agent=stop_hit    -1.08R  Δ=-1.50R
+  [42/65] 6B   #6047 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock +0.06R  Δ=+0.07R
+  [43/65] 6E   #5996 keltner_breakout       ctrl=profit_lock -0.12R  agent=profit_lock -0.12R  Δ=+0.00R
+  [44/65] 6E   #6041 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [45/65] 6B   #6014 order_block_d1         ctrl=profit_lock -0.09R  agent=profit_lock +0.10R  Δ=+0.20R
+  [46/65] 6B   #6027 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [47/65] 6B   #6039 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [48/65] 6E   #6034 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [49/65] 6B   #6024 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [50/65] 6B   #6051 order_block_d1         ctrl=profit_lock -0.06R  agent=profit_lock -0.06R  Δ=+0.00R
+  [51/65] GC   #6009 narrow_range_break     ctrl=profit_lock +0.22R  agent=profit_lock +0.22R  Δ=+0.00R
+  [52/65] NG   #6026 inside_bar_break       ctrl=profit_lock -0.04R  agent=profit_lock -0.04R  Δ=+0.00R
+  [53/65] 6E   #6025 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [54/65] 6E   #6054 liquidity_sweep_tuned  ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [55/65] NG   #6064 inside_bar_break       ctrl=profit_lock +1.07R  agent=profit_lock +1.07R  Δ=+0.00R
+  [56/65] GC   #5969 fair_value_gap_tuned   ctrl=profit_lock +0.03R  agent=loss_cap    -0.16R  Δ=-0.19R
+  [57/65] 6E   #6055 liquidity_sweep_tuned  ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [58/65] 6B   #6016 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [59/65] 6E   #6028 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [60/65] 6E   #6063 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+  [61/65] 6E   #6022 pivot_reversal         ctrl=profit_lock -0.00R  agent=profit_lock +0.09R  Δ=+0.09R
+  [62/65] MCL  #5986 keltner_breakout       ctrl=profit_lock +0.29R  agent=time_stopped +5.92R  Δ=+5.64R
+  [63/65] NG   #6046 inside_bar_break       ctrl=profit_lock -0.02R  agent=profit_lock +0.10R  Δ=+0.12R
+  [64/65] 6E   #6040 pivot_reversal         ctrl=profit_lock -0.12R  agent=profit_lock -0.12R  Δ=+0.00R
+  [65/65] 6B   #6018 order_block_d1         ctrl=profit_lock -0.00R  agent=profit_lock -0.00R  Δ=+0.00R
+
+=== Phase 2 replay summary (n=65) ===
+  Control avg R:  +0.121
+  Agent avg R:    +0.156
+  Delta per trade: +0.035R
+
+  Agent improved 10/65 trades, worsened 7, unchanged 48
+
+  Last-decision tally: HOLD=48  CLOSE=17  FALLBACK=0

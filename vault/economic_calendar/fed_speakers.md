@@ -1,7 +1,7 @@
 ---
 type: fed_speaker_calendar
-generated_at: 2026-05-12T10:00:12.104101+00:00
-count: 4
+generated_at: 2026-05-13T10:00:26.576587+00:00
+count: 5
 ---
 
 # Fed speakers / events — upcoming
@@ -14,3 +14,4 @@ HIGH-influence speakers (Chair, Vice Chair, NY Fed) move the front end of the cu
 | 2026-05-15T09:15:00+00:00 | LOW | G.17 - Industrial Production and Capacity Utilization |  |
 | 2026-05-20T14:00:00+00:00 | LOW | FOMC Minutes |  |
 | 2026-05-25T12:00:00+00:00 | LOW | Holiday - Memorial Day |  |
+| 2026-05-26T13:00:00+00:00 | LOW | H.6 - Money Stock Measures |  |
