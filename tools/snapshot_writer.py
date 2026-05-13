@@ -24,8 +24,10 @@ Why this shape:
 """
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -33,6 +35,44 @@ from state.db import get_db
 from tools.unrealized_pnl import compute_unrealized
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Topstep's CME-Globex trading day rolls at 5:00 PM US/Central time.
+# This is the boundary their daily-loss-limit counter resets on.
+# Anchoring our day_pl calculation to UTC midnight (the previous default)
+# meant the trader's internal DLL gate kept seeing yesterday's losses for
+# several hours AFTER Topstep had already reset, blocking trades on what
+# was actually a fresh trading day. See
+# vault/lessons/2026-05-13_overnight_dll_breach.md for the discovery.
+_TOPSTEP_DAY_BOUNDARY_CT = time(17, 0)
+_CENTRAL = ZoneInfo("America/Chicago")
+
+
+def _topstep_trading_day_start_utc(now_utc: datetime | None = None) -> datetime:
+    """Return the UTC timestamp of the most recent 5pm CT (= start of
+    the current Topstep trading day). DST-aware via zoneinfo."""
+    now_utc = now_utc or datetime.now(timezone.utc)
+    now_ct = now_utc.astimezone(_CENTRAL)
+    if now_ct.time() >= _TOPSTEP_DAY_BOUNDARY_CT:
+        boundary_ct = datetime.combine(now_ct.date(), _TOPSTEP_DAY_BOUNDARY_CT,
+                                          tzinfo=_CENTRAL)
+    else:
+        yesterday = now_ct.date() - timedelta(days=1)
+        boundary_ct = datetime.combine(yesterday, _TOPSTEP_DAY_BOUNDARY_CT,
+                                          tzinfo=_CENTRAL)
+    return boundary_ct.astimezone(timezone.utc)
+
+
+def _first_snapshot_since(db, boundary_utc: datetime) -> dict | None:
+    """First account_snapshot row at or after `boundary_utc`. Used as the
+    start-of-trading-day balance anchor. Bypasses the older
+    `db.first_snapshot_today_utc` (which anchored at UTC midnight)."""
+    iso = boundary_utc.strftime("%Y-%m-%dT%H:%M:%S")
+    row = db.connect().execute(
+        "SELECT * FROM account_snapshots WHERE ts >= ? "
+        "ORDER BY ts ASC LIMIT 1",
+        (iso,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def _load_yaml(rel_path: str) -> dict:
@@ -67,7 +107,7 @@ def capture_snapshot(client, account_id) -> dict | None:
         positions = client.get_positions(account_id) or []
         open_contracts = sum(int(p.get("size") or 0) for p in positions)
 
-        first_today = db.first_snapshot_today_utc()
+        first_today = _first_snapshot_since(db, _topstep_trading_day_start_utc())
         realized_day = (balance - float(first_today["balance_usd"])
                         if first_today else 0.0)
         starting = float(_load_yaml("config/risk_limits.yaml")
