@@ -1282,6 +1282,175 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
     return summary
 
 
+def consume_pending_signals(*, dry_run: bool = False,
+                              paper: bool = False) -> dict:
+    """Queue-consumer path. Reads signals from `tools.signal_queue`,
+    applies last-mile safety gates, and places brackets.
+
+    The brain (`scripts/brain_signaler.py`) is responsible for upstream
+    strategy execution, session filtering, regime filtering, and
+    cooldown — that work no longer happens in the trader.
+
+    This function is what `--use-queue` enables. The legacy `scan_once`
+    (strategy execution + decisioning) remains as the fallback path for
+    parallel rollout. Once we verify a clean session on this path, the
+    legacy code can be removed.
+
+    The safety gates here MUST stay even though the brain in theory
+    pre-validates — they're defense-in-depth against brain bugs (a
+    miscalibrated cell or stale config could emit a signal that should
+    be blocked).
+    """
+    from tools.signal_queue import consume as _consume_queue
+    summary = {"consumed": 0, "placed": 0, "blocked": 0, "shadow": 0,
+                "errors": 0, "skipped_in_trade": 0, "skipped_cooldown": 0,
+                "skipped_daily_cap": 0}
+
+    halted, reason = is_halted()
+    shadow_only = halted and SHADOW_ON_HALT and not paper
+    if halted and not shadow_only:
+        _log(f"HALTED: {reason}")
+        return {"status": "halted", "reason": reason}
+    if shadow_only:
+        _log(f"HALTED (shadow mode active — no broker writes): {reason}")
+
+    if is_sunday_reopen_blackout(_now_utc()):
+        _log("Sunday-reopen blackout (17:00-17:30 ET): skipping new entries")
+        return {"status": "sunday_reopen_blackout"}
+
+    try:
+        client = get_client()
+        account_id = get_account_id()
+    except Exception as e:
+        _log(f"broker unavailable: {e}")
+        return {"status": "broker_unavailable", "error": str(e)}
+
+    snap = capture_snapshot(client, account_id)
+    if snap and not snap.get("can_trade", True):
+        _log("can_trade=false; halt scan")
+        return {"status": "broker_can_trade_false"}
+    if snap:
+        breached, why = dll_breached(snap)
+        if breached:
+            _log(f"DLL BREACH: {why}")
+            return {"status": "dll_halt", "reason": why}
+
+    # 3:10 PM CT hard-flatten enforcement (same as scan_once).
+    if not dry_run and not paper:
+        from tools.hard_flatten_clock import (enforce_hard_flatten,
+                                                should_block_new_entries)
+        _hf_result = enforce_hard_flatten(client, account_id, log_fn=_log)
+        if _hf_result["flattened"] or _hf_result["cancelled"]:
+            _log(f"  HARD_FLATTEN window={_hf_result['window']}: "
+                  f"flattened {len(_hf_result['flattened'])} position(s), "
+                  f"cancelled {_hf_result['cancelled']} order(s)")
+        if should_block_new_entries():
+            _log("  Within 3:10 PM CT closing window — blocking new entries")
+            return {"status": "hard_flatten_window", **_hf_result}
+        cleanup_orphan_brackets(client, account_id)
+
+    open_pos = (snap.get("open_contracts_total") or 0) if snap else 0
+    if open_pos > 0:
+        _log(f"  {open_pos} open contracts; skipping new entries")
+        return {"status": "in_position", **summary}
+
+    today_count = todays_trade_count()
+    if today_count >= MAX_TRADES_PER_DAY:
+        _log(f"  daily trade cap hit ({today_count}/{MAX_TRADES_PER_DAY})")
+        return {"status": "daily_cap_hit", "today_count": today_count,
+                **summary}
+
+    signals = _consume_queue()
+    if not signals:
+        _log("queue: no pending signals")
+        return {"status": "empty_queue", **summary}
+
+    _log(f"queue: consumed {len(signals)} signal(s)")
+    for sig_obj in signals:
+        summary["consumed"] += 1
+        symbol = sig_obj.get("symbol", "")
+        strat_name = sig_obj.get("strategy", "?")
+        side = str(sig_obj.get("side", "")).lower()
+        qty = int(sig_obj.get("qty") or 1)
+
+        # Trader-shaped signal dict (keys match what gates expect)
+        sig = {
+            "side": side,
+            "price": sig_obj.get("entry_price"),
+            "stop": sig_obj.get("stop_price"),
+            "target": sig_obj.get("target_price"),
+            "reason": sig_obj.get("notes", ""),
+        }
+
+        # Cooldown is a brain concern in principle, but defense-in-depth:
+        # the trader checks too in case the brain double-emits.
+        if recent_thesis_for(symbol):
+            _log(f"  {symbol} {strat_name} {side}: skipped (recent thesis)")
+            summary["skipped_cooldown"] += 1
+            continue
+
+        ok, reason = signal_passes_min_r_gate(sig, symbol)
+        if not ok:
+            _log(f"  {symbol} {strat_name} {side} blocked: {reason}")
+            summary["blocked"] += 1
+            continue
+        ok, reason = signal_passes_max_risk_gate(sig, symbol, qty=qty)
+        if not ok:
+            _log(f"  {symbol} {strat_name} {side} blocked: {reason}")
+            summary["blocked"] += 1
+            continue
+        if snap:
+            signal_risk = compute_signal_risk_usd(sig, symbol, qty=qty)
+            if signal_risk is not None:
+                breach, breach_why = projected_dll_breach(snap, signal_risk)
+                if breach:
+                    _log(f"  {symbol} {strat_name} {side} blocked: {breach_why}")
+                    summary["blocked"] += 1
+                    continue
+
+        try:
+            if sig_obj.get("shadow_only") or shadow_only or paper:
+                # Shadow / paper / brain-flagged-experimental: record but
+                # don't place. Use the same shadow_trades table as scan_once
+                # for consistency with the validation pipeline.
+                try:
+                    tick_v = _tick_size(symbol)
+                    risk_usd = None
+                    if sig.get("stop") is not None:
+                        risk_ticks = abs(float(sig["price"]) - float(sig["stop"])) / tick_v
+                        risk_usd = compute_signal_risk_usd(sig, symbol, qty=qty)
+                    get_db().record_shadow_trade(
+                        agent="live_trader_queue",
+                        symbol=symbol, strategy=strat_name, side=side,
+                        entry_price=float(sig["price"]),
+                        stop_price=float(sig["stop"]),
+                        target_price=float(sig.get("target") or sig["price"]),
+                        shadow_reason=("brain_shadow_only"
+                                          if sig_obj.get("shadow_only")
+                                          else "halt_active"),
+                        risk_usd=risk_usd,
+                        notes=f"queue_id={sig_obj.get('id', '?')[:8]}",
+                    )
+                    _log(f"  SHADOW recorded: {symbol} {strat_name} {side}")
+                    summary["shadow"] += 1
+                except Exception as e:
+                    _log(f"  shadow record failed: {e}")
+                    summary["errors"] += 1
+            else:
+                result = place_bracket(client, account_id, symbol, sig,
+                                         qty=qty, dry_run=dry_run)
+                if result.get("status") in ("submitted", "dry_run"):
+                    summary["placed"] += 1
+                else:
+                    summary["errors"] += 1
+        except Exception as e:
+            _log(f"  place_bracket exception: {e}")
+            summary["errors"] += 1
+
+    _log(f"  queue-summary: {summary}")
+    return summary
+
+
 def _position_polling_loop(stop_event, dry_run: bool, paper: bool,
                             interval_sec: int = POSITION_POLL_SEC) -> None:
     """Background thread: poll open positions every interval_sec and
