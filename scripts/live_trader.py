@@ -68,6 +68,15 @@ from state.db import get_db  # noqa: E402
 # ────────────────────────────────────────────────────────────────
 
 SCAN_INTERVAL_SEC = 300          # 5-minute cadence
+POSITION_POLL_SEC = 30            # sub-minute poll for per-trade cap / trailing-lock.
+                                  # 2026-05-13 fix: the previous "$150 per-trade cap"
+                                  # fired only on the 5-min scan tick. A position could
+                                  # blow past the cap in thin tape before the next scan
+                                  # — the 2026-05-12 GC long went from +$70 to −$210
+                                  # in a single scan window, then to −$640 by the next.
+                                  # A separate background thread now polls
+                                  # tools/profit_protect.check_and_close every 30s so
+                                  # the cap fires within ~30s of being exceeded.
 LOOKBACK_BARS = 6                 # find_latest_signal cutoff (30 min on 5m bars)
 PER_TRADE_LOSS_CAP_USD = 150.0    # force-close if unrealized < -this
 SAME_SYMBOL_COOLDOWN_MIN = 45     # don't re-fire same symbol within window
@@ -406,6 +415,25 @@ def cell_passes_regime_filter(cell: dict, regime: dict) -> tuple[bool, str]:
     return True, ""
 
 
+def compute_signal_risk_usd(sig: dict, symbol: str, qty: int = 1) -> float | None:
+    """Compute the dollar risk of a signal: stop_ticks × tick_value × qty.
+
+    Returns None when economics can't be computed (missing price/stop,
+    invalid tick, missing tick_value). Callers MUST treat None as
+    'unknown — refuse to gate on it' (fail closed).
+    """
+    if sig.get("price") is None or sig.get("stop") is None:
+        return None
+    tick = _tick_size(symbol)
+    if tick <= 0:
+        return None
+    tval = _tick_value(symbol)
+    if tval <= 0:
+        return None
+    stop_ticks = abs(float(sig["price"]) - float(sig["stop"])) / tick
+    return stop_ticks * tval * max(1, int(qty))
+
+
 def signal_passes_max_risk_gate(sig: dict, symbol: str, qty: int = 1,
                                   max_risk_usd: float = MAX_SIGNAL_RISK_USD,
                                   ) -> tuple[bool, str]:
@@ -422,20 +450,52 @@ def signal_passes_max_risk_gate(sig: dict, symbol: str, qty: int = 1,
     Default-deny: missing tick_value or stop → reject. Treating a missing
     value as 'unknown ok' would replicate the Pattern A failure pattern.
     """
-    if sig.get("price") is None or sig.get("stop") is None:
-        return False, "missing price or stop"
-    tick = _tick_size(symbol)
-    if tick <= 0:
-        return False, f"invalid tick size for {symbol}"
-    tval = _tick_value(symbol)
-    if tval <= 0:
-        return False, f"missing tick_value for {symbol} — refusing to gate on $0"
-    stop_ticks = abs(float(sig["price"]) - float(sig["stop"])) / tick
-    risk_usd = stop_ticks * tval * max(1, int(qty))
+    risk_usd = compute_signal_risk_usd(sig, symbol, qty)
+    if risk_usd is None:
+        return False, "missing price/stop or tick economics — refusing to gate"
     if risk_usd > max_risk_usd:
+        tick = _tick_size(symbol)
+        tval = _tick_value(symbol)
+        stop_ticks = abs(float(sig["price"]) - float(sig["stop"])) / tick
         return False, (f"risk too large (${risk_usd:.0f} > ${max_risk_usd:.0f} cap; "
                         f"stop={stop_ticks:.1f}t × ${tval:.2f}/tick × {qty}ct)")
     return True, ""
+
+
+def projected_dll_breach(snap: dict, signal_risk_usd: float
+                          ) -> tuple[bool, str]:
+    """True if (current day P&L − this signal's worst-case loss) would
+    cross the internal DLL target. Pre-trade projection — mirrors
+    hooks/risk_gate._check_combine_defensive_ladder's projection logic
+    but lives in the live_trader path (auto_trader/SDK hook isn't
+    invoked here).
+
+    The defensive ladder's warn/restrict tiers are advisory only (target
+    prompt-level discipline). The lockdown tier (= internal_dll_target)
+    is the actual hard halt — and we already enforce it post-trade in
+    dll_breached(). This function adds the PRE-TRADE projection so we
+    don't fire a signal that would necessarily push us past lockdown.
+
+    Uses day P&L = realized + unrealized (matches the hook). Falls
+    through to Topstep DLL if internal is missing or zero — same
+    Pattern A defense as dll_breached().
+    """
+    if signal_risk_usd <= 0:
+        return False, ""
+    acct = _load_yaml("config/risk_limits.yaml").get("account", {}) or {}
+    internal = acct.get("internal_dll_target_usd")
+    topstep = float(acct.get("daily_loss_limit_usd", 1000))
+    dll = float(internal) if internal not in (None, 0, 0.0) else topstep
+    source = "internal_dll" if internal not in (None, 0, 0.0) else "topstep_dll"
+    realized = float(snap.get("realized_pl_day_usd") or 0)
+    unrealized = float(snap.get("unrealized_pl_usd") or 0)
+    day_pl = realized + unrealized
+    projected = day_pl - signal_risk_usd
+    if projected <= -dll:
+        return True, (f"{source} projection: day_pl ${day_pl:+.2f} − "
+                        f"${signal_risk_usd:.0f} worst-case = ${projected:+.2f} "
+                        f"<= -${dll:.0f}")
+    return False, ""
 
 
 def signal_passes_min_r_gate(sig: dict, symbol: str,
@@ -1154,6 +1214,19 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
                 _log(f"  {symbol} {strat_name} {sig_side} signal rejected: {reason}")
                 summary["blocked"] += 1
                 continue
+            # Defensive-ladder projection: would this trade's worst-case
+            # loss push day P&L past the internal DLL lockdown? Block
+            # pre-placement if so, rather than letting it fire and trip
+            # dll_breached on the next scan.
+            if snap:
+                signal_risk = compute_signal_risk_usd(sig, symbol, qty=1)
+                if signal_risk is not None:
+                    breach, breach_why = projected_dll_breach(snap, signal_risk)
+                    if breach:
+                        _log(f"  {symbol} {strat_name} {sig_side} signal "
+                              f"rejected: {breach_why}")
+                        summary["blocked"] += 1
+                        continue
             summary["triggers"] += 1
             # Place bracket — OR record shadow if halted/paper
             try:
@@ -1209,6 +1282,34 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
     return summary
 
 
+def _position_polling_loop(stop_event, dry_run: bool, paper: bool,
+                            interval_sec: int = POSITION_POLL_SEC) -> None:
+    """Background thread: poll open positions every interval_sec and
+    force-close any that breach the per-trade loss cap or trailing-lock
+    tiers via tools/profit_protect.check_and_close.
+
+    This runs in PARALLEL with the main 5-min scan loop so the loss cap
+    fires within ~30s of being exceeded instead of waiting for the next
+    scan tick. Dry-run and paper modes skip the polling entirely (no
+    broker writes).
+
+    Safe to run alongside scan_once's own call to check_and_close — both
+    paths are idempotent (broker market-IOC orders fire-and-forget; a
+    second close on a flat position is a no-op).
+    """
+    if dry_run or paper:
+        return
+    from tools.profit_protect import check_and_close
+    while not stop_event.is_set():
+        try:
+            client = get_client()
+            account_id = get_account_id()
+            check_and_close(client, account_id, log_fn=_log)
+        except Exception as e:
+            _log(f"position-poll error: {type(e).__name__}: {e}")
+        stop_event.wait(interval_sec)
+
+
 def main() -> int:
     p = argparse.ArgumentParser(prog="live_trader")
     p.add_argument("--once", action="store_true", help="single scan + exit")
@@ -1226,15 +1327,36 @@ def main() -> int:
 
     _log(f"=== live_trader started: interval={args.interval}s, "
           f"dry_run={args.dry_run}, paper={args.paper} ===")
-    while True:
-        try:
-            scan_once(dry_run=args.dry_run, paper=args.paper)
-        except KeyboardInterrupt:
-            _log("interrupted; exiting")
-            return 0
-        except Exception as e:
-            _log(f"scan error (will retry): {type(e).__name__}: {e}")
-        time.sleep(args.interval)
+
+    # Sub-minute position polling thread for the per-trade loss cap.
+    import threading
+    poll_stop = threading.Event()
+    poll_thread = None
+    if not args.dry_run and not args.paper:
+        poll_thread = threading.Thread(
+            target=_position_polling_loop,
+            args=(poll_stop, args.dry_run, args.paper),
+            kwargs={"interval_sec": POSITION_POLL_SEC},
+            daemon=True,
+            name="position-poller",
+        )
+        poll_thread.start()
+        _log(f"position-poller started (interval={POSITION_POLL_SEC}s)")
+
+    try:
+        while True:
+            try:
+                scan_once(dry_run=args.dry_run, paper=args.paper)
+            except KeyboardInterrupt:
+                _log("interrupted; exiting")
+                return 0
+            except Exception as e:
+                _log(f"scan error (will retry): {type(e).__name__}: {e}")
+            time.sleep(args.interval)
+    finally:
+        poll_stop.set()
+        if poll_thread is not None:
+            poll_thread.join(timeout=5)
 
 
 if __name__ == "__main__":

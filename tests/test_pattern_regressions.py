@@ -476,6 +476,95 @@ def test_pattern_a_dll_breached_falls_through_to_topstep_when_internal_zero():
 
 
 # ════════════════════════════════════════════════════════════════════
+#  Defensive-ladder projection — pre-trade DLL-projection gate
+# ════════════════════════════════════════════════════════════════════
+#
+# 2026-05-13 followup: even with the post-trade dll_breached gate AND
+# the MAX_SIGNAL_RISK pre-trade gate, there's still a window where a
+# valid-sized trade can be allowed when it shouldn't be — when the
+# trader is already deep in the red and another trade's worst case
+# would push past the lockdown threshold. The hook (risk_gate.py)
+# already had this projection logic but it doesn't run for live_trader.
+# Port: projected_dll_breach() in scripts/live_trader.py.
+
+
+def test_projected_dll_breach_blocks_when_worst_case_crosses_internal(monkeypatch):
+    """If day_pl=-$200 and a proposed trade would risk $150, worst case
+    is -$350. Internal DLL is $250 — projection MUST flag breach."""
+    fake_yaml = {
+        "account": {
+            "internal_dll_target_usd": 250,
+            "daily_loss_limit_usd": 1000,
+        }
+    }
+    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+
+    snap = {"realized_pl_day_usd": -200.0, "unrealized_pl_usd": 0.0}
+    breach, reason = lt.projected_dll_breach(snap, signal_risk_usd=150.0)
+    assert breach, (
+        f"PATTERN A REGRESSION: projection should have flagged a $150 "
+        f"trade at day_pl=-$200 against $250 internal DLL. "
+        f"Reason returned: {reason!r}. The defensive-ladder projection "
+        f"was the encoded defense from hooks/risk_gate that got dropped "
+        f"during the auto_trader→live_trader simplification. See "
+        f"vault/lessons/2026-05-13_overnight_dll_breach.md."
+    )
+    assert "internal_dll" in reason.lower(), (
+        f"Projection breach didn't label source as internal_dll. "
+        f"Reason: {reason!r}"
+    )
+
+
+def test_projected_dll_breach_allows_safe_trade(monkeypatch):
+    """Sanity companion: at day_pl=$0 with a $100 risk and $250 internal
+    DLL, projection MUST NOT block (worst case = -$100, well above limit).
+    If this fails the projection is too aggressive."""
+    fake_yaml = {
+        "account": {
+            "internal_dll_target_usd": 250,
+            "daily_loss_limit_usd": 1000,
+        }
+    }
+    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+
+    snap = {"realized_pl_day_usd": 0.0, "unrealized_pl_usd": 0.0}
+    breach, reason = lt.projected_dll_breach(snap, signal_risk_usd=100.0)
+    assert not breach, (
+        f"GATE TOO TIGHT: projection blocked a $100 trade at day_pl=$0 "
+        f"against $250 internal DLL — worst case -$100 is well above "
+        f"the lockdown threshold. Reason: {reason!r}. Check the "
+        f"comparison direction in projected_dll_breach()."
+    )
+
+
+def test_projected_dll_breach_uses_unrealized_in_day_pl(monkeypatch):
+    """Day P&L for the projection MUST include unrealized — otherwise a
+    bleeding open position is invisible to the gate. Mirrors the
+    2026-05-05 lesson (`unrealized_pl_usd=0` blinded all projections).
+
+    Setup: realized=-$100, unrealized=-$100 → day_pl=-$200. A $100 risk
+    trade would push to -$300, past the $250 internal DLL.
+    """
+    fake_yaml = {
+        "account": {
+            "internal_dll_target_usd": 250,
+            "daily_loss_limit_usd": 1000,
+        }
+    }
+    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+
+    snap = {"realized_pl_day_usd": -100.0, "unrealized_pl_usd": -100.0}
+    breach, reason = lt.projected_dll_breach(snap, signal_risk_usd=100.0)
+    assert breach, (
+        f"PATTERN A REGRESSION: projection ignored unrealized P&L. "
+        f"realized=-$100 + unrealized=-$100 + risk=$100 should push "
+        f"projected to -$300 vs $250 internal DLL → breach. "
+        f"Reason: {reason!r}. See vault/lessons/2026-05-05_*.md "
+        f"(`unrealized_pl_usd=0` blinded projections)."
+    )
+
+
+# ════════════════════════════════════════════════════════════════════
 #  Escalation surface for future Pattern incidents
 # ════════════════════════════════════════════════════════════════════
 #
