@@ -1484,18 +1484,29 @@ def main() -> int:
     p.add_argument("--once", action="store_true", help="single scan + exit")
     p.add_argument("--dry-run", action="store_true", help="signals + decisions, no orders")
     p.add_argument("--paper", action="store_true", help="paper-mode (no broker orders)")
+    p.add_argument("--use-queue", action="store_true",
+                   help="consume pre-computed signals from state/pending_signals.json "
+                        "(brain/trader split). When off, runs strategies directly "
+                        "(legacy path).")
     p.add_argument("--interval", type=int, default=SCAN_INTERVAL_SEC)
     args = p.parse_args()
 
     if os.environ.get("FUND_MODE", "live").lower() == "paper":
         args.paper = True
 
+    # FUND_USE_QUEUE=1 env var also enables queue mode (for scheduled tasks)
+    if os.environ.get("FUND_USE_QUEUE", "").lower() in ("1", "true", "yes"):
+        args.use_queue = True
+
+    scan_fn = (consume_pending_signals if args.use_queue else scan_once)
+
     if args.once:
-        scan_once(dry_run=args.dry_run, paper=args.paper)
+        scan_fn(dry_run=args.dry_run, paper=args.paper)
         return 0
 
     _log(f"=== live_trader started: interval={args.interval}s, "
-          f"dry_run={args.dry_run}, paper={args.paper} ===")
+          f"dry_run={args.dry_run}, paper={args.paper}, "
+          f"use_queue={args.use_queue} ===")
 
     # Sub-minute position polling thread for the per-trade loss cap.
     import threading
@@ -1515,7 +1526,7 @@ def main() -> int:
     try:
         while True:
             try:
-                scan_once(dry_run=args.dry_run, paper=args.paper)
+                scan_fn(dry_run=args.dry_run, paper=args.paper)
             except KeyboardInterrupt:
                 _log("interrupted; exiting")
                 return 0
