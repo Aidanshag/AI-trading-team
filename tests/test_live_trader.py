@@ -102,8 +102,10 @@ def test_is_halted_touchfile(tmp_path, monkeypatch):
 # ─── DLL breach ─────────────────────────────────────────────────
 
 def test_dll_not_breached():
-    # Default DLL is $1000 in risk_limits.yaml
-    snap = {"realized_pl_day_usd": -500.0}
+    # 2026-05-13: dll_breached now reads `internal_dll_target_usd` from
+    # risk_limits.yaml as the primary threshold (currently $250). Use a
+    # loss well under that floor.
+    snap = {"realized_pl_day_usd": -100.0}
     breached, why = lt.dll_breached(snap)
     assert not breached
 
@@ -112,7 +114,8 @@ def test_dll_breached():
     snap = {"realized_pl_day_usd": -1500.0}
     breached, why = lt.dll_breached(snap)
     assert breached is True
-    assert "1500" in why or "<= -" in why
+    # The reason should name the source so triage is fast
+    assert "<= -" in why and ("internal_dll" in why or "topstep_dll" in why)
 
 
 def test_dll_at_zero():

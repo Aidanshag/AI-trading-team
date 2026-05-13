@@ -44,6 +44,14 @@ def _tick_size(symbol: str) -> float:
     return float((syms.get(symbol) or {}).get("tick_size", 0.01))
 
 
+def _tick_value(symbol: str) -> float:
+    """USD value of one tick. 0.0 if symbol or value is missing — callers
+    that need to gate on dollars must treat 0.0 as 'unknown, refuse to act'."""
+    syms = _load_yaml("config/symbols.yaml").get("symbols", {})
+    val = (syms.get(symbol) or {}).get("tick_value")
+    return float(val) if val is not None else 0.0
+
+
 def is_sunday_reopen_blackout(now_utc: datetime) -> bool:
     """First 30 min of Sunday Globex reopen (Sunday 17:00–17:30 ET) — skip
     new entries during this thin-tape window. Spreads are widest as everyone

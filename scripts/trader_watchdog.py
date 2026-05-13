@@ -2,7 +2,14 @@
 
 Runs every 5 minutes via Windows Task Scheduler (FundTraderWatchdog).
 Detects a dead/stuck trader via DB heartbeat (account_snapshots.ts) and
-auto-restarts via the existing FundAutoTraderDaily task.
+auto-restarts via the idempotent `restart-live-trader-if-dead.ps1`
+launcher (which is the same path FundLiveTraderEnsureRunning uses).
+
+2026-05-13 redirect: prior version fired the legacy FundAutoTraderDaily
+task, which has been disabled since the live_trader cutover on 2026-05-11.
+Today's Windows-reboot incident killed the live_trader at 07:20 ET and
+nothing revived it for 5.6h, because FundLiveTraderEnsureRunning only
+fires Mon-Fri 06:30 ET. Watchdog now targets the active trader.
 
 Why DB heartbeat over a process check:
   A process check ("is python.exe with scripts.auto_trader running?")
@@ -155,36 +162,18 @@ def _kill_stuck_launchers() -> int:
 
 
 def _revive() -> bool:
-    """Clean up stuck launchers, clear stale PID, fire the task."""
-    # 1. Kill any stuck launcher PowerShell windows + dead trader pythons.
-    #    Without this, the scheduled task's MultipleInstances=IgnoreNew
-    #    policy silently rejects schtasks /Run because the prior instance
-    #    is still considered 'running'.
-    killed = _kill_stuck_launchers()
-    if killed:
-        _log(f"cleaned up {killed} stuck process(es) before revival")
+    """Fire the idempotent live_trader restart launcher.
 
-    # 2. Clear stale PID lock so the new trader can acquire it.
-    try:
-        if PID_FILE.exists():
-            PID_FILE.unlink()
-            _log(f"removed stale PID lock {PID_FILE}")
-    except Exception as exc:
-        _log(f"could not remove PID lock: {exc}")
+    `restart-live-trader-if-dead.ps1` already handles the duplicate-check
+    (process-table scan for `scripts.live_trader`) and is safe to call
+    even if the trader is alive — it logs "no action" and exits 0.
 
-    # 3. Fire the launcher.
-    # Empirically (2026-05-04 testing): schtasks /Run sometimes returns
-    # success but produces no actual launcher process. Direct invocation
-    # of the launcher script via PowerShell is more reliable. Use that as
-    # the primary path; fall back to schtasks if the direct launch fails
-    # for some reason.
-    launcher = PROJECT_ROOT / "scripts" / "start-autotrader-daily.ps1"
+    No PID-file cleanup is needed: live_trader doesn't use a PID lock
+    (see comment in restart-live-trader-if-dead.ps1).
+    """
+    launcher = PROJECT_ROOT / "scripts" / "restart-live-trader-if-dead.ps1"
     if launcher.exists():
         try:
-            # CREATE_NEW_PROCESS_GROUP — child outlives this watchdog.
-            # NOTE: do NOT use DETACHED_PROCESS — the launcher uses
-            # Start-Process to spawn the visible trader window, and that
-            # spawn fails silently inside a fully-detached process.
             CREATE_NEW_PROCESS_GROUP = 0x00000200
             proc = subprocess.Popen(
                 ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
@@ -196,19 +185,20 @@ def _revive() -> bool:
                 creationflags=CREATE_NEW_PROCESS_GROUP,
                 close_fds=True,
             )
-            _log(f"launcher spawned directly via Popen, PID {proc.pid}")
+            _log(f"restart-live-trader-if-dead.ps1 spawned, PID {proc.pid}")
             return True
         except Exception as exc:
             _log(f"direct launcher Popen failed: {exc}; falling back to schtasks")
 
-    # Fallback: schtasks /Run
+    # Fallback: schtasks /Run on the active scheduled task
     try:
         result = subprocess.run(
-            ["schtasks", "/Run", "/TN", "FundAutoTraderDaily"],
+            ["schtasks", "/Run", "/TN", "FundLiveTraderEnsureRunning"],
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode == 0:
-            _log(f"FundAutoTraderDaily fired (fallback): {result.stdout.strip()}")
+            _log(f"FundLiveTraderEnsureRunning fired (fallback): "
+                 f"{result.stdout.strip()}")
             return True
         _log(f"schtasks /Run failed (rc={result.returncode}): "
              f"{result.stderr.strip() or result.stdout.strip()}")

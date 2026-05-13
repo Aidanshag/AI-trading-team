@@ -77,6 +77,16 @@ MIN_SIGNAL_R_TICKS = 6            # reject signals whose stop OR target distance
                                   # buffer; if the strategy R-distance is smaller than the buffer,
                                   # the trade can't escape the buffer for a profit and may
                                   # degenerate into an orphan-leg fill. 2026-05-10 incident.)
+MAX_SIGNAL_RISK_USD = 150.0       # reject signals whose stop-distance × tick_value × qty
+                                  # exceeds this dollar amount. Symmetric with the per-trade
+                                  # loss cap. 2026-05-12/13 incident: GC long fired with a
+                                  # 6.4-point ($640) stop — the only floor was Topstep's
+                                  # $1,000 DLL, so a single trade chewed 64% of the daily
+                                  # limit. Equivalent of `per_trade_risk_pct_of_equity: 0.005`
+                                  # (50 bps on $30K active risk capital). Pattern B —
+                                  # calibration mismatch (strategy stop assumed a regime
+                                  # where 64 ticks was reasonable; thin overnight tape made
+                                  # it the entire account).
 SKIP_TARGET_LEG = True            # 2026-05-11 evening: enabled per user direction after
                                   # confirming the broker target-fill anomaly. Target LIMIT
                                   # orders were auto-filling within ~100ms at next-available
@@ -132,12 +142,28 @@ def is_halted() -> tuple[bool, str]:
 
 
 def dll_breached(snap: dict) -> tuple[bool, str]:
-    """True if today's realized P&L breaches the daily loss limit."""
-    risk = _load_yaml("config/risk_limits.yaml")
-    dll = float(risk.get("account", {}).get("daily_loss_limit_usd", 1000))
+    """True if today's realized P&L breaches the INTERNAL daily-loss
+    target (tighter floor; per-user direction "agents target THIS, not
+    Topstep's"). Falls through to Topstep's `daily_loss_limit_usd` as a
+    backstop if the internal target is missing.
+
+    2026-05-13 fix: prior version read only `daily_loss_limit_usd`
+    (= Topstep's $1,000 hard limit). At -$683 day P&L the gate returned
+    False and the trader fired a third bracket, taking the account to
+    -$1,005 and triggering Topstep server-side canTrade=0. See
+    vault/lessons/2026-05-13_overnight_dll_breach.md.
+    """
+    acct = _load_yaml("config/risk_limits.yaml").get("account", {}) or {}
+    internal = acct.get("internal_dll_target_usd")
+    topstep = float(acct.get("daily_loss_limit_usd", 1000))
+    # Internal first; fall through to Topstep if internal is missing.
+    # Treat 0 or None as "not configured" so a wiped value can't silently
+    # disable the gate (Pattern A defense).
+    dll = float(internal) if internal not in (None, 0, 0.0) else topstep
+    source = "internal_dll" if internal not in (None, 0, 0.0) else "topstep_dll"
     realized = float(snap.get("realized_pl_day_usd") or 0)
     if realized <= -dll:
-        return True, f"realized_day=${realized:+.2f} <= -${dll:.0f}"
+        return True, f"{source} breach: realized_day=${realized:+.2f} <= -${dll:.0f}"
     return False, ""
 
 
@@ -380,6 +406,38 @@ def cell_passes_regime_filter(cell: dict, regime: dict) -> tuple[bool, str]:
     return True, ""
 
 
+def signal_passes_max_risk_gate(sig: dict, symbol: str, qty: int = 1,
+                                  max_risk_usd: float = MAX_SIGNAL_RISK_USD,
+                                  ) -> tuple[bool, str]:
+    """Reject signals whose stop-distance dollar risk exceeds max_risk_usd.
+
+    Symmetric with the per-trade loss cap. Pattern B defense for the
+    2026-05-12/13 GC incident: a strategy returned a 64-tick stop and
+    the trader placed it unchecked, blowing through the $150 per-trade
+    cap (which only fires AFTER fill, on a 5-min scan tick) and ending
+    up at the broker stop for -$640.
+
+    Returns (passes, reason). On reject, reason is human-readable.
+
+    Default-deny: missing tick_value or stop → reject. Treating a missing
+    value as 'unknown ok' would replicate the Pattern A failure pattern.
+    """
+    if sig.get("price") is None or sig.get("stop") is None:
+        return False, "missing price or stop"
+    tick = _tick_size(symbol)
+    if tick <= 0:
+        return False, f"invalid tick size for {symbol}"
+    tval = _tick_value(symbol)
+    if tval <= 0:
+        return False, f"missing tick_value for {symbol} — refusing to gate on $0"
+    stop_ticks = abs(float(sig["price"]) - float(sig["stop"])) / tick
+    risk_usd = stop_ticks * tval * max(1, int(qty))
+    if risk_usd > max_risk_usd:
+        return False, (f"risk too large (${risk_usd:.0f} > ${max_risk_usd:.0f} cap; "
+                        f"stop={stop_ticks:.1f}t × ${tval:.2f}/tick × {qty}ct)")
+    return True, ""
+
+
 def signal_passes_min_r_gate(sig: dict, symbol: str,
                               min_r_ticks: int = MIN_SIGNAL_R_TICKS,
                               ) -> tuple[bool, str]:
@@ -468,7 +526,7 @@ def find_latest_signal(bars: pd.DataFrame, strategy_fn,
 # ────────────────────────────────────────────────────────────────
 
 # Tick math extracted to tools/trader_utils.py
-from tools.trader_utils import _tick_size, _round_to_tick  # noqa: E402
+from tools.trader_utils import _tick_size, _tick_value, _round_to_tick  # noqa: E402
 
 
 FILL_WAIT_TIMEOUT_S = 30          # how long to wait for entry to fill before cancelling
@@ -1087,6 +1145,11 @@ def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
             if sig_side != cell.get("side"):
                 continue
             ok, reason = signal_passes_min_r_gate(sig, symbol)
+            if not ok:
+                _log(f"  {symbol} {strat_name} {sig_side} signal rejected: {reason}")
+                summary["blocked"] += 1
+                continue
+            ok, reason = signal_passes_max_risk_gate(sig, symbol, qty=1)
             if not ok:
                 _log(f"  {symbol} {strat_name} {sig_side} signal rejected: {reason}")
                 summary["blocked"] += 1

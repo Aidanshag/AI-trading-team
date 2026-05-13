@@ -327,6 +327,155 @@ def test_pattern_b_floor_actually_matters_baseline_check():
 
 
 # ════════════════════════════════════════════════════════════════════
+#  Pattern B — wide-stop / no-upper-bound regression  (n=3, 2026-05-13)
+# ════════════════════════════════════════════════════════════════════
+#
+# 2026-05-12/13 overnight: live_trader fired GC long with the strategy's
+# native 64-tick ($640) stop. Internal $150 per-trade cap fires only
+# AFTER fill, on the 5-min scan tick — too slow in thin Asian tape. The
+# trade hit the broker stop for −$640 before the cap could close it.
+# Pattern B: calibration mismatch (strategy stop assumed a regime where
+# 64 ticks was reasonable; thin overnight tape made it the entire
+# account). Encoded defense: signal_passes_max_risk_gate rejects any
+# signal whose stop_distance × tick_value × qty > MAX_SIGNAL_RISK_USD
+# BEFORE the order leaves the trader.
+
+def test_pattern_b_oversized_gc_stop_rejected_pre_placement():
+    """The build-failing CI check for the 2026-05-13 wide-stop incident.
+
+    If this fails, scripts/live_trader has regressed to placing trades
+    whose dollar risk exceeds MAX_SIGNAL_RISK_USD. Today that's $150.
+    A 64-tick GC stop = $640 — clearly out of bounds and the exact
+    shape of the 2026-05-13 GC long that cost −$644.
+
+    The gate is purely arithmetic — tick_size × tick_value × stop_ticks
+    — so this test is deterministic. No broker, no DB, no network.
+    """
+    # GC: tick_size=0.10, tick_value=$10.00 → 64 ticks = $640 risk
+    sig = {"side": "long", "price": 4716.5, "stop": 4710.1,
+           "target": 4728.3}
+    ok, reason = lt.signal_passes_max_risk_gate(sig, "GC", qty=1)
+    assert not ok, (
+        f"PATTERN B REGRESSION: signal_passes_max_risk_gate ACCEPTED a "
+        f"GC bracket with 64-tick ($640) stop — well over the "
+        f"${lt.MAX_SIGNAL_RISK_USD:.0f} cap. This is the exact shape of "
+        f"the 2026-05-13 overnight GC long that cost −$644 and locked "
+        f"the Topstep account. Reason returned: {reason!r}.\n\n"
+        "Check: did MAX_SIGNAL_RISK_USD get raised? Did tick_value lookup "
+        "for GC break? Did the call site at scripts/live_trader.scan_once "
+        "stop calling this gate? See "
+        "vault/lessons/2026-05-13_overnight_dll_breach.md."
+    )
+
+
+def test_pattern_b_normal_stop_passes_max_risk_gate():
+    """Sanity / non-vacuous companion to the above.
+
+    A sane 6-tick GC stop ($60 risk) MUST pass. If this regresses, the
+    gate has been tuned too tight and is rejecting normal trades. Find
+    the tuning regression before merging.
+    """
+    sig = {"side": "long", "price": 4716.5, "stop": 4716.5 - 6 * 0.10,
+           "target": 4716.5 + 12 * 0.10}
+    ok, reason = lt.signal_passes_max_risk_gate(sig, "GC", qty=1)
+    assert ok, (
+        f"GATE TOO TIGHT: signal_passes_max_risk_gate rejected a 6-tick "
+        f"($60 risk) GC signal that is comfortably under the "
+        f"${lt.MAX_SIGNAL_RISK_USD:.0f} cap. Reason: {reason!r}. "
+        "MAX_SIGNAL_RISK_USD may have been lowered too far or the "
+        "tick_value lookup is broken."
+    )
+
+
+# ════════════════════════════════════════════════════════════════════
+#  Pattern A — wrong-config-key DLL gate regression  (n=3, 2026-05-13)
+# ════════════════════════════════════════════════════════════════════
+#
+# 2026-05-12/13 overnight: at day P&L −$683 the trader fired a third
+# bracket because dll_breached() read `daily_loss_limit_usd` (= Topstep's
+# $1000 hard limit) instead of `internal_dll_target_usd` (the tighter
+# soft floor). The default-1000 fallback meant the gate effectively
+# disabled itself relative to user intent ("agents target THIS, not
+# Topstep's"). Pattern A: a load-bearing safety field read the wrong
+# key and silently no-op'd until the broker-side hard limit kicked in.
+
+def test_pattern_a_dll_breached_uses_internal_target(monkeypatch, tmp_path):
+    """The build-failing CI check for the 2026-05-13 wrong-key DLL bug.
+
+    Mock risk_limits.yaml to declare internal_dll_target_usd=250 and a
+    Topstep daily_loss_limit_usd=1000. Pass a snapshot with day P&L
+    of -$300 (above internal, below Topstep). The gate MUST return
+    breached=True. If it returns False, dll_breached has regressed to
+    reading the Topstep field as primary.
+    """
+    fake_yaml = {
+        "account": {
+            "internal_dll_target_usd": 250,
+            "daily_loss_limit_usd": 1000,
+        }
+    }
+    # Patch the YAML loader used inside dll_breached
+    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+
+    snap = {"realized_pl_day_usd": -300.0}
+    breached, reason = lt.dll_breached(snap)
+    assert breached, (
+        f"PATTERN A REGRESSION: dll_breached returned False for day P&L "
+        f"-$300 when internal_dll_target_usd=$250. This is the wrong-key "
+        f"reading bug from 2026-05-13: the gate read $1000 (Topstep DLL) "
+        f"as the primary threshold, letting a third losing bracket fire "
+        f"at -$683 day P&L. Reason returned: {reason!r}.\n\n"
+        "See vault/lessons/2026-05-13_overnight_dll_breach.md and "
+        "CLAUDE.md → 'Pattern A — fail-silent defaults'."
+    )
+    # The reason should name the internal source so debugging is fast
+    assert "internal" in reason.lower(), (
+        f"PATTERN A SOFT-REGRESSION: dll_breached fired but didn't "
+        f"identify the source as 'internal_dll' in its reason string. "
+        f"Reason: {reason!r}. Future incident triage needs the "
+        f"source to be obvious; restore the source label."
+    )
+
+
+def test_pattern_a_dll_breached_falls_through_to_topstep_when_internal_zero():
+    """Companion: when internal target is missing or zeroed, the gate
+    MUST fall through to the Topstep hard limit rather than disabling
+    itself. Otherwise a stray config edit could silently turn off the
+    DLL check entirely — exactly the failure shape of 2026-04-29 and
+    2026-05-05 incidents.
+    """
+    # Internal missing entirely
+    fake_yaml = {"account": {"daily_loss_limit_usd": 1000}}
+
+    snap_under = {"realized_pl_day_usd": -300.0}
+    snap_over = {"realized_pl_day_usd": -1100.0}
+
+    import scripts.live_trader as lt_mod
+    original_loader = lt_mod._load_yaml
+    try:
+        lt_mod._load_yaml = lambda _p: fake_yaml
+        breached_under, _ = lt_mod.dll_breached(snap_under)
+        breached_over, reason_over = lt_mod.dll_breached(snap_over)
+    finally:
+        lt_mod._load_yaml = original_loader
+
+    assert not breached_under, (
+        "Fallback to Topstep failed: -$300 should NOT breach a "
+        "$1000 Topstep DLL when internal is absent."
+    )
+    assert breached_over, (
+        "Fallback to Topstep failed: -$1100 SHOULD breach a $1000 "
+        "Topstep DLL even when internal_dll_target_usd is missing. "
+        "Pattern A: a missing internal field must NOT disable the "
+        "outer Topstep guardrail."
+    )
+    assert "topstep" in reason_over.lower(), (
+        "Fallback didn't label the source as 'topstep_dll'; "
+        "triage needs the source identified."
+    )
+
+
+# ════════════════════════════════════════════════════════════════════
 #  Escalation surface for future Pattern incidents
 # ════════════════════════════════════════════════════════════════════
 #
