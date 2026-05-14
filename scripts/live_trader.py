@@ -63,15 +63,18 @@ from state.db import get_db  # noqa: E402
 # ────────────────────────────────────────────────────────────────
 
 SCAN_INTERVAL_SEC = 300          # 5-minute cadence
-POSITION_POLL_SEC = 10            # sub-minute poll for per-trade cap / trailing-lock.
-                                  # 2026-05-13: 30s initial setting after extracting
-                                  # the polling thread from the 5-min scan loop.
-                                  # 2026-05-14: tightened to 10s after user audit of
-                                  # fast-tape slippage risk. Trade-off: 3× more broker
-                                  # get_positions calls but rate limits are generous
-                                  # on the read path, and a 10s worst-case detection
-                                  # window is meaningfully better than 30s for
-                                  # catching fast moves before the broker stop fires.
+POSITION_POLL_SEC = 10            # baseline poll cadence when FLAT.
+POSITION_POLL_SEC_IN_TRADE = 2    # tight cadence when a position is OPEN.
+                                  # 2026-05-13: 30s initial polling. 2026-05-14:
+                                  # tightened to 10s. Then 2026-05-14 (later):
+                                  # user observation that 10s was too slow for fast
+                                  # tape — peak $61 retraced past $25 floor and we
+                                  # only caught it at $12, giving back $49.
+                                  # Two-tier polling: 10s when flat (cheap),
+                                  # 2s when in-position (paranoid). Trade-off:
+                                  # ~5× more API calls on the read path, but only
+                                  # WHILE a position is open. Brain still emits at
+                                  # 60s — this doesn't affect signal generation.
 LOOKBACK_BARS = 6                 # find_latest_signal cutoff (30 min on 5m bars)
 PER_TRADE_LOSS_CAP_USD = 150.0    # force-close if unrealized < -this
 SAME_SYMBOL_COOLDOWN_MIN = 45     # default — don't re-fire same symbol within window
@@ -596,10 +599,21 @@ def _position_polling_loop(stop_event, dry_run: bool, paper: bool,
         try:
             client = get_client()
             account_id = get_account_id()
-            check_and_close(client, account_id, log_fn=_log)
+            # check_and_close returns the list of positions it processed.
+            # Empty list = flat = use the relaxed cadence.
+            # Non-empty = in-position = tight cadence to minimize slippage
+            # past the active tier floor.
+            closed = check_and_close(client, account_id, log_fn=_log)
+            try:
+                positions = client.get_positions(account_id) or []
+                has_open = any(int(p.get("size") or 0) != 0 for p in positions)
+            except Exception:
+                has_open = False
         except Exception as e:
             _log(f"position-poll error: {type(e).__name__}: {e}")
-        stop_event.wait(interval_sec)
+            has_open = False
+        next_interval = POSITION_POLL_SEC_IN_TRADE if has_open else interval_sec
+        stop_event.wait(next_interval)
 
 
 def main() -> int:

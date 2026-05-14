@@ -213,6 +213,98 @@ def decide(unrealized: float, prev_peak: float,
     return False, ""
 
 
+def _compute_active_floor(prev_peak: float,
+                            tiers: tuple[tuple[float, float], ...] = TRAILING_PROFIT_TIERS,
+                            ) -> float | None:
+    """Return the tightest active floor given prev_peak (= highest floor
+    among tiers whose peak_threshold has been crossed). Returns None if
+    no tier crossed. Pure function — mirrors the inner logic of decide()."""
+    active: float | None = None
+    for peak_threshold, floor in tiers:
+        if prev_peak >= peak_threshold:
+            if active is None or floor > active:
+                active = floor
+    return active
+
+
+def _trail_broker_stop_to_floor(client, account_id, position: dict,
+                                  active_floor_usd: float,
+                                  tick_size: float, tick_value: float,
+                                  log: Callable[[str], None]) -> None:
+    """Move the broker-side protective stop UP (closer to entry) to lock
+    in `active_floor_usd` of profit. Never moves it the other direction
+    (= can only ever TIGHTEN protection).
+
+    Why this exists (2026-05-14): software polling has latency. When peak
+    hit $61 and floor was $25, the position retraced past $25 before our
+    poll caught it; we ended up closing at $12, giving back $49. The
+    proper fix is to make the BROKER enforce the floor server-side via
+    a tightened stop order — broker fills instantly when touched.
+    """
+    contract_id = position.get("contractId")
+    avg_price = float(position.get("averagePrice") or 0)
+    if not contract_id or avg_price <= 0 or tick_size <= 0 or tick_value <= 0:
+        return
+    type_code = int(position.get("type") or 0)
+    is_long = type_code == 1
+
+    # Compute desired stop price: the price at which unrealized P&L would
+    # equal `active_floor_usd`. For a long, current must drop to entry +
+    # floor_pts (above entry); for a short, current must rise to entry -
+    # floor_pts (below entry).
+    size = abs(int(position.get("size") or 1)) or 1
+    dollars_per_point = (tick_value / tick_size) * size
+    if dollars_per_point <= 0:
+        return
+    floor_points = active_floor_usd / dollars_per_point
+    if is_long:
+        desired_stop = avg_price + floor_points
+    else:
+        desired_stop = avg_price - floor_points
+    # Round to valid tick
+    desired_stop = round(desired_stop / tick_size) * tick_size
+
+    # Find current working stop for this contract
+    try:
+        working = client.get_working_orders(account_id) or []
+    except Exception:
+        return
+    stop_orders = [o for o in working
+                    if o.get("contractId") == contract_id
+                    and str(o.get("customTag", "")).endswith("_stop")]
+    if not stop_orders:
+        return
+    stop_order = stop_orders[0]
+    current_stop = float(stop_order.get("stopPrice") or 0)
+    if current_stop <= 0:
+        return
+
+    # Only modify if the new stop is TIGHTER (closer to entry/lock in profit).
+    # For long: tighter = HIGHER stop. For short: tighter = LOWER stop.
+    if is_long and desired_stop <= current_stop:
+        return
+    if (not is_long) and desired_stop >= current_stop:
+        return
+
+    # Compute limit price with 1-tick offset (same convention as place_bracket)
+    new_limit = (desired_stop - tick_size) if is_long else (desired_stop + tick_size)
+    new_limit = round(new_limit / tick_size) * tick_size
+
+    order_id = stop_order.get("id") or stop_order.get("orderId")
+    if not order_id:
+        return
+    try:
+        client.modify_order(
+            account_id=account_id, order_id=order_id,
+            stop_price=desired_stop, limit_price=new_limit,
+        )
+        log(f"  TRAILING_STOP: {contract_id} stop moved "
+             f"{current_stop} -> {desired_stop} (locks +${active_floor_usd:.0f})")
+    except Exception as e:
+        log(f"  trailing_stop modify failed for {contract_id}: "
+             f"{type(e).__name__}: {e}")
+
+
 def _unrealized_usd(side: str, size: int, avg_price: float,
                      last_price: float, tick_size: float,
                      tick_value: float) -> float:
@@ -412,6 +504,18 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
             if not should_close:
                 # Reset consecutive_holds when the rule no longer wants to close
                 _position_consecutive_holds.pop(key, None)
+                # 2026-05-14: trail the broker-side stop UP as peak grows.
+                # The software profit-lock is bounded by polling latency
+                # (peak $61 retraced past $25 floor → only caught at $12).
+                # Putting the floor at the BROKER server-side means it
+                # fires instantly on touch. _trail_broker_stop_to_floor
+                # only ever TIGHTENS the stop (never loosens).
+                active_floor = _compute_active_floor(prev_peak)
+                if active_floor is not None and active_floor > 0:
+                    _trail_broker_stop_to_floor(
+                        client, account_id, p, active_floor,
+                        tick_size, tick_value, log,
+                    )
                 continue
 
             # ── Agent veto layer (Phase 1b 2026-05-12) ──

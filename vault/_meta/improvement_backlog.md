@@ -31,6 +31,21 @@ Priority logic going forward:
 - Each change must specify: prediction → measurement plan → variance trigger
 - If a P0 item below adds complexity without enabling validation, demote it
 
+## 🆕 Queued 2026-05-14 late-night — HIGHEST PRIORITY (autonomous monitoring)
+
+- [P0] [effort: 180min] [risk: low] [status: open] [autonomous-eligible: yes]
+  **Sentinel — continuous autonomous anomaly watcher** — user direct quote 2026-05-14: "nothing improves unless I directly work on it." Multiple bugs tonight (tests writing 24 mock orders to production DB, MGC missing from `_TICK_ECONOMICS`, peak reporting glitch, profit-lock that fired but with $49 slippage from polling latency) all went undetected until the user manually flagged them. The system has watchdog (process-death) and Discord (some events) but no behavior-level monitoring.
+  Build `tools/sentinel.py` + `FundSentinel` scheduled task running every 10 min that:
+  1. Scans the orders table for `broker_order_id LIKE 'mock_%'` → critical Discord alert (= tests are polluting production)
+  2. Scans for open positions where `_resolve_tick_economics` returns (0,0) → critical alert (= profit-lock is blind)
+  3. For each closed trade today: check `realized_pl_usd` vs the profit-lock floor that should have fired. If close happened with >$10 slippage past the floor, warn → indicates broker latency or polling miss
+  4. Cross-check: any `customTag` in working orders that has no matching position → orphan flag (should be cleaned by cleanup_orphan_brackets, but verify)
+  5. Check that brain emit rate matches trader scan rate ratio (brain emits 60s, trader scans every 5min — should see N signals consumed where N = # emissions ÷ 5)
+  6. Check live_trader process tree: if >1 live_trader python process running, alert (= duplicate from kill/restart race, causes double-firing)
+  Each finding posts to Discord with severity. Report saved daily to `vault/_meta/sentinel_YYYY-MM-DD.md`.
+  Why: replaces the "user manually catches problems" pattern with system-catches-problems. The bugs that hit tonight would have been auto-flagged within 10 min.
+  Acceptance: 6 invariants checked every 10 min, Discord alert fires on any violation, daily report written.
+
 ## 🆕 Queued 2026-05-14 evening — HIGH PRIORITY
 
 - [P0] [effort: 180min] [risk: medium] [status: open] [autonomous-eligible: yes]

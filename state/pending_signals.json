@@ -1,41 +1,9 @@
 {
   "signals": [
     {
-      "id": "0c203751027c45e1a143028c4bd996ef",
-      "emitted_at": "2026-05-14T01:46:25+00:00",
-      "expires_at": "2026-05-14T01:49:25+00:00",
-      "symbol": "MNQ",
-      "side": "long",
-      "entry_price": 29670.25,
-      "stop_price": 29649.491071428572,
-      "target_price": 29722.14732142857,
-      "qty": 1,
-      "strategy": "fair_value_gap_tuned",
-      "session": "Asian",
-      "cell_key": "fair_value_gap_tuned|MNQ|Asian|long",
-      "shadow_only": false,
-      "notes": "reason=fvg_bull_mitigation gap=[29654.50,29661.50] age=9"
-    },
-    {
-      "id": "4f5109c4b2c7467bb6bde3ea3ffb7a76",
-      "emitted_at": "2026-05-14T01:46:25+00:00",
-      "expires_at": "2026-05-14T01:49:25+00:00",
-      "symbol": "GC",
-      "side": "short",
-      "entry_price": 4695.4,
-      "stop_price": 4702.564285714286,
-      "target_price": 4677.489285714284,
-      "qty": 1,
-      "strategy": "fair_value_gap_tuned",
-      "session": "Asian",
-      "cell_key": "fair_value_gap_tuned|GC|Asian|short",
-      "shadow_only": true,
-      "notes": "experimental; reason=fvg_bear_mitigation gap=[4699.50,4700.90] age=1"
-    },
-    {
-      "id": "5f0143d1a53b4245b73a0cd62315aba2",
-      "emitted_at": "2026-05-14T01:46:25+00:00",
-      "expires_at": "2026-05-14T01:49:25+00:00",
+      "id": "8e17ddbf6b014eeda3d3d35a739e9a52",
+      "emitted_at": "2026-05-14T02:01:19+00:00",
+      "expires_at": "2026-05-14T02:04:19+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4696.2,
@@ -49,20 +17,20 @@
       "notes": "experimental; reason=nr7_break_short"
     },
     {
-      "id": "a28c564041e84ac49ee99c9fe8309cad",
-      "emitted_at": "2026-05-14T01:46:26+00:00",
-      "expires_at": "2026-05-14T01:49:26+00:00",
+      "id": "4b16f33ebdca428e99ede96ae56ae863",
+      "emitted_at": "2026-05-14T02:01:20+00:00",
+      "expires_at": "2026-05-14T02:04:20+00:00",
       "symbol": "MGC",
-      "side": "short",
-      "entry_price": 4695.1,
-      "stop_price": 4702.807142857143,
-      "target_price": 4675.8321428571435,
+      "side": "long",
+      "entry_price": 4701.4,
+      "stop_price": 4695.0,
+      "target_price": 4716.228571428571,
       "qty": 1,
-      "strategy": "fair_value_gap_tuned",
+      "strategy": "narrow_range_break",
       "session": "Asian",
-      "cell_key": "fair_value_gap_tuned|MGC|Asian|short",
+      "cell_key": "narrow_range_break|MGC|Asian|long",
       "shadow_only": false,
-      "notes": "reason=fvg_bear_mitigation gap=[4699.40,4701.10] age=1"
+      "notes": "reason=nr7_break_long"
     }
   ]
 }

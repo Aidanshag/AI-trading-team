@@ -95,7 +95,11 @@ def stub_environment(monkeypatch, tmp_queue):
                           lambda c, a, log_fn=None: {"flattened": [],
                                                        "cancelled": 0,
                                                        "window": "outside"})
-    # DB no-ops
+    # DB no-ops. CRITICAL: must patch in BOTH live_trader and
+    # tools.bracket_placement (which imports get_db directly from state.db).
+    # 2026-05-14: patching only lt.get_db meant place_bracket's
+    # `from state.db import get_db` was unaffected → tests wrote 24 mock
+    # orders to the production DB before this fix.
     class _DB:
         def execute(self, *a, **k): return self
         def fetchone(self): return None
@@ -103,7 +107,10 @@ def stub_environment(monkeypatch, tmp_queue):
         def cursor(self): return self
         def connect(self): return self
         def record_shadow_trade(self, **k): pass
-    monkeypatch.setattr(lt, "get_db", lambda: _DB())
+    _db_instance = _DB()
+    monkeypatch.setattr(lt, "get_db", lambda: _db_instance)
+    import tools.bracket_placement as _bp
+    monkeypatch.setattr(_bp, "get_db", lambda: _db_instance)
     # Speed up fill polling so tests are fast
     monkeypatch.setattr(lt, "FILL_WAIT_TIMEOUT_S", 1)
     monkeypatch.setattr(lt, "FILL_WAIT_POLL_S", 1)

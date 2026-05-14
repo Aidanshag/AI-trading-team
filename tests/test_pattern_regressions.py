@@ -131,7 +131,14 @@ def test_pattern_a_unfilled_entry_does_not_place_protective_legs(monkeypatch):
 
     # Override the DB so we don't touch real state. Override the fill
     # timeout to 1s so the test completes in <2s.
-    monkeypatch.setattr(lt, "get_db", lambda: _NoOpDB())
+    # CRITICAL: patch in BOTH lt and tools.bracket_placement — place_bracket
+    # imports get_db directly from state.db (not via live_trader). Patching
+    # only lt.get_db means real DB writes still go through. 2026-05-14 found
+    # this leaked the test stop order into production DB.
+    db_instance = _NoOpDB()
+    monkeypatch.setattr(lt, "get_db", lambda: db_instance)
+    import tools.bracket_placement as _bp
+    monkeypatch.setattr(_bp, "get_db", lambda: db_instance)
     monkeypatch.setattr(lt, "FILL_WAIT_TIMEOUT_S", 1)
     monkeypatch.setattr(lt, "FILL_WAIT_POLL_S", 1)
 
