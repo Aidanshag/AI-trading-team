@@ -31,6 +31,20 @@ Priority logic going forward:
 - Each change must specify: prediction → measurement plan → variance trigger
 - If a P0 item below adds complexity without enabling validation, demote it
 
+## 🆕 Queued 2026-05-14 — BROKER LIMIT FILL ANOMALY (investigate)
+
+- [P0] [effort: 60min — investigation] [risk: none — just observation] [status: open] [autonomous-eligible: yes]
+  **Investigate why buy-limit orders fill at prices above the limit** — concrete incident 2026-05-14 04:28:06: MGC buy limit @ 4698.0 filled at 4709.0 (11 points / 110 ticks ADVERSE slippage on a buy limit). This should be impossible under standard limit semantics (buy limit fills at limit price or BELOW). Either ProjectX has a non-standard "marketable limit" treatment that allows arbitrary slippage, or there's a bug in how we're calling place_order. Investigation steps:
+  1. Read ProjectX API docs (or test directly) for `order_type="limit"` behavior at the broker
+  2. Check if marketable buy limits act like market orders (= fill at any ask)
+  3. Test placing a deliberately non-marketable limit (way below current price) and verifying it sits as working
+  4. Check if the issue is a race: did current price actually drop below 4698 momentarily, allowing the buy limit to trigger, but then fill at 4709 because the actual ask at fill time was 4709?
+  5. Possibly switch from `order_type="limit"` to a proper `order_type="market"` if marketability is desired (or a true non-marketable limit if price discipline is desired)
+  Files: `tools/bracket_placement.py:place_bracket` (entry order section), `tools/projectx_client.py:place_order`, observation log in `vault/research/analysis/`.
+  Acceptance: documented understanding of ProjectX limit semantics + recommendation on the right order_type for the trader's intent.
+  Auto-merge: no — this is research, not a code change. Autonomous routine writes the analysis; user reviews before any place_order changes.
+  Mitigation already in place 2026-05-14: `MAX_FILL_SLIPPAGE_TICKS = 10` in bracket_placement.py — flattens if fill is too far from intended entry. Doesn't fix the broker quirk but prevents trading on the destroyed edge.
+
 ## 🆕 Queued 2026-05-14 — EXIT OPTIMIZATION ROADMAP
 
 User direction 2026-05-14: "eventually should all of these be implemented." All 6 exit-optimization options were laid out and the user asked them all to be done at some point. #1 (software take-profit at target) shipped 2026-05-14 0431 UTC. The remaining 5 are queued below in priority order. **Pick from this section first when the autonomous routine fires.**

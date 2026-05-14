@@ -31,6 +31,17 @@ from tools.trader_utils import _tick_size, _round_to_tick, _utcnow_iso
 FILL_WAIT_TIMEOUT_S = 30          # how long to wait for entry to fill before cancelling
 FILL_WAIT_POLL_S = 2              # polling cadence while waiting
 
+# 2026-05-14: post-fill sanity checks. A "marketable limit" with a 5-tick
+# buffer should fill within those 5 ticks of the strategy's intended
+# entry. The MGC-long incident this morning filled at 4709 when the
+# limit was 4698 (115 ticks of adverse slippage), leaving virtually zero
+# upside to target. If the fill destroys R/R or shows excessive
+# slippage, emergency-flatten BEFORE placing the protective stop —
+# don't trade on a destroyed edge.
+MAX_FILL_SLIPPAGE_TICKS = 10       # generous — strategy buffer is 5 ticks
+MIN_POST_FILL_RR = 0.4             # need at least 0.4 reward-per-unit-risk
+                                    # remaining after fill, else flatten
+
 
 def _position_signature(client, account_id, contract_id: str) -> tuple[int, int]:
     """(type, size) for the contract, or (0, 0) if flat. Used to detect
@@ -214,8 +225,73 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
     log(f"  {symbol} entry FILLED @ {actual_fill}; "
           f"stop recalculated to {stop_px} (risk={signal_risk:.4f} from fill)")
 
-    # 4. Stop-limit (1-tick offset for Topstep's tight-limit rule)
     opp = "sell" if side == "buy" else "buy"
+
+    # ── 3b. POST-FILL SLIPPAGE CHECK (2026-05-14) ──
+    # A buy limit at 4698 should never fill at 4709. If the fill is many
+    # ticks adverse from the strategy's intended entry, the marketable-
+    # limit behavior is anomalous and the trade's R/R is suspect.
+    # Flatten immediately rather than trade on a destroyed edge.
+    fill_slippage_ticks = abs(actual_fill - entry_price) / tick
+    if fill_slippage_ticks > MAX_FILL_SLIPPAGE_TICKS:
+        log(f"  POST_FILL_SLIPPAGE: fill {actual_fill} is "
+             f"{fill_slippage_ticks:.1f}t from signal entry {entry_price} "
+             f"(max {MAX_FILL_SLIPPAGE_TICKS}t allowed); emergency-flattening")
+        try:
+            from tools.alert import send_alert as _alert
+            _alert(
+                f"⚠️ POST_FILL_SLIPPAGE {symbol} {side} filled @ {actual_fill} "
+                f"({fill_slippage_ticks:.0f}t adverse from {entry_price}); "
+                f"flattened pre-stop. Investigate broker limit semantics.",
+                level="warn",
+            )
+        except Exception:
+            pass
+        _emergency_flatten_position(
+            client, account_id, contract_id,
+            side_to_close=opp, qty=int(qty),
+            reason=f"fill slippage {fill_slippage_ticks:.1f}t > {MAX_FILL_SLIPPAGE_TICKS}t",
+            log_fn=log,
+        )
+        return {"status": "post_fill_slippage_flattened",
+                "client_order_id": cid, "fill_slippage_ticks": fill_slippage_ticks}
+
+    # ── 3c. POST-FILL R/R CHECK (2026-05-14) ──
+    # If the strategy provided a target, verify there's enough upside
+    # remaining after fill to make the trade worthwhile. Reward / risk
+    # must be at least MIN_POST_FILL_RR; otherwise the fill has destroyed
+    # the edge (target may be right at or past fill). Emergency-flatten.
+    if target_px is not None and signal_risk > 0:
+        if side == "buy":
+            reward_pts = max(0.0, target_px - actual_fill)
+        else:
+            reward_pts = max(0.0, actual_fill - target_px)
+        rr_ratio = reward_pts / signal_risk
+        if rr_ratio < MIN_POST_FILL_RR:
+            log(f"  POST_FILL_RR: ratio {rr_ratio:.2f} < {MIN_POST_FILL_RR} "
+                 f"(reward {reward_pts:.2f}pts, risk {signal_risk:.2f}pts); "
+                 f"emergency-flattening")
+            try:
+                from tools.alert import send_alert as _alert
+                _alert(
+                    f"⚠️ POST_FILL_RR {symbol} {side} R/R destroyed by fill "
+                    f"(reward {reward_pts:.2f}pts vs risk {signal_risk:.2f}pts, "
+                    f"ratio {rr_ratio:.2f} < {MIN_POST_FILL_RR}); flattened "
+                    f"pre-stop.",
+                    level="warn",
+                )
+            except Exception:
+                pass
+            _emergency_flatten_position(
+                client, account_id, contract_id,
+                side_to_close=opp, qty=int(qty),
+                reason=f"R/R destroyed by fill: {rr_ratio:.2f} < {MIN_POST_FILL_RR}",
+                log_fn=log,
+            )
+            return {"status": "post_fill_rr_destroyed",
+                    "client_order_id": cid, "rr_ratio": rr_ratio}
+
+    # 4. Stop-limit (1-tick offset for Topstep's tight-limit rule)
     stop_limit_px = (stop_px - tick) if opp == "sell" else (stop_px + tick)
     stop_limit_px = _round_to_tick(stop_limit_px, tick)
     stop_cid = cid + "_stop"
