@@ -43,6 +43,74 @@ def test_decide_hard_loss_cap_closes():
     assert "loss_hard_cap" in reason
 
 
+def test_software_target_hit_fires_close_position():
+    """End-to-end: register a software take-profit target for a contract,
+    then run check_and_close with a price that produces unrealized >=
+    target. Must call close_position (not place_order) to flatten, AND
+    clear the target registry so we don't double-fire next poll.
+
+    This is the critical integration test for the 2026-05-14 software
+    take-profit feature — the strategy's target gets honored even though
+    we don't place a broker target leg (5/11 anomaly workaround)."""
+    # Setup: 1ct MGC long opened at 4700, target unrealized = $30
+    pp._position_high_water.clear()
+    pp._target_usd_by_contract.clear()
+    contract_id = "CON.F.US.MGC.M26"
+    pp.register_software_target(contract_id, target_usd=30.0)
+    assert pp._target_usd_by_contract[contract_id] == 30.0
+
+    # Mock client: MGC tick=0.10, tick_value=$1.0
+    # Long at 4700, current bar at 4703.5 → +3.5 pts = +35 ticks = +$35
+    # That's >= $30 target → must close
+    client = _FakeClient(
+        positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                    "averagePrice": 4700.0}],
+        bars_by_symbol={"MGC": _FakeBars([4703.5])},
+    )
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+
+    # Build-failing assertions
+    assert len(closed) == 1, (
+        f"target-hit should produce exactly 1 close, got {len(closed)}"
+    )
+    assert closed[0]["reason"] == "target_hit", (
+        f"close reason must be 'target_hit', got {closed[0]['reason']!r}"
+    )
+    assert client.closed_contracts == [contract_id], (
+        f"must use close_position(), not place_order(market). "
+        f"close_position calls: {client.closed_contracts}, "
+        f"place_order calls: {client.placed}"
+    )
+    assert client.placed == [], (
+        f"target-hit must NOT call place_order (that path is broken at "
+        f"Topstep — silent rejection). place_order calls: {client.placed}"
+    )
+    # Target should be cleared from registry after close
+    assert contract_id not in pp._target_usd_by_contract, (
+        f"target should be cleared after close to prevent double-fire"
+    )
+
+
+def test_software_target_not_hit_holds_position():
+    """Companion: with target=$30 and unrealized only $15, must NOT close."""
+    pp._position_high_water.clear()
+    pp._target_usd_by_contract.clear()
+    contract_id = "CON.F.US.MGC.M26"
+    pp.register_software_target(contract_id, target_usd=30.0)
+
+    # +1.5 pts = +15 ticks = +$15 — below $30 target
+    client = _FakeClient(
+        positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                    "averagePrice": 4700.0}],
+        bars_by_symbol={"MGC": _FakeBars([4701.5])},
+    )
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert closed == [], "should not close — unrealized $15 < target $30"
+    assert client.closed_contracts == [], "should not have called close_position"
+    # Target STAYS in registry for the next poll
+    assert pp._target_usd_by_contract.get(contract_id) == 30.0
+
+
 def test_software_target_registration_and_clear():
     """register_software_target adds, _clear_software_target removes.
     2026-05-14 take-profit-at-target feature."""
