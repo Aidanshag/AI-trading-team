@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "8bf37894c626417898026ed37a974119",
-      "emitted_at": "2026-05-14T00:24:35+00:00",
-      "expires_at": "2026-05-14T00:27:35+00:00",
+      "id": "f37b897efdc046b99f71ef30d1aab295",
+      "emitted_at": "2026-05-14T00:32:56+00:00",
+      "expires_at": "2026-05-14T00:35:56+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4698.5,

@@ -309,442 +309,67 @@ def signal_passes_min_r_gate(sig: dict, symbol: str,
 
 
 # ────────────────────────────────────────────────────────────────
-# Bracket placement
+# Bracket placement (extracted to tools/bracket_placement.py 2026-05-13)
 # ────────────────────────────────────────────────────────────────
 
 # Tick math extracted to tools/trader_utils.py
 from tools.trader_utils import _tick_size, _tick_value, _round_to_tick  # noqa: E402
 
-
-FILL_WAIT_TIMEOUT_S = 30          # how long to wait for entry to fill before cancelling
-FILL_WAIT_POLL_S = 2              # polling cadence while waiting
-
-
-def _position_signature(client, account_id, contract_id: str) -> tuple[int, int]:
-    """(type, size) for the contract, or (0, 0) if flat. Used to detect
-    entry fills without trusting any single API field."""
-    try:
-        for p in client.get_positions(account_id):
-            if p.get("contractId") == contract_id:
-                size = int(p.get("size", 0))
-                if size != 0:
-                    return (int(p.get("type", 0)), size)
-    except Exception:
-        pass
-    return (0, 0)
-
-
-def _position_avg_price(client, account_id, contract_id: str) -> float | None:
-    """Return the averagePrice for the open position on this contract,
-    or None if flat. 2026-05-11: needed to recalculate the stop AFTER
-    fill — see place_bracket comment on the MNQ 39-point-favorable-fill
-    bug that left the position unprotected."""
-    try:
-        for p in client.get_positions(account_id):
-            if p.get("contractId") == contract_id and int(p.get("size", 0)) != 0:
-                px = p.get("averagePrice")
-                if px is not None:
-                    return float(px)
-    except Exception:
-        pass
-    return None
-
-
-def _verify_stop_landed(client, account_id, contract_id: str,
-                        stop_cid: str, poll_attempts: int = 3,
-                        poll_s: float = 1.0) -> bool:
-    """Confirm the stop order shows up in working orders after placement.
-    Polls a few times with short delay because brokers can lag in
-    surfacing newly-placed orders. Returns True iff the order is found.
-    2026-05-11."""
-    for _ in range(poll_attempts):
-        try:
-            for o in client.get_working_orders(account_id) or []:
-                if str(o.get("customTag") or "") == stop_cid:
-                    return True
-        except Exception:
-            pass
-        time.sleep(poll_s)
-    return False
-
-
-def _emergency_flatten_position(client, account_id, contract_id: str,
-                                 side_to_close: str, qty: int,
-                                 reason: str) -> bool:
-    """Market-close a position that has no working protective stop.
-    2026-05-11: belt-and-suspenders for stop-placement failures."""
-    import uuid as _uuid
-    cid = f"emergency_flat_{_uuid.uuid4().hex[:8]}"
-    try:
-        client.place_order(
-            account_id=account_id, contract_id=contract_id,
-            side=side_to_close, qty=int(qty), order_type="market",
-            time_in_force="ioc", client_order_id=cid,
-        )
-        _log(f"  EMERGENCY FLATTEN: {contract_id} {side_to_close} x{qty} -- {reason}")
-        return True
-    except Exception as e:
-        _log(f"  EMERGENCY FLATTEN FAILED for {contract_id}: {e}")
-        return False
-
-
-def _wait_for_entry_fill(client, account_id, contract_id: str,
-                          baseline_sig: tuple[int, int],
-                          timeout_s: int = FILL_WAIT_TIMEOUT_S,
-                          poll_s: int = FILL_WAIT_POLL_S) -> bool:
-    """Poll until the position signature changes (= entry filled) or
-    timeout. Returns True iff a change was detected. Default-deny:
-    timeout → not filled → caller cancels entry."""
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        if _position_signature(client, account_id, contract_id) != baseline_sig:
-            return True
-        time.sleep(poll_s)
-    return False
+# Bracket placement + fill-confirm + stop-verify + emergency-flatten all
+# live in tools/bracket_placement.py now. Re-exported here so existing
+# tests + scan_once call sites keep working unchanged.
+from tools.bracket_placement import (  # noqa: E402
+    FILL_WAIT_TIMEOUT_S,
+    FILL_WAIT_POLL_S,
+    _position_signature,
+    _position_avg_price,
+    _verify_stop_landed,
+    _emergency_flatten_position,
+    _wait_for_entry_fill,
+    place_bracket as _place_bracket_impl,
+)
 
 
 def place_bracket(client, account_id, symbol: str, signal: dict,
                   qty: int = 1, dry_run: bool = False) -> dict:
-    """Place entry-limit; on confirmed fill, place stop + target.
-
-    Sequence (orphan-leg-safe, 2026-05-10):
-      1. Snapshot the position signature for this contract.
-      2. Place entry as marketable-limit.
-      3. Poll positions; if the signature changes within FILL_WAIT_TIMEOUT_S
-         seconds, the entry filled -> place protective stop and target.
-      4. If the timeout expires with no signature change, cancel the
-         entry. NO protective legs are placed.
-
-    Rationale: the prior implementation placed all three legs back-to-back.
-    When the entry limit never filled but the stop-trigger price was close
-    enough to be hit by routine price movement, the stop leg would fire
-    alone and OPEN an unintended reversed position. The 2026-05-10
-    incident cost $137.89 via this exact pathway. See
-    project_alerting_infrastructure.md and the bracket OCO history."""
-    side = "buy" if signal["side"] == "long" else "sell"
-    cid = f"live_{uuid.uuid4().hex[:12]}"
-    db = get_db()
-    tick = _tick_size(symbol)
-    entry_price = float(signal["price"])
-    # Marketable-limit: 5-tick slippage buffer (matches v1 behavior, proven)
-    if side == "buy":
-        limit_px = _round_to_tick(entry_price + 5 * tick, tick)
-    else:
-        limit_px = _round_to_tick(entry_price - 5 * tick, tick)
-    stop_px = _round_to_tick(float(signal["stop"]), tick)
-    target_px = _round_to_tick(float(signal["target"]), tick) if signal.get("target") else None
-
-    if dry_run:
-        _log(f"  DRY: would place {symbol} {side} qty={qty} entry={limit_px} "
-              f"stop={stop_px} target={target_px} cid={cid}")
-        return {"status": "dry_run", "client_order_id": cid}
-
-    # Front-month contract id
-    try:
-        contract_id = client.front_month_contract_id(symbol)
-    except ProjectXError as e:
-        _log(f"  contract lookup failed for {symbol}: {e}")
-        return {"status": "failed", "error": str(e)}
-
-    # Record entry in DB before submitting
-    db.connect().execute(
-        """INSERT INTO orders (client_order_id, agent, ts_proposed, symbol, side,
-                                 order_type, qty, limit_price, stop_price,
-                                 status, risk_verdict)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (cid, "live_trader", _utcnow_iso(), symbol, side, "limit", int(qty),
-         limit_px, stop_px, "proposed", "allow"),
+    """Thin wrapper around tools.bracket_placement.place_bracket that
+    threads the trader's _log function and SKIP_TARGET_LEG setting."""
+    return _place_bracket_impl(
+        client, account_id, symbol, signal,
+        qty=qty, dry_run=dry_run,
+        log_fn=_log, skip_target_leg=SKIP_TARGET_LEG,
     )
-    db.connect().commit()
-
-    # 1. Snapshot baseline position for fill detection (must precede placement)
-    baseline_sig = _position_signature(client, account_id, contract_id)
-
-    # 2. Entry as marketable-limit
-    try:
-        result = client.place_order(
-            account_id=account_id, contract_id=contract_id,
-            side=side, qty=int(qty), order_type="limit",
-            limit_price=limit_px, stop_price=None,
-            time_in_force="day", client_order_id=cid,
-        )
-    except ProjectXError as e:
-        _log(f"  entry place failed: {e}")
-        return {"status": "failed", "error": str(e)}
-
-    if isinstance(result, dict) and result.get("success") is False:
-        err = result.get("errorMessage") or "broker rejected"
-        _log(f"  entry rejected: {err}")
-        return {"status": "rejected", "error": err}
-
-    broker_oid = (result.get("orderId") or result.get("id") if isinstance(result, dict) else None)
-    db.connect().execute(
-        "UPDATE orders SET ts_submitted=?, status=?, broker_order_id=? WHERE client_order_id=?",
-        (_utcnow_iso(), "submitted", str(broker_oid) if broker_oid else None, cid),
-    )
-    db.connect().commit()
-
-    # 3. WAIT for fill confirmation before placing protective legs.
-    # Without this gate the protective stop/target can fire alone when
-    # the entry limit never fills, opening an unintended reversed
-    # position (2026-05-10 incident).
-    _log(f"  {symbol} entry placed, polling fill (timeout {FILL_WAIT_TIMEOUT_S}s)")
-    filled = _wait_for_entry_fill(client, account_id, contract_id, baseline_sig)
-    if not filled:
-        _log(f"  {symbol} entry {cid} UNFILLED after {FILL_WAIT_TIMEOUT_S}s -- "
-              f"cancelling; no protective legs placed")
-        try:
-            if broker_oid is not None:
-                client.cancel_order(account_id, broker_oid)
-        except Exception as e:
-            _log(f"  entry cancel failed (will remain working): {e}")
-        db.connect().execute(
-            "UPDATE orders SET status=?, ts_cancelled=? WHERE client_order_id=?",
-            ("cancelled_unfilled", _utcnow_iso(), cid),
-        )
-        db.connect().commit()
-        return {"status": "cancelled_unfilled", "client_order_id": cid}
-    # 3a. Recalculate stop relative to ACTUAL fill price.
-    # 2026-05-11 MNQ incident: signal entry was 29448.5, marketable-limit fill
-    # was 29409.25 (39 pts favorable slippage). Original signal stop at 29437.75
-    # ended up on the wrong side of the actual fill -> broker rejected -> position
-    # ran unprotected. Fix: keep the signal's RISK DISTANCE but anchor it to the
-    # fill price instead of the signal's expected entry.
-    actual_fill = _position_avg_price(client, account_id, contract_id) or entry_price
-    signal_risk = abs(entry_price - float(signal["stop"]))
-    if side == "buy":
-        stop_px = _round_to_tick(actual_fill - signal_risk, tick)
-    else:
-        stop_px = _round_to_tick(actual_fill + signal_risk, tick)
-    _log(f"  {symbol} entry FILLED @ {actual_fill}; "
-          f"stop recalculated to {stop_px} (risk={signal_risk:.4f} from fill)")
-
-    # 4. Stop-limit (1-tick offset for Topstep's tight-limit rule)
-    # NOTE: when SKIP_TARGET_LEG is True (broker target-fill anomaly workaround),
-    # we place only the stop and skip the target leg below.
-    opp = "sell" if side == "buy" else "buy"
-    stop_limit_px = (stop_px - tick) if opp == "sell" else (stop_px + tick)
-    stop_limit_px = _round_to_tick(stop_limit_px, tick)
-    stop_cid = cid + "_stop"
-    stop_placed_ok = False
-    try:
-        sr = client.place_order(
-            account_id=account_id, contract_id=contract_id,
-            side=opp, qty=int(qty), order_type="stop_limit",
-            limit_price=stop_limit_px, stop_price=stop_px,
-            time_in_force="gtc", client_order_id=stop_cid,
-        )
-        sboid = (sr.get("orderId") or sr.get("id")) if isinstance(sr, dict) else None
-        # Detect broker-side rejection of the stop (returns success=False).
-        sr_ok = (not isinstance(sr, dict)) or sr.get("success") is not False
-        if not sr_ok:
-            err = sr.get("errorMessage") or "rejected"
-            _log(f"  stop placement REJECTED by broker: {err}")
-        else:
-            db.connect().execute(
-                """INSERT INTO orders (client_order_id, agent, ts_proposed, ts_submitted,
-                                         symbol, side, order_type, qty, stop_price,
-                                         status, risk_verdict, broker_order_id)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (stop_cid, "live_trader", _utcnow_iso(), _utcnow_iso(),
-                 symbol, opp, "stop", int(qty), stop_px,
-                 "submitted", "allow", str(sboid) if sboid else None),
-            )
-            db.connect().commit()
-            # 4a. VERIFY the stop is actually working at the broker.
-            # 2026-05-11: rejection returned success=False but in earlier
-            # implementations rejection still slipped past silently. Belt:
-            # poll working orders for the stop_cid. If absent, emergency-flatten.
-            stop_placed_ok = _verify_stop_landed(client, account_id, contract_id, stop_cid)
-            if not stop_placed_ok:
-                _log(f"  CRITICAL: stop {stop_cid} not visible in working orders "
-                      f"after placement; emergency-flattening position")
-                _emergency_flatten_position(
-                    client, account_id, contract_id,
-                    side_to_close=opp, qty=int(qty),
-                    reason=f"stop {stop_cid} did not land at broker",
-                )
-                return {"status": "stop_placement_failed_flattened",
-                        "client_order_id": cid}
-    except ProjectXError as e:
-        _log(f"  stop placement failed: {e}")
-        # No stop at broker -> emergency-flatten the now-unprotected position
-        _emergency_flatten_position(
-            client, account_id, contract_id,
-            side_to_close=opp, qty=int(qty),
-            reason=f"stop place_order raised: {e}",
-        )
-        return {"status": "stop_placement_failed_flattened",
-                "client_order_id": cid}
-        # Continue — target may still place; verification will catch missing stop
-
-    # 3. Target as limit (only if target price provided AND target legs not skipped)
-    if target_px is not None and not SKIP_TARGET_LEG:
-        target_cid = cid + "_target"
-        try:
-            tr = client.place_order(
-                account_id=account_id, contract_id=contract_id,
-                side=opp, qty=int(qty), order_type="limit",
-                limit_price=target_px, stop_price=None,
-                time_in_force="gtc", client_order_id=target_cid,
-            )
-            tboid = (tr.get("orderId") or tr.get("id")) if isinstance(tr, dict) else None
-            db.connect().execute(
-                """INSERT INTO orders (client_order_id, agent, ts_proposed, ts_submitted,
-                                         symbol, side, order_type, qty, limit_price,
-                                         status, risk_verdict, broker_order_id)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (target_cid, "live_trader", _utcnow_iso(), _utcnow_iso(),
-                 symbol, opp, "limit", int(qty), target_px,
-                 "submitted", "allow", str(tboid) if tboid else None),
-            )
-            db.connect().commit()
-        except ProjectXError as e:
-            _log(f"  target placement failed: {e}")
-
-    _log(f"  PLACED {symbol} {side} qty={qty} entry≈{limit_px} stop={stop_px} "
-          f"target={target_px or '—'} cid={cid}")
-    return {"status": "submitted", "client_order_id": cid,
-            "broker_order_id": broker_oid}
 
 
 # ────────────────────────────────────────────────────────────────
-# Per-trade loss-cap enforcement
+# Per-trade loss-cap enforcement (extracted to tools/loss_cap.py 2026-05-13)
 # ────────────────────────────────────────────────────────────────
+
+from tools.loss_cap import enforce_loss_cap as _enforce_loss_cap_impl  # noqa: E402
+
 
 def enforce_loss_cap(client, account_id) -> int:
-    """Force-close any position whose unrealized loss < -PER_TRADE_LOSS_CAP_USD.
-    Returns # positions closed."""
-    closed = 0
-    try:
-        positions = client.get_positions(account_id) or []
-    except Exception:
-        return 0
-    syms = _load_yaml("config/symbols.yaml").get("symbols", {})
-    for p in positions:
-        size = int(p.get("size") or 0)
-        if size == 0:
-            continue
-        contract = p.get("contractId") or ""
-        avg = float(p.get("avgPrice") or 0)
-        if avg <= 0 or not contract:
-            continue
-        type_code = int(p.get("type") or 0)
-        sign = 1 if type_code == 1 else -1 if type_code == 2 else (1 if size > 0 else -1)
-        size = abs(size)
-        root = None
-        for tok in contract.split("."):
-            if tok in ("CON", "F", "US", ""): continue
-            if len(tok) <= 3 and tok and tok[0].isalpha() and tok[1:].isdigit(): continue
-            root = tok; break
-        meta = syms.get(root or "", {})
-        tick_size = float(meta.get("tick_size") or 0)
-        tick_value = float(meta.get("tick_value") or 0)
-        if tick_size <= 0 or tick_value <= 0:
-            continue
-        try:
-            bars = client.get_bars(contract_id=contract,
-                                    start_time=(_now_utc() - timedelta(minutes=10)).isoformat(),
-                                    end_time=_now_utc().isoformat(),
-                                    unit=2, unit_number=1, limit=5, live=False)
-            mark = float(bars[-1].get("c") or 0) if bars else 0
-        except Exception:
-            continue
-        if mark <= 0:
-            continue
-        unrealized = sign * size * ((mark - avg) / tick_size) * tick_value
-        if unrealized < -PER_TRADE_LOSS_CAP_USD:
-            opp = "sell" if type_code == 1 else "buy"
-            cid = f"livecap_{uuid.uuid4().hex[:8]}"
-            try:
-                client.place_order(account_id=account_id, contract_id=contract,
-                                     side=opp, qty=size, order_type="market",
-                                     time_in_force="ioc", client_order_id=cid)
-                _log(f"  LOSS-CAP CLOSE: {root} unrealized=${unrealized:+.2f} < -${PER_TRADE_LOSS_CAP_USD:.0f}")
-                closed += 1
-            except Exception as e:
-                _log(f"  loss-cap close failed for {root}: {e}")
-    return closed
+    """Thin wrapper threading the trader's _log + PER_TRADE_LOSS_CAP_USD."""
+    return _enforce_loss_cap_impl(
+        client, account_id,
+        per_trade_cap_usd=PER_TRADE_LOSS_CAP_USD,
+        log_fn=_log,
+    )
 
 
 # ────────────────────────────────────────────────────────────────
-# Orphan-bracket cleanup
+# Orphan-bracket cleanup (extracted to tools/orphan_cleanup.py 2026-05-13)
 # ────────────────────────────────────────────────────────────────
 
-ORPHAN_GRACE_SEC = 120  # 2-min grace before any cancel
+from tools.orphan_cleanup import (  # noqa: E402
+    ORPHAN_GRACE_SEC,
+    cleanup_orphan_brackets as _cleanup_orphan_brackets_impl,
+)
 
 
 def cleanup_orphan_brackets(client, account_id) -> int:
-    """Cancel working bracket legs whose underlying position is flat.
-
-    Why: ProjectX `place_order` has no native bracket linkage; v2 places
-    entry/stop/target as 3 independent orders. If broker's implicit OCO
-    fails (or simply doesn't exist), one leg filling leaves the others
-    working. This sweep cancels orders that no longer protect a position.
-
-    Safe-by-default:
-      - 2-min grace per order: never cancels a freshly-placed bracket
-        whose position hasn't propagated through the API yet.
-      - Only acts on orders tagged 'live_' (our customTag prefix). Won't
-        touch user-placed manual orders.
-      - Only cancels when position is verifiably flat (not inferred).
-
-    Returns # orders cancelled.
-    """
-    cancelled = 0
-    try:
-        positions = client.get_positions(account_id) or []
-        working = client.get_working_orders(account_id) or []
-    except Exception as e:
-        _log(f"  cleanup skipped (broker fetch failed): {type(e).__name__}: {e}")
-        return 0
-
-    # Map contractId → True if position is non-zero
-    has_position: dict[str, bool] = {}
-    for p in positions:
-        cid = p.get("contractId")
-        if not cid:
-            continue
-        size = int(p.get("size") or 0)
-        if size != 0:
-            has_position[cid] = True
-
-    now = _now_utc()
-    for o in working:
-        tag = str(o.get("customTag") or "")
-        if not tag.startswith("live_"):
-            continue  # not ours
-        cid = o.get("contractId")
-        if not cid:
-            continue
-        if has_position.get(cid):
-            continue  # position is open; bracket is legitimate
-
-        # Position is flat for this contract. Apply grace period.
-        try:
-            ts_str = o.get("creationTimestamp") or ""
-            if ts_str:
-                order_ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                age_sec = (now - order_ts).total_seconds()
-            else:
-                age_sec = ORPHAN_GRACE_SEC + 1  # no timestamp → assume old enough
-        except Exception:
-            age_sec = ORPHAN_GRACE_SEC + 1
-
-        if age_sec < ORPHAN_GRACE_SEC:
-            continue  # too fresh; broker may still be propagating fill state
-
-        oid = o.get("id") or o.get("orderId")
-        if not oid:
-            continue
-        try:
-            client.cancel_order(account_id, oid)
-            _log(f"  cleaned orphan {tag} (id={oid}, age={age_sec:.0f}s, contract={cid})")
-            cancelled += 1
-        except Exception as e:
-            _log(f"  cleanup cancel failed for {oid}: {type(e).__name__}: {e}")
-
-    return cancelled
+    """Thin wrapper threading the trader's _log."""
+    return _cleanup_orphan_brackets_impl(client, account_id, log_fn=_log)
 
 
 # Cooldown / daily-count queries extracted to tools/trade_state.py 2026-05-08.
