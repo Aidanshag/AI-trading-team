@@ -318,12 +318,24 @@ class ProjectXClient:
     ) -> dict:
         """Place an order on the specified account.
 
-        ProjectX order-type codes (verify against current API docs):
-            1 = Market, 2 = Limit, 3 = Stop, 4 = Stop-Limit, 5 = Trailing Stop.
+        ProjectX TopstepX order-type codes (corrected 2026-05-14 after
+        live evidence — broker rejection "limit price not set" when we
+        sent type=1 confirmed type=1 IS a LIMIT order, not Market.
+        Tonight's empirical mapping:
+            1 = Limit (requires limit_price)
+            2 = Market (limit_price ignored)
+            3 = Stop
+            4 = Stop-Limit  (verified — protective stops use this)
+            5 = Trailing Stop (untested)
+        See vault/_meta/memory_backup/project_broker_order_semantics.md
+        for the full investigation history. PRE-2026-05-14 the mapping
+        had "market" and "limit" SWAPPED, which caused: (a) all close
+        attempts via place_order to be rejected silently, (b) all entry
+        "limits" to fill at market regardless of limit_price.
         Side codes: 0 = Buy, 1 = Sell.
         """
         type_code = {
-            "market": 1, "limit": 2, "stop": 3, "stop_limit": 4,
+            "limit": 1, "market": 2, "stop": 3, "stop_limit": 4,
         }.get(order_type.lower())
         if type_code is None:
             raise ValueError(f"Unknown order_type {order_type!r}")

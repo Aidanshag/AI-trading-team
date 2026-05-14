@@ -339,10 +339,14 @@ def _trail_broker_stop_to_floor(client, account_id, position: dict,
         return
 
     # 2. Place a new stop at the desired price (same side, same qty,
-    #    new prices). Use a customTag suffix that still ends in "_stop"
+    #    new prices). Use a customTag suffix that STILL ENDS IN "_stop"
     #    so other code (cleanup_orphan_brackets, future trailing) recognizes it.
+    # 2026-05-14 fix: previous formula appended "_trail{4hex}" AFTER "_stop"
+    # which broke the endswith("_stop") filter — the next trail poll
+    # couldn't find the replacement stop, thought position was unprotected.
     import uuid as _uuid
-    new_cid = f"{old_stop_cid.rsplit('_stop', 1)[0]}_stop_trail{_uuid.uuid4().hex[:4]}"
+    base = old_stop_cid.rsplit("_stop", 1)[0]
+    new_cid = f"{base}_t{_uuid.uuid4().hex[:6]}_stop"
     opp_side = "sell" if is_long else "buy"
     try:
         sr = client.place_order(
