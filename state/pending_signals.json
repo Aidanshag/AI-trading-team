@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "a51a989027eb4d8ebe0e9845aa2acfe1",
-      "emitted_at": "2026-05-14T00:13:08+00:00",
-      "expires_at": "2026-05-14T00:16:08+00:00",
+      "id": "8bf37894c626417898026ed37a974119",
+      "emitted_at": "2026-05-14T00:24:35+00:00",
+      "expires_at": "2026-05-14T00:27:35+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4698.5,
@@ -15,22 +15,6 @@
       "cell_key": "fair_value_gap_tuned|GC|Asian|short",
       "shadow_only": false,
       "notes": "reason=fvg_bear_mitigation gap=[4706.20,4707.30] age=7"
-    },
-    {
-      "id": "49403695a062495ca6f3e31900a8f605",
-      "emitted_at": "2026-05-14T00:13:09+00:00",
-      "expires_at": "2026-05-14T00:16:09+00:00",
-      "symbol": "6E",
-      "side": "short",
-      "entry_price": 1.1732,
-      "stop_price": 1.1733214285714286,
-      "target_price": 1.1729571428571428,
-      "qty": 1,
-      "strategy": "fair_value_gap",
-      "session": "Asian",
-      "cell_key": "fair_value_gap|6E|Asian|short",
-      "shadow_only": false,
-      "notes": "reason=fvg_bear_mitigation gap=[1.17,1.17] age=1"
     }
   ]
 }

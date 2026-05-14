@@ -1,19 +1,24 @@
-"""Tests for scripts/live_trader.py — the simplified Layer 1 knife.
+"""Tests for scripts/live_trader.py — pure-execution / safety-gate layer.
 
-Coverage:
-- session_now_utc: ET session bucketing
-- load_live_cells: brain output parsing
+After 2026-05-13 brain/trader split, the trader's responsibilities are
+ONLY: order placement, last-mile safety gates, position polling,
+snapshot heartbeat. Brain-side tests (sessions, regime, news, signal
+extraction) live in tests/test_brain_logic.py.
+
+Coverage here:
 - is_halted: halt-file + config checks
-- dll_breached: daily loss limit check
-- find_latest_signal: lookback window enforcement
-- _round_to_tick: tick-size rounding for brackets
-- recent_thesis_for: cooldown tracking
-- scan_once dry-run: end-to-end no-orders behavior
+- dll_breached: daily loss limit check (internal-first read)
+- signal_passes_min_r_gate: pre-placement R-floor gate
+- _round_to_tick / _tick_size: bracket math
+- recent_thesis_for: cooldown (defense-in-depth)
+- _position_signature / _position_avg_price: position-state helpers
+- _verify_stop_landed / _wait_for_entry_fill: orphan-leg defense
+- cleanup_orphan_brackets: working-order hygiene
+- module structure: trader has the queue-consume entry point
 """
 from __future__ import annotations
 
 import json
-import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,67 +31,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from scripts import live_trader as lt  # noqa: E402
 
 
-# ─── session bucketing ─────────────────────────────────────────
-
-def test_session_now_utc_rth():
-    # 14:00 UTC = 10:00 ET → RTH
-    t = datetime(2026, 5, 8, 14, 0, tzinfo=timezone.utc)
-    assert lt.session_now_utc(t) == "RTH"
-
-
-def test_session_now_utc_london():
-    # 08:00 UTC = 04:00 ET → London
-    t = datetime(2026, 5, 8, 8, 0, tzinfo=timezone.utc)
-    assert lt.session_now_utc(t) == "London"
-
-
-def test_session_now_utc_postclose():
-    # 22:00 UTC = 18:00 ET → PostClose
-    t = datetime(2026, 5, 8, 22, 0, tzinfo=timezone.utc)
-    assert lt.session_now_utc(t) == "PostClose"
-
-
-def test_session_now_utc_asian():
-    # 02:00 UTC = 22:00 ET → Asian (wraps)
-    t = datetime(2026, 5, 8, 2, 0, tzinfo=timezone.utc)
-    assert lt.session_now_utc(t) == "Asian"
-
-
-# ─── load_live_cells ────────────────────────────────────────────
-
-def test_load_live_cells_missing_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(lt, "LIVE_ALLOWLIST_PATH", tmp_path / "missing.json")
-    assert lt.load_live_cells() == []
-
-
-def test_load_live_cells_valid(tmp_path, monkeypatch):
-    state_file = tmp_path / "validation.json"
-    state_file.write_text(json.dumps({
-        "live_allowlist": [
-            {"strategy": "gap_fill", "symbol": "ZN", "session": "Asian", "side": "long"},
-            {"strategy": "gap_fill", "symbol": "ZT", "session": "Asian", "side": "short"},
-        ]
-    }))
-    monkeypatch.setattr(lt, "LIVE_ALLOWLIST_PATH", state_file)
-    cells = lt.load_live_cells()
-    assert len(cells) == 2
-    assert cells[0]["symbol"] == "ZN"
-
-
-def test_load_live_cells_corrupt(tmp_path, monkeypatch):
-    state_file = tmp_path / "bad.json"
-    state_file.write_text("{not valid json")
-    monkeypatch.setattr(lt, "LIVE_ALLOWLIST_PATH", state_file)
-    assert lt.load_live_cells() == []
-
-
 # ─── halt checks ────────────────────────────────────────────────
 
 def test_is_halted_no_halt(tmp_path, monkeypatch):
     monkeypatch.setattr(lt, "HALT_FILE", tmp_path / "no_halt")
     halted, reason = lt.is_halted()
-    # Note: also depends on config/risk_limits.yaml; if past halt timestamp, OK
-    # We only assert the touch-file path is False
     assert not (tmp_path / "no_halt").exists()
 
 
@@ -102,9 +51,8 @@ def test_is_halted_touchfile(tmp_path, monkeypatch):
 # ─── DLL breach ─────────────────────────────────────────────────
 
 def test_dll_not_breached():
-    # 2026-05-13: dll_breached now reads `internal_dll_target_usd` from
-    # risk_limits.yaml as the primary threshold (currently $250). Use a
-    # loss well under that floor.
+    # 2026-05-13: dll_breached reads `internal_dll_target_usd` first
+    # (currently $250). Use a loss well under the floor.
     snap = {"realized_pl_day_usd": -100.0}
     breached, why = lt.dll_breached(snap)
     assert not breached
@@ -114,7 +62,6 @@ def test_dll_breached():
     snap = {"realized_pl_day_usd": -1500.0}
     breached, why = lt.dll_breached(snap)
     assert breached is True
-    # The reason should name the source so triage is fast
     assert "<= -" in why and ("internal_dll" in why or "topstep_dll" in why)
 
 
@@ -139,70 +86,36 @@ def test_tick_size_zn():
 
 
 def test_tick_size_unknown_falls_back():
-    # Unknown symbol returns the default 0.01
     assert lt._tick_size("UNKNOWN_FOO") == 0.01
 
 
-# ─── find_latest_signal lookback ────────────────────────────────
-
-def test_find_latest_signal_short_bars():
-    import pandas as pd
-    bars = pd.DataFrame(
-        {"Open": [1, 2], "High": [1, 2], "Low": [1, 2], "Close": [1, 2], "Volume": [1, 1]},
-        index=pd.to_datetime(["2026-05-08 00:00", "2026-05-08 00:05"]),
-    )
-
-    def fn(b):
-        yield from []
-
-    assert lt.find_latest_signal(bars, fn) is None  # too few bars
-
-
-def test_find_latest_signal_no_entries():
-    import pandas as pd
-    n = 50
-    bars = pd.DataFrame(
-        {"Open": list(range(n)), "High": list(range(n)),
-         "Low": list(range(n)), "Close": list(range(n)),
-         "Volume": [1] * n},
-        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
-    )
-
-    def fn(b):
-        yield from []  # no signals
-
-    assert lt.find_latest_signal(bars, fn) is None
-
-
-# ─── module imports cleanly ─────────────────────────────────────
+# ─── module structure ──────────────────────────────────────────
 
 def test_module_imports():
-    """Confirm the trader module imports without errors."""
-    assert hasattr(lt, "scan_once")
+    """Confirm the trader exposes its core surface."""
+    assert hasattr(lt, "consume_pending_signals")
     assert hasattr(lt, "place_bracket")
-    assert hasattr(lt, "find_latest_signal")
+    assert hasattr(lt, "dll_breached")
+    assert hasattr(lt, "signal_passes_max_risk_gate")
+    assert hasattr(lt, "signal_passes_min_r_gate")
+    assert hasattr(lt, "projected_dll_breach")
     assert hasattr(lt, "main")
-    assert hasattr(lt, "load_live_cells")
     assert lt.SCAN_INTERVAL_SEC > 0
-    assert lt.LOOKBACK_BARS > 0
     assert lt.PER_TRADE_LOSS_CAP_USD > 0
+    assert lt.MAX_SIGNAL_RISK_USD > 0
 
 
 def test_constants_align_with_v1_intent():
-    """The simplified trader's constants should match the v1's intent
-    where intent was clear."""
-    assert lt.LOOKBACK_BARS == 6              # 30 min on 5m bars
+    """The trader's hard floors should match user-stated intent."""
     assert lt.SCAN_INTERVAL_SEC == 300        # 5 min
-    assert lt.PER_TRADE_LOSS_CAP_USD == 150.0  # tightened for first night
-    assert lt.MIN_SIGNAL_R_TICKS >= 6          # must exceed 5-tick marketable buffer
+    assert lt.PER_TRADE_LOSS_CAP_USD == 150.0
+    assert lt.MIN_SIGNAL_R_TICKS >= 6
+    assert lt.MAX_SIGNAL_RISK_USD == 150.0
 
 
 # ─── degenerate-R signal gate (2026-05-10 incident) ────────────────
 
 def test_min_r_gate_rejects_stop_equals_entry():
-    """The 2026-05-10 incident shape: ATR collapses to <1 tick in low-vol
-    session, so the strategy emits a signal whose stop is rounded to the
-    same price as entry. Must reject."""
     sig = {"price": 110.53125, "stop": 110.53125, "target": 110.546875}
     ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
     assert ok is False
@@ -210,16 +123,13 @@ def test_min_r_gate_rejects_stop_equals_entry():
 
 
 def test_min_r_gate_rejects_one_tick_target():
-    """A signal with adequate stop but a target only one tick from entry
-    can't survive the 5-tick marketable-limit buffer. Reject."""
-    sig = {"price": 110.50, "stop": 110.38, "target": 110.515625}  # target ~1 tick
+    sig = {"price": 110.50, "stop": 110.38, "target": 110.515625}
     ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
     assert ok is False
     assert "target too close" in reason
 
 
 def test_min_r_gate_passes_normal_signal():
-    """A signal with comfortable R-distance on both sides passes."""
     sig = {"price": 110.50, "stop": 110.30, "target": 110.80}
     ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
     assert ok is True
@@ -233,8 +143,6 @@ def test_min_r_gate_rejects_missing_stop():
 
 
 def test_min_r_gate_no_target_uses_stop_only():
-    """Some strategies emit signals without a target. Gate should pass
-    if stop-distance is adequate."""
     sig = {"price": 110.50, "stop": 110.30, "target": None}
     ok, reason = lt.signal_passes_min_r_gate(sig, "ZN")
     assert ok is True
@@ -277,12 +185,10 @@ def test_position_signature_handles_broker_exception():
         def get_positions(self, account_id):
             raise RuntimeError("boom")
     sig = lt._position_signature(Bad(), 1, "CON.F.US.USA.M26")
-    assert sig == (0, 0)  # fail-closed: report flat on error
+    assert sig == (0, 0)
 
 
 def test_wait_for_entry_fill_returns_false_on_timeout():
-    """When the position signature doesn't change, wait returns False
-    (entry is treated as unfilled; caller must cancel it)."""
     broker = _FakeBrokerNoPosition()
     filled = lt._wait_for_entry_fill(
         broker, 1, "CON.F.US.USA.M26",
@@ -291,144 +197,7 @@ def test_wait_for_entry_fill_returns_false_on_timeout():
     assert filled is False
 
 
-def test_cell_passes_regime_filter_no_filter():
-    """A cell without regime_filter passes regardless of regime."""
-    cell = {"strategy": "fair_value_gap", "symbol": "MNQ"}
-    regime = {"vol_regime": "low"}
-    ok, _ = lt.cell_passes_regime_filter(cell, regime)
-    assert ok is True
-
-
-def test_cell_passes_regime_filter_match():
-    """Cell with vol_regime=['high'] passes when regime is high."""
-    cell = {"regime_filter": {"vol_regime": ["high"]}}
-    ok, _ = lt.cell_passes_regime_filter(cell, {"vol_regime": "high"})
-    assert ok is True
-
-
-def test_cell_passes_regime_filter_mismatch():
-    """Cell with vol_regime=['high'] fails when regime is med or low."""
-    cell = {"regime_filter": {"vol_regime": ["high"]}}
-    for r in ["low", "med"]:
-        ok, reason = lt.cell_passes_regime_filter(cell, {"vol_regime": r})
-        assert ok is False
-        assert "vol_regime" in reason
-
-
-def test_cell_passes_regime_filter_multikey_all_must_match():
-    """Multi-key filter: all keys must match."""
-    cell = {"regime_filter": {"vol_regime": ["high"], "trend_regime": ["trending"]}}
-    assert lt.cell_passes_regime_filter(cell, {"vol_regime": "high", "trend_regime": "trending"})[0] is True
-    # One mismatch fails
-    assert lt.cell_passes_regime_filter(cell, {"vol_regime": "high", "trend_regime": "ranging"})[0] is False
-    assert lt.cell_passes_regime_filter(cell, {"vol_regime": "med",  "trend_regime": "trending"})[0] is False
-
-
-def test_cell_passes_regime_filter_unknown_regime_fail_closed():
-    """If we couldn't compute regime (empty dict), restricted cells fail.
-    Non-restricted cells still pass."""
-    restricted = {"regime_filter": {"vol_regime": ["high"]}}
-    open_cell = {"strategy": "x"}
-    assert lt.cell_passes_regime_filter(restricted, {})[0] is False
-    assert lt.cell_passes_regime_filter(open_cell,  {})[0] is True
-
-
-def test_news_proximity_clear_when_no_events_nearby(monkeypatch):
-    """When _load_calendar_events returns nothing, proximity is 'clear'."""
-    monkeypatch.setattr(lt, "_load_calendar_events", lambda sym: [])
-    assert lt.news_proximity_for("ZN") == "clear"
-
-
-def test_news_proximity_inside_within_15min_of_high(monkeypatch):
-    """A HIGH event within 15 min returns 'inside'."""
-    from datetime import datetime, timezone, timedelta
-    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
-    # Event 10 min from now
-    monkeypatch.setattr(lt, "_load_calendar_events",
-                         lambda sym: [{"ts": now + timedelta(minutes=10), "severity": "HIGH"}])
-    assert lt.news_proximity_for("ZN", now=now) == "inside"
-
-
-def test_news_proximity_near_when_30min_from_high(monkeypatch):
-    """A HIGH event 30 min away returns 'near'."""
-    from datetime import datetime, timezone, timedelta
-    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
-    monkeypatch.setattr(lt, "_load_calendar_events",
-                         lambda sym: [{"ts": now + timedelta(minutes=30), "severity": "HIGH"}])
-    assert lt.news_proximity_for("ZN", now=now) == "near"
-
-
-def test_news_proximity_near_when_60min_from_medium(monkeypatch):
-    """A MEDIUM event 50 min away returns 'near' (medium has wider near window)."""
-    from datetime import datetime, timezone, timedelta
-    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
-    monkeypatch.setattr(lt, "_load_calendar_events",
-                         lambda sym: [{"ts": now + timedelta(minutes=50), "severity": "MEDIUM"}])
-    assert lt.news_proximity_for("ZN", now=now) == "near"
-
-
-def test_news_proximity_clear_when_far_from_event(monkeypatch):
-    """Events 4+ hours away return 'clear'."""
-    from datetime import datetime, timezone, timedelta
-    now = datetime(2026, 5, 11, 12, 0, 0, tzinfo=timezone.utc)
-    monkeypatch.setattr(lt, "_load_calendar_events",
-                         lambda sym: [{"ts": now + timedelta(hours=4), "severity": "HIGH"}])
-    assert lt.news_proximity_for("ZN", now=now) == "clear"
-
-
-def test_current_regime_includes_news_when_symbol_passed(monkeypatch):
-    """current_regime(bars, symbol='ZN') includes news_proximity in output."""
-    import pandas as pd
-    import numpy as np
-    np.random.seed(7)
-    n = 200
-    rets = np.random.randn(n) * 0.001
-    close = 100 * np.exp(np.cumsum(rets))
-    bars = pd.DataFrame(
-        {"Open": close, "High": close + 0.1, "Low": close - 0.1,
-         "Close": close, "Volume": [1]*n},
-        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
-    )
-    monkeypatch.setattr(lt, "_load_calendar_events", lambda sym: [])
-    regime = lt.current_regime(bars, symbol="ZN")
-    assert "news_proximity" in regime
-    assert regime["news_proximity"] == "clear"
-
-
-def test_current_regime_returns_empty_on_short_bars():
-    """Too few bars to classify -> empty dict so gate fails closed."""
-    import pandas as pd
-    n = 50  # less than ref_window+lookback (100+14)
-    bars = pd.DataFrame(
-        {"Open": list(range(n)), "High": [x+1 for x in range(n)],
-         "Low": [x-1 for x in range(n)], "Close": list(range(n)),
-         "Volume": [1]*n},
-        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
-    )
-    regime = lt.current_regime(bars)
-    assert regime == {}
-
-
-def test_current_regime_returns_dict_on_full_bars():
-    """Enough bars -> regime dict with vol_regime + trend_regime."""
-    import pandas as pd
-    import numpy as np
-    np.random.seed(7)
-    n = 200
-    rets = np.random.randn(n) * 0.001
-    close = 100 * np.exp(np.cumsum(rets))
-    bars = pd.DataFrame(
-        {"Open": close, "High": close + 0.1, "Low": close - 0.1,
-         "Close": close, "Volume": [1]*n},
-        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
-    )
-    regime = lt.current_regime(bars)
-    assert "vol_regime" in regime and regime["vol_regime"] in ("low", "med", "high")
-    assert "trend_regime" in regime and regime["trend_regime"] in ("trending", "ranging")
-
-
 def test_position_avg_price_returns_value_when_position_exists():
-    """_position_avg_price returns averagePrice float when position is open."""
     class _Broker:
         def get_positions(self, _aid):
             return [{"contractId": "CON.F.US.MNQ.M26", "size": 1,
@@ -438,7 +207,6 @@ def test_position_avg_price_returns_value_when_position_exists():
 
 
 def test_position_avg_price_returns_none_when_flat():
-    """_position_avg_price returns None when no matching position."""
     class _Broker:
         def get_positions(self, _aid):
             return []
@@ -446,7 +214,6 @@ def test_position_avg_price_returns_none_when_flat():
 
 
 def test_position_avg_price_returns_none_on_broker_error():
-    """_position_avg_price fails closed on broker exceptions."""
     class _Bad:
         def get_positions(self, _aid):
             raise RuntimeError("broker down")
@@ -454,7 +221,6 @@ def test_position_avg_price_returns_none_on_broker_error():
 
 
 def test_verify_stop_landed_finds_order():
-    """_verify_stop_landed returns True when stop_cid is in working orders."""
     class _Broker:
         def get_working_orders(self, _aid):
             return [{"customTag": "live_abc_stop", "id": 1}]
@@ -463,95 +229,20 @@ def test_verify_stop_landed_finds_order():
 
 
 def test_verify_stop_landed_returns_false_when_missing():
-    """_verify_stop_landed returns False after polling attempts exhausted."""
     class _Broker:
         def get_working_orders(self, _aid):
-            return []  # never shows up
+            return []
     assert lt._verify_stop_landed(_Broker(), 1, "X", "live_missing",
                                     poll_attempts=2, poll_s=0) is False
 
 
 def test_wait_for_entry_fill_returns_true_when_signature_changes():
-    """When position appears (signature changes from baseline), wait
-    returns True so caller proceeds to place protective legs."""
     broker = _FakeBrokerWithPosition("CON.F.US.USA.M26", 1, 1)
-    # baseline says flat; current broker shows position -> change detected
     filled = lt._wait_for_entry_fill(
         broker, 1, "CON.F.US.USA.M26",
         baseline_sig=(0, 0), timeout_s=2, poll_s=1,
     )
     assert filled is True
-
-
-# ─── find_latest_signal tick_size injection (2026-05-11) ───────────
-
-def test_find_latest_signal_injects_tick_size():
-    """When the strategy accepts tick_size and symbol is given, the
-    real tick_size for that symbol should be passed in. The strategy
-    receives it and can use it for floor logic."""
-    import pandas as pd
-    n = 50
-    bars = pd.DataFrame(
-        {"Open": list(range(n)), "High": list(range(n)),
-         "Low": list(range(n)), "Close": list(range(n)),
-         "Volume": [1] * n},
-        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
-    )
-    received: dict = {}
-
-    def fake_strategy(bars, tick_size=None):
-        received["tick_size"] = tick_size
-        # Return nothing; we only care about what got passed in
-        return iter([])
-
-    lt.find_latest_signal(bars, fake_strategy, symbol="ZN")
-    assert received["tick_size"] is not None
-    # ZN tick = 1/64; should be 0.015625
-    assert abs(received["tick_size"] - 0.015625) < 1e-9
-
-
-def test_find_latest_signal_does_not_inject_when_strategy_lacks_param():
-    """Strategies without a tick_size param should be called without it
-    (backwards-compat: existing strategies that take only `bars`)."""
-    import pandas as pd
-    n = 50
-    bars = pd.DataFrame(
-        {"Open": list(range(n)), "High": list(range(n)),
-         "Low": list(range(n)), "Close": list(range(n)),
-         "Volume": [1] * n},
-        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
-    )
-    calls = {"n": 0}
-
-    def old_strategy(bars):  # no tick_size kwarg
-        calls["n"] += 1
-        return iter([])
-
-    # If injection were unconditional, this would raise TypeError.
-    # Confirming it doesn't.
-    lt.find_latest_signal(bars, old_strategy, symbol="ZN")
-    assert calls["n"] == 1
-
-
-def test_find_latest_signal_no_symbol_skips_injection():
-    """When symbol is None (the legacy call shape), no injection
-    happens even if the strategy accepts tick_size."""
-    import pandas as pd
-    n = 50
-    bars = pd.DataFrame(
-        {"Open": list(range(n)), "High": list(range(n)),
-         "Low": list(range(n)), "Close": list(range(n)),
-         "Volume": [1] * n},
-        index=pd.date_range("2026-05-08", periods=n, freq="5min"),
-    )
-    received: dict = {"tick_size": "untouched"}
-
-    def fake_strategy(bars, tick_size=None):
-        received["tick_size"] = tick_size
-        return iter([])
-
-    lt.find_latest_signal(bars, fake_strategy)  # no symbol
-    assert received["tick_size"] is None  # default used, not injected
 
 
 # ─── orphan-bracket cleanup ─────────────────────────────────────
@@ -574,7 +265,6 @@ class _FakeClient:
 
 
 def test_cleanup_skips_when_position_open():
-    """Don't cancel bracket legs when position is open (legitimate bracket)."""
     pos = [{"contractId": "CON.F.US.TYA.M26", "size": 1, "type": 1}]
     old_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     working = [{
@@ -588,8 +278,7 @@ def test_cleanup_skips_when_position_open():
 
 
 def test_cleanup_skips_within_grace_period():
-    """Don't cancel bracket legs younger than ORPHAN_GRACE_SEC even if flat."""
-    pos = []  # flat
+    pos = []
     fresh_ts = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
     working = [{
         "id": 1001, "contractId": "CON.F.US.TYA.M26",
@@ -602,8 +291,7 @@ def test_cleanup_skips_within_grace_period():
 
 
 def test_cleanup_cancels_orphan_past_grace():
-    """Cancel bracket leg older than grace period when position is flat."""
-    pos = []  # flat
+    pos = []
     old_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     working = [{
         "id": 2001, "contractId": "CON.F.US.TYA.M26",
@@ -619,7 +307,6 @@ def test_cleanup_cancels_orphan_past_grace():
 
 
 def test_cleanup_ignores_non_live_tags():
-    """Don't touch orders that aren't ours (no 'live_' prefix)."""
     pos = []
     old_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     working = [{
@@ -633,7 +320,6 @@ def test_cleanup_ignores_non_live_tags():
 
 
 def test_cleanup_handles_broker_fetch_failure():
-    """Cleanup doesn't crash if broker fetch fails."""
     class _BrokenClient:
         def get_positions(self, _): raise RuntimeError("network down")
         def get_working_orders(self, _): return []

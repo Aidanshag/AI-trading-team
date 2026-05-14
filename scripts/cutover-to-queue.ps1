@@ -80,7 +80,7 @@ try {
 $traderLog = Join-Path $ProjectRoot "logs\live_trader_queue.log"
 try {
     $trader = Start-Process -FilePath $Python `
-        -ArgumentList @("-u", "-m", "scripts.live_trader", "--use-queue") `
+        -ArgumentList @("-u", "-m", "scripts.live_trader") `
         -WorkingDirectory $ProjectRoot `
         -RedirectStandardOutput $traderLog `
         -RedirectStandardError ($traderLog + ".err") `

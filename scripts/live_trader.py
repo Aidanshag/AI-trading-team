@@ -36,7 +36,6 @@ Environment:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -44,9 +43,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-
-import pandas as pd
-import yaml
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -56,7 +52,6 @@ _HERE = Path(__file__).resolve().parent.parent
 os.chdir(_HERE)
 sys.path.insert(0, str(_HERE))
 
-from tools.backtest import strategies as strats  # noqa: E402
 from tools.projectx_client import (
     get_client, get_account_id, ProjectXError,  # noqa: E402
 )
@@ -109,7 +104,6 @@ SHADOW_ON_HALT = True             # 2026-05-12: when halt is active, continue sc
                                   # (~21h) instead of going dark. Shadow trades land in the
                                   # `shadow_trades` table and get resolved by
                                   # scripts/shadow_trade_resolver.py at next preflight.
-LIVE_ALLOWLIST_PATH = _HERE / "state" / "strategy_validation.json"
 HALT_FILE = _HERE / "state" / "live_trader_halt"   # touch to halt; remove to resume
 
 
@@ -189,230 +183,12 @@ from tools.unrealized_pnl import compute_unrealized  # noqa: E402
 
 
 # ────────────────────────────────────────────────────────────────
-# Brain interface — read live cells
+# Signal-risk + gate functions (LAST-MILE SAFETY FLOORS)
 # ────────────────────────────────────────────────────────────────
-
-def load_live_cells() -> list[dict]:
-    """Read the brain's validated allowlist."""
-    if not LIVE_ALLOWLIST_PATH.exists():
-        return []
-    try:
-        st = json.loads(LIVE_ALLOWLIST_PATH.read_text(encoding="utf-8"))
-        return st.get("live_allowlist") or []
-    except Exception:
-        return []
-
-
-def session_now_utc(now_utc: datetime) -> str:
-    """Map UTC to ET session bucket."""
-    et_hour = (now_utc.hour - 4 + now_utc.minute / 60.0) % 24
-    if 9.5 <= et_hour < 16:    return "RTH"
-    if 4 <= et_hour < 9.5:     return "London"
-    if 16 <= et_hour < 20:     return "PostClose"
-    return "Asian"
-
-
-# ────────────────────────────────────────────────────────────────
-# Bars + signals
-# ────────────────────────────────────────────────────────────────
-
-# fetch_bars extracted to tools/bar_fetcher.py 2026-05-08 (continuous trim).
-# Wrapper preserves call signature so scan_once doesn't change.
-from tools.bar_fetcher import fetch_bars as _fetch_bars_impl  # noqa: E402
-
-def fetch_bars(client, symbol: str, minutes: int = 5, lookback: int = 200):
-    return _fetch_bars_impl(client, symbol, minutes, lookback, log_fn=_log)
-
-
-def _load_calendar_events(symbol: str) -> list[dict]:
-    """Load HIGH/MEDIUM economic events affecting `symbol` from
-    vault/economic_calendar/*.json. Returns [{'ts': datetime, 'severity': str}].
-    Never raises; returns [] on any error or missing files. 2026-05-11."""
-    cal_dir = _HERE / "vault" / "economic_calendar"
-    if not cal_dir.exists():
-        return []
-    out: list[dict] = []
-    # 1. Fed speakers / Fed releases
-    fs = cal_dir / "fed_speakers.json"
-    if fs.exists():
-        try:
-            data = json.loads(fs.read_text(encoding="utf-8"))
-            for e in data.get("events", []) or []:
-                infl = str(e.get("influence", "")).upper()
-                if infl not in ("HIGH", "MEDIUM"):
-                    continue
-                ts = e.get("ts_utc")
-                if not ts:
-                    continue
-                try:
-                    dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-                except Exception:
-                    continue
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                out.append({"ts": dt, "severity": infl})
-        except Exception:
-            pass
-    # 2. Treasury auctions for this symbol
-    ta = cal_dir / "treasury_auctions.json"
-    if ta.exists():
-        try:
-            data = json.loads(ta.read_text(encoding="utf-8"))
-            for a in data.get("auctions", []) or []:
-                primary = a.get("affected_primary", []) or []
-                basis = a.get("affected_basis", []) or []
-                if symbol not in primary and symbol not in basis:
-                    continue
-                ts = a.get("auction_dt_et")
-                if not ts:
-                    continue
-                try:
-                    dt = datetime.fromisoformat(str(ts))
-                    if dt.tzinfo is None:
-                        # ET is UTC-4 in DST. Approximate; events span ±15min anyway.
-                        dt = dt.replace(tzinfo=timezone(timedelta(hours=-4)))
-                except Exception:
-                    continue
-                severity = "HIGH" if symbol in primary else "MEDIUM"
-                out.append({"ts": dt, "severity": severity})
-        except Exception:
-            pass
-    # 3. today.json (econ data prints — EIA, CPI, NFP, etc.)
-    tj = cal_dir / "today.json"
-    if tj.exists():
-        try:
-            raw = json.loads(tj.read_text(encoding="utf-8"))
-            events_iter = raw.get("events", []) if isinstance(raw, dict) else (raw or [])
-            for e in events_iter:
-                impact = str(e.get("impact", "")).lower()
-                if impact not in ("high", "medium"):
-                    continue
-                ts = e.get("ts_utc") or e.get("time_utc")
-                if not ts:
-                    continue
-                try:
-                    dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-                except Exception:
-                    continue
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                out.append({"ts": dt, "severity": impact.upper()})
-        except Exception:
-            pass
-    return out
-
-
-def news_proximity_for(symbol: str, now: datetime | None = None) -> str:
-    """Distance to nearest HIGH/MEDIUM economic event affecting `symbol`.
-    Returns 'inside' (±15 min of HIGH), 'near' (15-60 min of HIGH OR
-    ±60 min of MEDIUM), or 'clear' (otherwise). 2026-05-11.
-
-    Used to gate cells around scheduled-event volatility. Strategies like
-    vol_spike_fade can be tagged news_proximity=['near','inside'] for
-    surgical fire-only-near-news deployment.
-    """
-    if now is None:
-        now = _now_utc()
-    events = _load_calendar_events(symbol)
-    if not events:
-        return "clear"
-    closest_high = None
-    closest_med = None
-    for e in events:
-        try:
-            mins = abs((e["ts"] - now).total_seconds() / 60)
-        except Exception:
-            continue
-        if e["severity"] == "HIGH":
-            if closest_high is None or mins < closest_high:
-                closest_high = mins
-        elif e["severity"] == "MEDIUM":
-            if closest_med is None or mins < closest_med:
-                closest_med = mins
-    if closest_high is not None and closest_high <= 15:
-        return "inside"
-    if (closest_high is not None and closest_high <= 60) or \
-       (closest_med is not None and closest_med <= 60):
-        return "near"
-    return "clear"
-
-
-def current_regime(bars: pd.DataFrame,
-                    vol_lookback: int = 14, vol_ref_window: int = 100,
-                    trend_lookback: int = 14, trend_ref_window: int = 100,
-                    symbol: str | None = None) -> dict:
-    """Compute the current vol+trend regime of the latest bar.
-
-    Mirrors `scripts/regime_classifier.py` logic but computes inline so
-    the trader doesn't need to read a stale per-day tag file.
-
-    Returns:
-        {'vol_regime': 'low'|'med'|'high',
-         'trend_regime': 'trending'|'ranging',
-         'news_proximity': 'clear'|'near'|'inside'}     # if symbol provided
-    Returns {} if bars too short to classify.
-    """
-    if len(bars) < max(vol_ref_window, trend_ref_window) + vol_lookback:
-        return {}
-    try:
-        # Vol regime: 14-bar realized vol vs 100-bar median
-        returns = bars["Close"].pct_change()
-        realized = returns.rolling(vol_lookback).std() * (252 * 78) ** 0.5
-        median = realized.rolling(vol_ref_window, min_periods=20).median()
-        last_realized = float(realized.iloc[-1])
-        last_median = float(median.iloc[-1])
-        if pd.isna(last_realized) or pd.isna(last_median) or last_median == 0:
-            vol_regime = "med"
-        elif last_realized < 0.7 * last_median:
-            vol_regime = "low"
-        elif last_realized > 1.4 * last_median:
-            vol_regime = "high"
-        else:
-            vol_regime = "med"
-        # Trend regime: 14-bar range vs 100-bar mean range
-        rng = (bars["High"] - bars["Low"]).rolling(trend_lookback).mean()
-        mean_rng = rng.rolling(trend_ref_window, min_periods=20).mean()
-        last_rng = float(rng.iloc[-1])
-        last_mean = float(mean_rng.iloc[-1])
-        if pd.isna(last_rng) or pd.isna(last_mean) or last_mean == 0:
-            trend_regime = "ranging"
-        elif last_rng > 1.3 * last_mean:
-            trend_regime = "trending"
-        else:
-            trend_regime = "ranging"
-    except Exception:
-        return {}
-    result = {"vol_regime": vol_regime, "trend_regime": trend_regime}
-    if symbol:
-        try:
-            result["news_proximity"] = news_proximity_for(symbol)
-        except Exception:
-            pass
-    return result
-
-
-def cell_passes_regime_filter(cell: dict, regime: dict) -> tuple[bool, str]:
-    """Check if current regime matches the cell's optional regime_filter.
-
-    Cells can declare a `regime_filter` dict like:
-        {"vol_regime": ["high"], "trend_regime": ["trending", "ranging"]}
-    A cell passes iff EVERY declared key matches one of its allowed values.
-    Cells with no `regime_filter` always pass (backward-compatible).
-
-    2026-05-11: enables surgical deployment of volatility-aware strategies
-    (keltner_breakout, vol_spike_fade) so they fire only in their target
-    regime, not on every signal.
-    """
-    cell_filter = cell.get("regime_filter")
-    if not cell_filter:
-        return True, ""
-    if not regime:
-        # If we couldn't compute regime, fail-closed: don't fire restricted cells
-        return False, "regime unknown"
-    for key, allowed in cell_filter.items():
-        if regime.get(key) not in allowed:
-            return False, f"{key}={regime.get(key)} not in {allowed}"
-    return True, ""
+# All BRAIN logic (load_live_cells, session_now_utc, current_regime,
+# cell_passes_regime_filter, news_proximity_for, find_latest_signal,
+# fetch_bars) moved to tools/brain_logic.py + scripts/brain_signaler.py
+# on 2026-05-13 per the standing rule "trader places, brain decides."
 
 
 def compute_signal_risk_usd(sig: dict, symbol: str, qty: int = 1) -> float | None:
@@ -530,55 +306,6 @@ def signal_passes_min_r_gate(sig: dict, symbol: str,
     if target_ticks < min_r_ticks:
         return False, (f"target too close ({target_ticks:.1f}t < {min_r_ticks}t min)")
     return True, ""
-
-
-def find_latest_signal(bars: pd.DataFrame, strategy_fn,
-                        symbol: str | None = None) -> dict | None:
-    """Run strategy on bars, return the most recent entry signal in
-    the last LOOKBACK_BARS bars (ignore stale).
-
-    2026-05-11: when `symbol` is provided AND the strategy accepts a
-    `tick_size` keyword, the symbol's tick_size is auto-injected. This
-    activates floor-the-stop logic (min_stop_ticks) inside strategies
-    like `gap_fill` / `gap_fill_wide` so they refuse to emit degenerate
-    sub-tick-stop signals at the strategy layer. The trader-side
-    MIN_SIGNAL_R_TICKS gate remains as defense-in-depth.
-    """
-    import inspect
-    if len(bars) < 30:
-        return None
-    cutoff_idx = max(0, len(bars) - LOOKBACK_BARS)
-    cutoff = bars.index[cutoff_idx]
-    # Build a callable that optionally injects tick_size for strategies
-    # that accept it. Cheap to do per-call; no state side effects.
-    call = strategy_fn
-    if symbol is not None:
-        try:
-            sig_params = inspect.signature(strategy_fn).parameters
-            if "tick_size" in sig_params:
-                tick = _tick_size(symbol)
-                if tick > 0:
-                    call = lambda b, _f=strategy_fn, _t=tick: _f(b, tick_size=_t)
-        except (TypeError, ValueError):
-            pass
-    latest = None
-    try:
-        for sig in call(bars):
-            if sig.kind != "entry":
-                continue
-            if sig.date >= cutoff:
-                latest = sig
-    except Exception:
-        return None
-    if latest is None:
-        return None
-    return {
-        "date": latest.date, "side": latest.side,
-        "price": float(latest.price),
-        "stop": float(latest.stop) if latest.stop is not None else None,
-        "target": float(latest.target) if latest.target is not None else None,
-        "reason": latest.reason,
-    }
 
 
 # ────────────────────────────────────────────────────────────────
@@ -1029,257 +756,13 @@ def recent_thesis_for(symbol: str, minutes: int = SAME_SYMBOL_COOLDOWN_MIN) -> b
 
 
 # ────────────────────────────────────────────────────────────────
-# Main scan loop
+# Main scan loop — queue consumer
 # ────────────────────────────────────────────────────────────────
-
-def scan_once(*, dry_run: bool = False, paper: bool = False) -> dict:
-    """One scan pass: snapshot, gates, signal-detect, place.
-
-    2026-05-12: when halt is active AND `SHADOW_ON_HALT=True`, continue
-    scanning and record what would have been placed as shadow trades.
-    No broker calls; just validation-data accumulation."""
-    summary = {"scanned": 0, "triggers": 0, "placed": 0, "blocked": 0,
-               "skipped_in_trade": 0, "skipped_cooldown": 0, "errors": 0,
-               "shadow": 0}
-    halted, reason = is_halted()
-    shadow_only = halted and SHADOW_ON_HALT and not paper
-    if halted and not shadow_only:
-        _log(f"HALTED: {reason}")
-        return {"status": "halted", "reason": reason}
-    if shadow_only:
-        _log(f"HALTED (shadow mode active — no broker writes): {reason}")
-
-    # Sunday-reopen first-30-min blackout: skip new entries when spreads are widest.
-    # Snapshots + cleanup still run; we just don't place new trades.
-    if is_sunday_reopen_blackout(_now_utc()):
-        _log("Sunday-reopen blackout (17:00-17:30 ET): skipping new entries this scan")
-        return {"status": "sunday_reopen_blackout"}
-
-    try:
-        client = get_client()
-        account_id = get_account_id()
-    except Exception as e:
-        _log(f"broker unavailable: {e}")
-        return {"status": "broker_unavailable", "error": str(e)}
-
-    snap = capture_snapshot(client, account_id)
-    if snap and not snap.get("can_trade", True):
-        _log(f"can_trade=false; halt scan")
-        return {"status": "broker_can_trade_false"}
-
-    # DLL hard kill
-    if snap:
-        breached, why = dll_breached(snap)
-        if breached:
-            _log(f"DLL BREACH: {why}")
-            return {"status": "dll_halt", "reason": why}
-
-    # 3:10 PM CT hard-flatten enforcement (Topstep Combine + XFA rule).
-    # Must run BEFORE entry/exit logic so the deadline is honored even
-    # if signals fire. See tools/hard_flatten_clock.py for window logic.
-    if not dry_run and not paper:
-        from tools.hard_flatten_clock import (enforce_hard_flatten,
-                                                should_block_new_entries)
-        _hf_result = enforce_hard_flatten(client, account_id, log_fn=_log)
-        if _hf_result["flattened"] or _hf_result["cancelled"]:
-            _log(f"  HARD_FLATTEN window={_hf_result['window']}: "
-                  f"flattened {len(_hf_result['flattened'])} position(s), "
-                  f"cancelled {_hf_result['cancelled']} order(s)")
-        if should_block_new_entries():
-            _log(f"  Within 3:10 PM CT closing window — blocking new entries this scan")
-            return {"status": "hard_flatten_window", **_hf_result}
-
-    # Per-trade loss-cap enforcement + trailing-profit-lock + daily cap
-    if not dry_run and not paper:
-        enforce_loss_cap(client, account_id)
-        # 2026-05-12: periodic protection sweep — verify each open position
-        # still has a working broker stop. Catches stops that the broker
-        # cancelled mid-session (session-end cleanup, server error, etc.).
-        # Complements `_verify_stop_landed` which only checks at placement.
-        from tools.position_protection import sweep as _protection_sweep
-        _protection_sweep(client, account_id, log_fn=_log)
-        # 2026-05-11 evening: with SKIP_TARGET_LEG=True, the broker doesn't
-        # auto-take profit (no target leg). This call provides software-side
-        # take-profit via the trailing-profit-lock + hard-cap rules in
-        # tools/profit_protect.py. See module docstring for tier definitions.
-        from tools.profit_protect import check_and_close as _profit_lock_check
-        _profit_lock_check(client, account_id, log_fn=_log)
-        # 2026-05-12: daily-profit cap (Combine-only). Caps a single day's
-        # gains to keep the 50% consistency rule satisfied. Auto-disabled
-        # when account_stage != combine (see config/account_stage.yaml).
-        from tools.account_stage import (combine_daily_profit_cap_usd,
-                                          daily_window_reset_hour_ct)
-        from tools.daily_profit_cap import check_and_enforce as _profit_cap_check
-        _cap = combine_daily_profit_cap_usd()
-        # Skip cap check under shadow_only — halt is already active that
-        # was caused by the cap; re-running would just spam the log.
-        if _cap is not None and not shadow_only:
-            def _set_halt_to(dt_utc):
-                # Use the same halt mechanism as scripts/halt.py: text-edits
-                # config/risk_limits.yaml's trading_halt_until line (preserving
-                # comments). _write_halt is module-private but we use it here
-                # to avoid duplicating the regex-edit logic.
-                from scripts.halt import _write_halt
-                _write_halt(dt_utc, reason="daily_profit_cap")
-            _cap_result = _profit_cap_check(
-                client, account_id, cap_usd=_cap,
-                reset_hour_ct=daily_window_reset_hour_ct(),
-                log_fn=_log, halt_setter=_set_halt_to,
-            )
-            # 2026-05-12 hotfix: if the cap triggered THIS scan, the halt was
-            # just set but is_halted() at the top of scan_once already ran
-            # before the halt was written. Short-circuit the rest of this
-            # scan so we don't accidentally place new entries between the
-            # cap firing and the next scan's halt-check.
-            if _cap_result.get("triggered"):
-                return {"status": "daily_profit_cap_hit", **_cap_result}
-        cleanup_orphan_brackets(client, account_id)
-
-    # Cells to scan
-    cells = load_live_cells()
-    if not cells:
-        _log(f"no live cells in allowlist; skipping")
-        return {"status": "no_cells"}
-
-    sess_now = session_now_utc(_now_utc())
-    # Group cells by symbol so we fetch bars once per symbol
-    cells_by_symbol: dict[str, list[dict]] = {}
-    for c in cells:
-        cells_by_symbol.setdefault(c["symbol"], []).append(c)
-
-    syms = sorted(cells_by_symbol.keys())
-    _log(f"scanning {len(syms)} symbols (session={sess_now}): {syms}")
-
-    # Open contract count — bound concurrent trades
-    open_pos = (snap.get("open_contracts_total") or 0) if snap else 0
-    if open_pos > 0:
-        _log(f"  {open_pos} open contracts; skipping new entries")
-        return {"status": "in_position", **summary}
-
-    # Daily trade cap
-    today_count = todays_trade_count()
-    if today_count >= MAX_TRADES_PER_DAY:
-        _log(f"  daily trade cap hit ({today_count}/{MAX_TRADES_PER_DAY}); halt for today")
-        return {"status": "daily_cap_hit", "today_count": today_count, **summary}
-
-    for symbol in syms:
-        # Cooldown check
-        if recent_thesis_for(symbol):
-            summary["skipped_cooldown"] += 1
-            continue
-
-        # Pull bars once per symbol
-        bars = fetch_bars(client, symbol)
-        if bars is None or len(bars) < 30:
-            continue
-
-        # Current vol+trend regime (+ news_proximity for this symbol)
-        regime = current_regime(bars, symbol=symbol)
-
-        # For each cell, check session+side match and try to fire
-        fired_for_symbol = False
-        for cell in cells_by_symbol[symbol]:
-            if fired_for_symbol:
-                break
-            if cell.get("session") != sess_now:
-                continue
-            # Regime filter (2026-05-11): cells with `regime_filter` only fire
-            # when current regime matches. No filter → cell always passes.
-            ok_regime, regime_reason = cell_passes_regime_filter(cell, regime)
-            if not ok_regime:
-                summary.setdefault("skipped_regime", 0)
-                summary["skipped_regime"] += 1
-                continue
-            strat_name = cell.get("strategy")
-            strat_fn = getattr(strats, strat_name, None)
-            if strat_fn is None:
-                continue
-            sig = find_latest_signal(bars, strat_fn, symbol=symbol)
-            summary["scanned"] += 1
-            if sig is None:
-                continue
-            if sig.get("stop") is None:
-                continue
-            # Side must match the cell
-            sig_side = str(sig.get("side", "")).lower()
-            if sig_side != cell.get("side"):
-                continue
-            ok, reason = signal_passes_min_r_gate(sig, symbol)
-            if not ok:
-                _log(f"  {symbol} {strat_name} {sig_side} signal rejected: {reason}")
-                summary["blocked"] += 1
-                continue
-            ok, reason = signal_passes_max_risk_gate(sig, symbol, qty=1)
-            if not ok:
-                _log(f"  {symbol} {strat_name} {sig_side} signal rejected: {reason}")
-                summary["blocked"] += 1
-                continue
-            # Defensive-ladder projection: would this trade's worst-case
-            # loss push day P&L past the internal DLL lockdown? Block
-            # pre-placement if so, rather than letting it fire and trip
-            # dll_breached on the next scan.
-            if snap:
-                signal_risk = compute_signal_risk_usd(sig, symbol, qty=1)
-                if signal_risk is not None:
-                    breach, breach_why = projected_dll_breach(snap, signal_risk)
-                    if breach:
-                        _log(f"  {symbol} {strat_name} {sig_side} signal "
-                              f"rejected: {breach_why}")
-                        summary["blocked"] += 1
-                        continue
-            summary["triggers"] += 1
-            # Place bracket — OR record shadow if halted/paper
-            try:
-                if shadow_only:
-                    # Halted but shadow-mode active: record the trigger to the
-                    # shadow_trades table so we can validate hypothetical
-                    # performance during the halt window. Resolved later by
-                    # scripts/shadow_trade_resolver.py.
-                    try:
-                        tick_v = _tick_size(symbol)
-                        risk_usd = None
-                        if sig.get("stop") is not None:
-                            risk_ticks = abs(float(sig["price"]) - float(sig["stop"])) / tick_v
-                            risk_usd = risk_ticks * (
-                                {"GC": 10.0, "NG": 10.0, "ZN": 15.625, "ZB": 31.25,
-                                 "ZT": 15.625, "ZF": 7.8125, "MNQ": 0.5, "MES": 1.25,
-                                 "MCL": 1.0, "6E": 6.25, "6B": 6.25, "6C": 10.0
-                                }.get(symbol, 1.0)
-                            )
-                        get_db().record_shadow_trade(
-                            agent="live_trader",
-                            symbol=symbol, strategy=strat_name, side=sig_side,
-                            entry_price=float(sig["price"]),
-                            stop_price=float(sig["stop"]),
-                            target_price=float(sig.get("target") or sig["price"]),
-                            shadow_reason="halt_active",
-                            risk_usd=risk_usd,
-                            notes=f"halt_reason={reason}",
-                        )
-                        _log(f"  SHADOW recorded: {symbol} {strat_name} {sig_side} "
-                              f"@ {sig['price']} stop={sig['stop']} "
-                              f"target={sig.get('target')} risk≈${risk_usd}")
-                        summary["shadow"] += 1
-                    except Exception as e:
-                        _log(f"  shadow record failed: {e}")
-                        summary["errors"] += 1
-                elif paper:
-                    _log(f"  PAPER: would place {symbol} {strat_name} {sig_side} "
-                          f"@ {sig['price']} stop={sig['stop']} target={sig.get('target')}")
-                    summary["placed"] += 1
-                else:
-                    result = place_bracket(client, account_id, symbol, sig, dry_run=dry_run)
-                    if result.get("status") in ("submitted", "dry_run"):
-                        summary["placed"] += 1
-                    else:
-                        summary["errors"] += 1
-                fired_for_symbol = True
-            except Exception as e:
-                _log(f"  place_bracket exception: {e}")
-                summary["errors"] += 1
-
-    _log(f"  summary: {summary}")
-    return summary
+# The brain (scripts/brain_signaler.py) emits signals to
+# state/pending_signals.json. This trader reads them, applies
+# last-mile safety gates, and places brackets. The legacy
+# scan_once strategy-execution path was deleted 2026-05-13 as part
+# of the brain/trader split.
 
 
 def consume_pending_signals(*, dry_run: bool = False,
@@ -1482,31 +965,22 @@ def _position_polling_loop(stop_event, dry_run: bool, paper: bool,
 def main() -> int:
     p = argparse.ArgumentParser(prog="live_trader")
     p.add_argument("--once", action="store_true", help="single scan + exit")
-    p.add_argument("--dry-run", action="store_true", help="signals + decisions, no orders")
-    p.add_argument("--paper", action="store_true", help="paper-mode (no broker orders)")
-    p.add_argument("--use-queue", action="store_true",
-                   help="consume pre-computed signals from state/pending_signals.json "
-                        "(brain/trader split). When off, runs strategies directly "
-                        "(legacy path).")
+    p.add_argument("--dry-run", action="store_true",
+                   help="consume signals + apply gates, no broker orders")
+    p.add_argument("--paper", action="store_true",
+                   help="paper-mode (no broker orders)")
     p.add_argument("--interval", type=int, default=SCAN_INTERVAL_SEC)
     args = p.parse_args()
 
     if os.environ.get("FUND_MODE", "live").lower() == "paper":
         args.paper = True
 
-    # FUND_USE_QUEUE=1 env var also enables queue mode (for scheduled tasks)
-    if os.environ.get("FUND_USE_QUEUE", "").lower() in ("1", "true", "yes"):
-        args.use_queue = True
-
-    scan_fn = (consume_pending_signals if args.use_queue else scan_once)
-
     if args.once:
-        scan_fn(dry_run=args.dry_run, paper=args.paper)
+        consume_pending_signals(dry_run=args.dry_run, paper=args.paper)
         return 0
 
     _log(f"=== live_trader started: interval={args.interval}s, "
-          f"dry_run={args.dry_run}, paper={args.paper}, "
-          f"use_queue={args.use_queue} ===")
+          f"dry_run={args.dry_run}, paper={args.paper} ===")
 
     # Sub-minute position polling thread for the per-trade loss cap.
     import threading
@@ -1526,7 +1000,7 @@ def main() -> int:
     try:
         while True:
             try:
-                scan_fn(dry_run=args.dry_run, paper=args.paper)
+                consume_pending_signals(dry_run=args.dry_run, paper=args.paper)
             except KeyboardInterrupt:
                 _log("interrupted; exiting")
                 return 0
