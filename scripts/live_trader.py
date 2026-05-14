@@ -63,15 +63,15 @@ from state.db import get_db  # noqa: E402
 # ────────────────────────────────────────────────────────────────
 
 SCAN_INTERVAL_SEC = 300          # 5-minute cadence
-POSITION_POLL_SEC = 30            # sub-minute poll for per-trade cap / trailing-lock.
-                                  # 2026-05-13 fix: the previous "$150 per-trade cap"
-                                  # fired only on the 5-min scan tick. A position could
-                                  # blow past the cap in thin tape before the next scan
-                                  # — the 2026-05-12 GC long went from +$70 to −$210
-                                  # in a single scan window, then to −$640 by the next.
-                                  # A separate background thread now polls
-                                  # tools/profit_protect.check_and_close every 30s so
-                                  # the cap fires within ~30s of being exceeded.
+POSITION_POLL_SEC = 10            # sub-minute poll for per-trade cap / trailing-lock.
+                                  # 2026-05-13: 30s initial setting after extracting
+                                  # the polling thread from the 5-min scan loop.
+                                  # 2026-05-14: tightened to 10s after user audit of
+                                  # fast-tape slippage risk. Trade-off: 3× more broker
+                                  # get_positions calls but rate limits are generous
+                                  # on the read path, and a 10s worst-case detection
+                                  # window is meaningfully better than 30s for
+                                  # catching fast moves before the broker stop fires.
 LOOKBACK_BARS = 6                 # find_latest_signal cutoff (30 min on 5m bars)
 PER_TRADE_LOSS_CAP_USD = 150.0    # force-close if unrealized < -this
 SAME_SYMBOL_COOLDOWN_MIN = 45     # don't re-fire same symbol within window

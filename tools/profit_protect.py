@@ -124,15 +124,33 @@ def _strip_exchange_suffix(sym: str) -> str:
 # ── Tick economics (kept lightweight; mirrors live_trader fallback) ─
 
 _TICK_ECONOMICS: dict[str, tuple[float, float]] = {
+    # Rates
     "ZN": (0.015625, 15.625), "ZB": (0.03125, 31.25),
     "ZT": (0.0078125, 15.625), "ZF": (0.0078125, 7.8125),
-    "NG": (0.001, 10.0),
-    "GC": (0.10, 10.0), "SI": (0.005, 25.0), "HG": (0.0005, 12.5),
-    "MES": (0.25, 1.25), "MNQ": (0.25, 0.50),
-    "ES": (0.25, 12.50), "NQ": (0.25, 5.00),
-    "MCL": (0.01, 1.00), "CL": (0.01, 10.00),
+    "UB": (0.03125, 31.25),
+    # Energies
+    "NG": (0.001, 10.0), "MNG": (0.005, 1.25), "QG": (0.005, 12.50),
+    "CL": (0.01, 10.0), "MCL": (0.01, 1.0),
+    "RB": (0.0001, 4.20), "HO": (0.0001, 4.20),
+    # Metals — 2026-05-14 fix: MGC was missing, broke profit-lock for the
+    # MGC short opened 2026-05-14 01:05 UTC.
+    "GC": (0.10, 10.0), "MGC": (0.10, 1.0),
+    "SI": (0.005, 25.0), "SIL": (0.005, 5.0),
+    "HG": (0.0005, 12.5), "MHG": (0.0005, 1.25),
+    "PL": (0.10, 5.0),
+    # Equity index
+    "ES": (0.25, 12.50), "MES": (0.25, 1.25),
+    "NQ": (0.25, 5.00), "MNQ": (0.25, 0.50),
+    "RTY": (0.10, 5.00), "M2K": (0.10, 0.50),
+    "YM": (1.00, 5.00),  "MYM": (0.50, 0.50),
+    "NKD": (5.00, 25.00),
+    # FX futures
     "6E": (0.00005, 6.25), "6B": (0.0001, 6.25),
     "6J": (0.0000005, 6.25), "6A": (0.0001, 10.00), "6C": (0.0001, 10.00),
+    # Grains / livestock (sector: ag)
+    "ZC": (0.0025, 12.50), "ZS": (0.0025, 12.50),
+    "ZW": (0.0025, 12.50), "ZL": (0.0001, 6.00), "ZM": (0.10, 10.0),
+    "LE": (0.025, 10.0), "HE": (0.025, 10.0),
 }
 
 
@@ -177,6 +195,12 @@ def decide(unrealized: float, prev_peak: float,
 def _unrealized_usd(side: str, size: int, avg_price: float,
                      last_price: float, tick_size: float,
                      tick_value: float) -> float:
+    if tick_size <= 0 or tick_value <= 0:
+        # Pattern A defense: missing tick economics MUST NOT silently return 0
+        # (would blind profit-lock to a real bleeding position). Raise so the
+        # outer check_and_close logs the error and skips the position.
+        raise ValueError(f"missing tick economics: tick_size={tick_size} "
+                          f"tick_value={tick_value}")
     move = (last_price - avg_price) if side == "long" else (avg_price - last_price)
     ticks = move / tick_size
     return ticks * tick_value * abs(size)
