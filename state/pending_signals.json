@@ -1,20 +1,3 @@
 {
-  "signals": [
-    {
-      "id": "f37b897efdc046b99f71ef30d1aab295",
-      "emitted_at": "2026-05-14T00:32:56+00:00",
-      "expires_at": "2026-05-14T00:35:56+00:00",
-      "symbol": "GC",
-      "side": "short",
-      "entry_price": 4698.5,
-      "stop_price": 4708.007142857143,
-      "target_price": 4674.732142857143,
-      "qty": 1,
-      "strategy": "fair_value_gap_tuned",
-      "session": "Asian",
-      "cell_key": "fair_value_gap_tuned|GC|Asian|short",
-      "shadow_only": false,
-      "notes": "reason=fvg_bear_mitigation gap=[4706.20,4707.30] age=7"
-    }
-  ]
+  "signals": []
 }
