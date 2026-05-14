@@ -1,9 +1,25 @@
 {
   "signals": [
     {
-      "id": "06a0fbaa043f4896809899f3018e207b",
-      "emitted_at": "2026-05-14T01:21:04+00:00",
-      "expires_at": "2026-05-14T01:24:04+00:00",
+      "id": "e0677e8d4d5c4bf599621759c260fdf5",
+      "emitted_at": "2026-05-14T01:28:21+00:00",
+      "expires_at": "2026-05-14T01:31:21+00:00",
+      "symbol": "MNQ",
+      "side": "long",
+      "entry_price": 29670.25,
+      "stop_price": 29649.491071428572,
+      "target_price": 29722.14732142857,
+      "qty": 1,
+      "strategy": "fair_value_gap_tuned",
+      "session": "Asian",
+      "cell_key": "fair_value_gap_tuned|MNQ|Asian|long",
+      "shadow_only": false,
+      "notes": "reason=fvg_bull_mitigation gap=[29654.50,29661.50] age=9"
+    },
+    {
+      "id": "78ef709a5d57423c9395701c1e6cdcd8",
+      "emitted_at": "2026-05-14T01:28:22+00:00",
+      "expires_at": "2026-05-14T01:31:22+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4695.4,
@@ -17,9 +33,9 @@
       "notes": "experimental; reason=fvg_bear_mitigation gap=[4699.50,4700.90] age=1"
     },
     {
-      "id": "ea152360b73d4fcba6b38814105aa542",
-      "emitted_at": "2026-05-14T01:21:05+00:00",
-      "expires_at": "2026-05-14T01:24:05+00:00",
+      "id": "ed9bb968718741a2b4fdc093cb11dec0",
+      "emitted_at": "2026-05-14T01:28:23+00:00",
+      "expires_at": "2026-05-14T01:31:23+00:00",
       "symbol": "MGC",
       "side": "short",
       "entry_price": 4695.1,

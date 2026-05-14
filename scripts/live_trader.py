@@ -74,7 +74,12 @@ POSITION_POLL_SEC = 10            # sub-minute poll for per-trade cap / trailing
                                   # catching fast moves before the broker stop fires.
 LOOKBACK_BARS = 6                 # find_latest_signal cutoff (30 min on 5m bars)
 PER_TRADE_LOSS_CAP_USD = 150.0    # force-close if unrealized < -this
-SAME_SYMBOL_COOLDOWN_MIN = 45     # don't re-fire same symbol within window
+SAME_SYMBOL_COOLDOWN_MIN = 45     # default — don't re-fire same symbol within window
+SAME_SYMBOL_COOLDOWN_OVERRIDES = {  # per-symbol overrides 2026-05-14: smaller-risk
+                                      # contracts (micros) get tighter cooldowns since
+                                      # the dollar-per-trade ceiling is lower.
+    "MGC": 15,                       # micro gold — 1/10 risk of GC, fire 3× more often
+}
 MAX_TRADES_PER_DAY = 8            # hard cap on entries per UTC day
 MIN_SIGNAL_R_TICKS = 6            # reject signals whose stop OR target distance is < N ticks
                                   # (rationale: place_bracket adds a 5-tick marketable-limit
@@ -376,7 +381,11 @@ def cleanup_orphan_brackets(client, account_id) -> int:
 from tools.trade_state import recent_thesis_for as _recent_thesis_for_impl  # noqa: E402
 from tools.trade_state import todays_trade_count  # noqa: E402
 
-def recent_thesis_for(symbol: str, minutes: int = SAME_SYMBOL_COOLDOWN_MIN) -> bool:
+def recent_thesis_for(symbol: str, minutes: int | None = None) -> bool:
+    """Per-symbol cooldown check. Uses SAME_SYMBOL_COOLDOWN_OVERRIDES[symbol]
+    if defined, else SAME_SYMBOL_COOLDOWN_MIN, else the explicit `minutes` arg."""
+    if minutes is None:
+        minutes = SAME_SYMBOL_COOLDOWN_OVERRIDES.get(symbol, SAME_SYMBOL_COOLDOWN_MIN)
     return _recent_thesis_for_impl(symbol, minutes)
 
 
