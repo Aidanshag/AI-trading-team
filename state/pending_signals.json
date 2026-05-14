@@ -1,9 +1,25 @@
 {
   "signals": [
     {
-      "id": "fe910495421c4c65b159a35f2c13b033",
-      "emitted_at": "2026-05-14T04:48:05+00:00",
-      "expires_at": "2026-05-14T04:51:05+00:00",
+      "id": "be374f349243414c9056cac39b21f5d0",
+      "emitted_at": "2026-05-14T05:01:50+00:00",
+      "expires_at": "2026-05-14T05:04:50+00:00",
+      "symbol": "GC",
+      "side": "short",
+      "entry_price": 4709.2,
+      "stop_price": 4712.9,
+      "target_price": 4696.7,
+      "qty": 1,
+      "strategy": "narrow_range_break",
+      "session": "Asian",
+      "cell_key": "narrow_range_break|GC|Asian|short",
+      "shadow_only": true,
+      "notes": "experimental; reason=nr7_break_short"
+    },
+    {
+      "id": "2246d90930374ab69dbfb2c16cdda632",
+      "emitted_at": "2026-05-14T05:01:51+00:00",
+      "expires_at": "2026-05-14T05:04:51+00:00",
       "symbol": "6E",
       "side": "short",
       "entry_price": 1.17315,
@@ -17,36 +33,20 @@
       "notes": "reason=fvg_bear_mitigation gap=[1.17,1.17] age=1"
     },
     {
-      "id": "35aa47193f0f4e8db79f75cc205f47c5",
-      "emitted_at": "2026-05-14T04:48:06+00:00",
-      "expires_at": "2026-05-14T04:51:06+00:00",
+      "id": "32392acd1f1c4bab8f6061cf373de9c1",
+      "emitted_at": "2026-05-14T05:01:52+00:00",
+      "expires_at": "2026-05-14T05:04:52+00:00",
       "symbol": "MGC",
-      "side": "long",
-      "entry_price": 4697.5,
-      "stop_price": 4687.4,
-      "target_price": 4709.114285714286,
+      "side": "short",
+      "entry_price": 4709.2,
+      "stop_price": 4712.7,
+      "target_price": 4696.685714285714,
       "qty": 1,
       "strategy": "narrow_range_break",
       "session": "Asian",
-      "cell_key": "narrow_range_break|MGC|Asian|long",
+      "cell_key": "narrow_range_break|MGC|Asian|short",
       "shadow_only": false,
-      "notes": "reason=nr7_break_long"
-    },
-    {
-      "id": "58c8bc80956a4abab07f287b3ee51c99",
-      "emitted_at": "2026-05-14T04:49:07+00:00",
-      "expires_at": "2026-05-14T04:52:07+00:00",
-      "symbol": "GC",
-      "side": "long",
-      "entry_price": 4697.4,
-      "stop_price": 4687.5,
-      "target_price": 4708.885714285714,
-      "qty": 1,
-      "strategy": "narrow_range_break",
-      "session": "Asian",
-      "cell_key": "narrow_range_break|GC|Asian|long",
-      "shadow_only": true,
-      "notes": "experimental; reason=nr7_break_long"
+      "notes": "reason=nr7_break_short"
     }
   ]
 }

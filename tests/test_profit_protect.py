@@ -149,11 +149,20 @@ class _FakeClient:
         self._positions = positions
         self._bars = bars_by_symbol
         self.placed: list[dict] = []
+        self.closed_contracts: list[str] = []
     def get_positions(self, account_id):
         return self._positions
     def place_order(self, **kwargs):
         self.placed.append(kwargs)
-        return {"orderId": 999}
+        return {"orderId": 999, "success": True}
+    def close_position(self, account_id, contract_id):
+        # 2026-05-14: profit-lock + loss-cap now use this endpoint instead
+        # of place_order(market-IOC) — broker rejects market-IOC because
+        # type=1 in Topstep's schema means LIMIT not MARKET.
+        self.closed_contracts.append(contract_id)
+        return {"success": True, "errorCode": 0, "errorMessage": None}
+    def get_working_orders(self, account_id):
+        return []
 
 
 def _fake_fetch(client, symbol, minutes, lookback):
@@ -203,7 +212,8 @@ def test_check_and_close_closes_runaway_after_retracement():
     assert len(closed) == 1
     assert closed[0]["unrealized"] <= 1100
     assert "trailing_lock" in closed[0]["reason"]
-    assert client.placed[0]["order_type"] == "market"
+    # 2026-05-14: closes now go through close_position endpoint, not place_order
+    assert client.closed_contracts == ["CON.F.US.GCE.M26"]
 
 
 def test_check_and_close_locks_breakeven_after_30_peak():
@@ -224,6 +234,8 @@ def test_check_and_close_locks_breakeven_after_30_peak():
     closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
     assert len(closed) == 1
     assert "trailing_lock" in closed[0]["reason"]
+    # 2026-05-14: closes now go through close_position endpoint
+    assert client.closed_contracts == ["CON.F.US.GCE.M26"]
 
 
 def test_check_and_close_short_position_math():

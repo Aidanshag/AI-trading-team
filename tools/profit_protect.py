@@ -590,20 +590,27 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
             # Strategies emit a target_price on every signal. We don't
             # place a broker target leg due to the 5/11 auto-fill anomaly,
             # so honor it in software: when unrealized hits the target
-            # value, market-close immediately. This harvests wins at the
-            # strategy's own prediction instead of waiting for trailing-
-            # lock retrace (which has polling-latency slippage).
+            # value, close immediately via close_position (NOT
+            # place_order market-IOC — that path is broken at the broker,
+            # rejects with "limit price not set" because type=1 maps to
+            # LIMIT not MARKET in Topstep's actual schema. 2026-05-14).
             target_usd = _target_usd_by_contract.get(contract_id)
             if target_usd is not None and unrealized >= target_usd:
-                opposite_side = "sell" if side == "long" else "buy"
-                cid = f"target_{int(time.time())}_{uuid.uuid4().hex[:6]}"
                 try:
-                    client.place_order(
-                        account_id=account_id, contract_id=contract_id,
-                        side=opposite_side, qty=int(size),
-                        order_type="market", time_in_force="ioc",
-                        client_order_id=cid,
-                    )
+                    result = client.close_position(account_id, contract_id)
+                    if isinstance(result, dict) and result.get("success") is False:
+                        err = result.get("errorMessage") or "broker rejected"
+                        log(f"  target_hit close REJECTED for {contract_id}: {err}")
+                        try:
+                            from tools.alert import send_alert as _alert
+                            _alert(
+                                f"CRITICAL: target-hit close REJECTED for "
+                                f"{symbol}: {err}. Position still OPEN.",
+                                level="crit",
+                            )
+                        except Exception:
+                            pass
+                        continue
                     log(f"  TARGET_HIT: {symbol} {side} {size}ct "
                          f"unrealized=${unrealized:+.2f} target=${target_usd:.0f}")
                     try:
@@ -715,15 +722,26 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                          f"{type(e).__name__}: {e}")
                     # Fall through to mechanical close below
 
-            # ── Mechanical market-close ──
-            opposite = "sell" if side == "long" else "buy"
-            cid = f"profitlock_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+            # ── Mechanical close via native close_position endpoint ──
+            # 2026-05-14: switched from place_order(market-IOC) which the
+            # broker silently rejects with "limit price not set" (the
+            # market-type code 1 is actually LIMIT in Topstep's schema).
             try:
-                client.place_order(
-                    account_id=account_id, contract_id=contract_id,
-                    side=opposite, qty=int(size), order_type="market",
-                    time_in_force="ioc", client_order_id=cid,
-                )
+                result = client.close_position(account_id, contract_id)
+                if isinstance(result, dict) and result.get("success") is False:
+                    err = result.get("errorMessage") or "broker rejected"
+                    log(f"  PROFIT_LOCK_CLOSE REJECTED for {contract_id}: {err}")
+                    try:
+                        from tools.alert import send_alert as _alert
+                        _alert(
+                            f"CRITICAL: profit-lock close REJECTED for "
+                            f"{symbol} at unrealized ${unrealized:+.0f}: {err}. "
+                            f"Position still OPEN.",
+                            level="crit",
+                        )
+                    except Exception:
+                        pass
+                    continue
                 log(f"  PROFIT_LOCK_CLOSE: {symbol} {side} {size}ct "
                      f"unrealized=${unrealized:+.2f} peak=${prev_peak:+.2f} "
                      f"-- {reason}")

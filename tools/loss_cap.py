@@ -65,12 +65,26 @@ def enforce_loss_cap(client, account_id,
             continue
         unrealized = sign * size * ((mark - avg) / tick_size) * tick_value
         if unrealized < -per_trade_cap_usd:
-            opp = "sell" if type_code == 1 else "buy"
-            cid = f"livecap_{uuid.uuid4().hex[:8]}"
+            # 2026-05-14: switched from place_order(market-IOC) — broker
+            # rejects with "limit price not set" because type=1 maps to
+            # LIMIT in Topstep's actual schema, not MARKET. close_position
+            # is the native endpoint and verified to actually flatten.
             try:
-                client.place_order(account_id=account_id, contract_id=contract,
-                                     side=opp, qty=size, order_type="market",
-                                     time_in_force="ioc", client_order_id=cid)
+                result = client.close_position(account_id, contract)
+                if isinstance(result, dict) and result.get("success") is False:
+                    err = result.get("errorMessage") or "broker rejected"
+                    log(f"  LOSS-CAP REJECTED for {root}: {err} — position STILL OPEN")
+                    try:
+                        from tools.alert import send_alert as _alert
+                        _alert(
+                            f"CRITICAL: loss-cap close REJECTED for {root} "
+                            f"at unrealized ${unrealized:+.0f}: {err}. "
+                            f"Position still OPEN.",
+                            level="crit",
+                        )
+                    except Exception:
+                        pass
+                    continue
                 log(f"  LOSS-CAP CLOSE: {root} unrealized=${unrealized:+.2f} "
                      f"< -${per_trade_cap_usd:.0f}")
                 try:

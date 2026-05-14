@@ -92,19 +92,47 @@ def _emergency_flatten_position(client, account_id, contract_id: str,
                                   side_to_close: str, qty: int,
                                   reason: str,
                                   log_fn: Callable[[str], None]) -> bool:
-    """Market-close a position that has no working protective stop.
-    2026-05-11: belt-and-suspenders for stop-placement failures."""
-    cid = f"emergency_flat_{uuid.uuid4().hex[:8]}"
+    """Force-close a position via Topstep's native `close_position`
+    endpoint (/api/Position/closeContract).
+
+    2026-05-14 fix: previous version used `place_order(order_type=
+    "market", time_in_force="ioc")` which the broker accepted but
+    DID NOT FILL. The "success" response from `place_order` only
+    confirms the request was received — broker rejection details
+    are in `result["success"]` which we weren't checking, AND the
+    market-IOC path appears unreliable at Topstep regardless.
+    The native `close_position` endpoint is a separate code path
+    that's verified to actually flatten."""
     try:
-        client.place_order(
-            account_id=account_id, contract_id=contract_id,
-            side=side_to_close, qty=int(qty), order_type="market",
-            time_in_force="ioc", client_order_id=cid,
-        )
-        log_fn(f"  EMERGENCY FLATTEN: {contract_id} {side_to_close} x{qty} -- {reason}")
+        result = client.close_position(account_id, contract_id)
+        if isinstance(result, dict) and result.get("success") is False:
+            err = result.get("errorMessage") or "broker rejected close"
+            log_fn(f"  EMERGENCY FLATTEN REJECTED for {contract_id}: {err} -- {reason}")
+            try:
+                from tools.alert import send_alert as _alert
+                _alert(
+                    f"CRITICAL: emergency-flatten REJECTED by broker for "
+                    f"{contract_id}. Position still OPEN. Reason given: {err}. "
+                    f"Original trigger: {reason}",
+                    level="crit",
+                )
+            except Exception:
+                pass
+            return False
+        log_fn(f"  EMERGENCY FLATTEN: {contract_id} via close_position -- {reason}")
         return True
     except Exception as e:
         log_fn(f"  EMERGENCY FLATTEN FAILED for {contract_id}: {e}")
+        try:
+            from tools.alert import send_alert as _alert
+            _alert(
+                f"CRITICAL: emergency-flatten raised on {contract_id}: "
+                f"{type(e).__name__}: {e}. Position likely STILL OPEN. "
+                f"Trigger: {reason}",
+                level="crit",
+            )
+        except Exception:
+            pass
         return False
 
 
@@ -367,22 +395,28 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
             log(f"  target placement failed: {e}")
 
     # Register software take-profit target (2026-05-14).
-    # Brain emits a target_price; broker target leg is skipped due to the
-    # 5/11 auto-fill anomaly. Instead, profit_protect.check_and_close
-    # honors the target in software — when unrealized hits this value,
-    # it market-closes immediately. Captures the strategy's predicted
-    # exit instead of riding the trailing-lock retrace down.
+    # Direction-aware: target must be on the FAVORABLE side of fill. If
+    # the fill happened past the strategy's target (e.g. buy filled above
+    # target for a long), there's no upside left and we DON'T register
+    # — the post-fill R/R check above should have already flattened.
     if target_px is not None and tick > 0:
         from tools.trader_utils import _tick_value
         tval = _tick_value(symbol)
         if tval > 0:
             dollars_per_point = tval / tick
-            target_usd = abs(target_px - actual_fill) * dollars_per_point * qty
-            if target_usd > 0:
+            if side == "buy":
+                target_distance = target_px - actual_fill   # +ve = above fill
+            else:
+                target_distance = actual_fill - target_px   # +ve = below fill
+            if target_distance > 0:
+                target_usd = target_distance * dollars_per_point * qty
                 from tools.profit_protect import register_software_target
                 register_software_target(contract_id, target_usd)
                 log(f"  software take-profit registered: ${target_usd:.0f} "
                       f"@ target_price={target_px}")
+            else:
+                log(f"  target_price={target_px} is past fill {actual_fill} "
+                     f"({side}) — no upside, target NOT registered")
 
     log(f"  PLACED {symbol} {side} qty={qty} entry≈{limit_px} stop={stop_px} "
           f"target={target_px or '—'} cid={cid}")
