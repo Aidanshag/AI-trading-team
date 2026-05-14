@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "9d13532a72354b2b99cf7fb053b40f21",
-      "emitted_at": "2026-05-14T00:11:01+00:00",
-      "expires_at": "2026-05-14T00:14:01+00:00",
+      "id": "a51a989027eb4d8ebe0e9845aa2acfe1",
+      "emitted_at": "2026-05-14T00:13:08+00:00",
+      "expires_at": "2026-05-14T00:16:08+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4698.5,
@@ -17,9 +17,9 @@
       "notes": "reason=fvg_bear_mitigation gap=[4706.20,4707.30] age=7"
     },
     {
-      "id": "268b923bb9e04f5db3f7cda85c348c6b",
-      "emitted_at": "2026-05-14T00:11:02+00:00",
-      "expires_at": "2026-05-14T00:14:02+00:00",
+      "id": "49403695a062495ca6f3e31900a8f605",
+      "emitted_at": "2026-05-14T00:13:09+00:00",
+      "expires_at": "2026-05-14T00:16:09+00:00",
       "symbol": "6E",
       "side": "short",
       "entry_price": 1.1732,
