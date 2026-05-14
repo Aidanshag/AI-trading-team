@@ -24,42 +24,22 @@ Why this shape:
 """
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import yaml
 
 from state.db import get_db
+from tools.trader_utils import topstep_trading_day_start_utc
 from tools.unrealized_pnl import compute_unrealized
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Topstep's CME-Globex trading day rolls at 5:00 PM US/Central time.
-# This is the boundary their daily-loss-limit counter resets on.
-# Anchoring our day_pl calculation to UTC midnight (the previous default)
-# meant the trader's internal DLL gate kept seeing yesterday's losses for
-# several hours AFTER Topstep had already reset, blocking trades on what
-# was actually a fresh trading day. See
-# vault/lessons/2026-05-13_overnight_dll_breach.md for the discovery.
-_TOPSTEP_DAY_BOUNDARY_CT = time(17, 0)
-_CENTRAL = ZoneInfo("America/Chicago")
 
-
-def _topstep_trading_day_start_utc(now_utc: datetime | None = None) -> datetime:
-    """Return the UTC timestamp of the most recent 5pm CT (= start of
-    the current Topstep trading day). DST-aware via zoneinfo."""
-    now_utc = now_utc or datetime.now(timezone.utc)
-    now_ct = now_utc.astimezone(_CENTRAL)
-    if now_ct.time() >= _TOPSTEP_DAY_BOUNDARY_CT:
-        boundary_ct = datetime.combine(now_ct.date(), _TOPSTEP_DAY_BOUNDARY_CT,
-                                          tzinfo=_CENTRAL)
-    else:
-        yesterday = now_ct.date() - timedelta(days=1)
-        boundary_ct = datetime.combine(yesterday, _TOPSTEP_DAY_BOUNDARY_CT,
-                                          tzinfo=_CENTRAL)
-    return boundary_ct.astimezone(timezone.utc)
+# Local alias kept for callers that imported the private name; new code
+# should use `topstep_trading_day_start_utc` from tools.trader_utils.
+_topstep_trading_day_start_utc = topstep_trading_day_start_utc
 
 
 def _first_snapshot_since(db, boundary_utc: datetime) -> dict | None:

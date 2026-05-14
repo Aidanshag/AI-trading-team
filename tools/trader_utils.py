@@ -6,13 +6,37 @@ dependencies — pure functions only.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Topstep's CME-Globex trading day rolls at 5:00 PM US/Central time.
+# This is the boundary their daily-loss-limit + trade-count counters
+# reset on. Anchoring to UTC midnight (the previous default in some
+# spots) caused inconsistencies — see vault/lessons/2026-05-13_*.md.
+_TOPSTEP_DAY_BOUNDARY_CT = time(17, 0)
+_CENTRAL = ZoneInfo("America/Chicago")
+
+
+def topstep_trading_day_start_utc(now_utc: datetime | None = None) -> datetime:
+    """Return the UTC timestamp of the most recent 5pm CT (= start of
+    the current Topstep trading day). DST-aware via zoneinfo. Public —
+    callers in tools/snapshot_writer and tools/trade_state import it."""
+    now_utc = now_utc or datetime.now(timezone.utc)
+    now_ct = now_utc.astimezone(_CENTRAL)
+    if now_ct.time() >= _TOPSTEP_DAY_BOUNDARY_CT:
+        boundary_ct = datetime.combine(now_ct.date(), _TOPSTEP_DAY_BOUNDARY_CT,
+                                          tzinfo=_CENTRAL)
+    else:
+        yesterday = now_ct.date() - timedelta(days=1)
+        boundary_ct = datetime.combine(yesterday, _TOPSTEP_DAY_BOUNDARY_CT,
+                                          tzinfo=_CENTRAL)
+    return boundary_ct.astimezone(timezone.utc)
 
 
 def _load_yaml(path: str) -> dict:

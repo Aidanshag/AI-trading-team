@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from state.db import get_db
-from tools.trader_utils import _now_utc
+from tools.trader_utils import _now_utc, topstep_trading_day_start_utc
 
 
 def recent_thesis_for(symbol: str, minutes: int) -> bool:
@@ -29,16 +29,23 @@ def recent_thesis_for(symbol: str, minutes: int) -> bool:
 
 
 def todays_trade_count() -> int:
-    """Count of entry orders placed today (UTC) by the live_trader.
+    """Count of entry orders placed in the current TOPSTEP trading day
+    (5pm CT to 5pm CT) by the live_trader.
+
+    2026-05-14 fix: was counting from UTC midnight, which is 3-4h after
+    Topstep's trading-day reset (5pm CT = 22 UTC EDT). Caused inconsistency
+    with the snapshot anchor (which already uses Topstep day) and locked
+    the trader out for 3-4h every night.
 
     Excludes stop/target legs (only counts entry orders).
     """
-    today = _now_utc().strftime("%Y-%m-%d")
+    boundary = topstep_trading_day_start_utc()
+    cutoff_iso = boundary.strftime("%Y-%m-%dT%H:%M:%S")
     db = get_db()
     row = db.connect().execute(
         "SELECT COUNT(*) FROM orders WHERE agent='live_trader' "
-        "AND date(ts_proposed)=? "
+        "AND ts_proposed >= ? "
         "AND client_order_id NOT LIKE '%_stop' AND client_order_id NOT LIKE '%_target'",
-        (today,),
+        (cutoff_iso,),
     ).fetchone()
     return int(row[0]) if row else 0

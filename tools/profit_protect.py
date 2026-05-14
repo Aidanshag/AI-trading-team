@@ -123,6 +123,27 @@ def _strip_exchange_suffix(sym: str) -> str:
 
 # ── Tick economics (kept lightweight; mirrors live_trader fallback) ─
 
+def _resolve_tick_economics(symbol: str) -> tuple[float, float]:
+    """Resolve (tick_size, tick_value) for a symbol with two layers:
+      1. Hardcoded _TICK_ECONOMICS dict (fast path; explicitly curated).
+      2. Fallback to config/symbols.yaml (canonical source — covers any
+         symbol the brain might emit signals for).
+    Returns (0.0, 0.0) only when BOTH layers fail."""
+    ts, tv = _TICK_ECONOMICS.get(symbol, (0.0, 0.0))
+    if ts > 0 and tv > 0:
+        return ts, tv
+    # Fallback: read from config/symbols.yaml
+    try:
+        from tools.trader_utils import _load_yaml
+        syms = _load_yaml("config/symbols.yaml").get("symbols", {}) or {}
+        meta = syms.get(symbol) or {}
+        ts = float(meta.get("tick_size") or 0)
+        tv = float(meta.get("tick_value") or 0)
+        return ts, tv
+    except Exception:
+        return 0.0, 0.0
+
+
 _TICK_ECONOMICS: dict[str, tuple[float, float]] = {
     # Rates
     "ZN": (0.015625, 15.625), "ZB": (0.03125, 31.25),
@@ -345,8 +366,28 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
             symbol = _strip_exchange_suffix(raw_sym)
             if not symbol:
                 continue
-            tick_size, tick_value = _TICK_ECONOMICS.get(symbol, (0.0, 0.0))
+            tick_size, tick_value = _resolve_tick_economics(symbol)
             if tick_size <= 0 or tick_value <= 0:
+                # CRITICAL: position is OPEN but we cannot compute unrealized.
+                # Profit-lock + loss-cap are blind to this position. Fire a
+                # Discord alert so the user knows immediately. This is the
+                # exact failure shape that lost coverage of the MGC short
+                # on 2026-05-14 — _TICK_ECONOMICS was missing MGC and the
+                # silent skip meant only the broker stop protected it.
+                log(f"  CRITICAL: no tick economics for {symbol} ({contract_id}); "
+                     f"profit-lock + loss-cap BLIND to this position")
+                try:
+                    from tools.alert import alert as _alert
+                    _alert(
+                        f"CRITICAL: open position on {symbol} but no tick "
+                        f"economics resolved. Profit-lock + loss-cap CANNOT "
+                        f"fire. Only broker stop protecting. Add {symbol} to "
+                        f"config/symbols.yaml or tools/profit_protect."
+                        f"_TICK_ECONOMICS.",
+                        level="crit",
+                    )
+                except Exception:
+                    pass
                 continue
 
             # Latest mark via 1-min bars (cheap; usually cached)

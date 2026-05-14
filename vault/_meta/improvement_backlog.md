@@ -31,6 +31,27 @@ Priority logic going forward:
 - Each change must specify: prediction → measurement plan → variance trigger
 - If a P0 item below adds complexity without enabling validation, demote it
 
+## 🆕 Queued 2026-05-14 evening — HIGH PRIORITY
+
+- [P0] [effort: 180min] [risk: medium] [status: open] [autonomous-eligible: yes]
+  **Trailing broker stop — replace software-polled profit-lock with broker-side trailing stop** — user 2026-05-14 explicitly asked for this ("logic-based system, not just tiers; letting a trade go from $100 to $30 still sucks"). Currently `tools/profit_protect.check_and_close` polls every 10s and submits a market-IOC when peak retraces below floor. Two failure modes: (a) fast-tape slippage past the cap before the next poll, (b) broker stop is at the wider strategy-stop level so worst-case is bounded by the strategy stop, not the floor. The fix: as peak crosses each tier, MODIFY the broker stop UP to the floor-equivalent price. Broker enforces it server-side, instantly.
+  Why: tier (80, 40) means a $100 peak retraces to $39 before closing = $61 give-back. User finds this excessive. Trailing broker stop makes the broker enforce the floor at the broker level — when peak hits $100, broker stop sits at $40-equivalent price (= entry ± 40-ticks-of-MGC). When current touches that, broker fires INSTANTLY.
+  Files: `tools/profit_protect.py` (add the modify-broker-stop call after computing active_floor), `tools/bracket_placement.py` (export a helper to compute broker-stop-price for a given floor), `tools/projectx_client.py` (verify modify_order signature, or use cancel+replace if modify isn't supported). Tests in `tests/test_profit_protect.py` should add cases for "peak crosses tier → modify_order called with new stop price."
+  Acceptance: when running with an open position and unrealized crosses each tier threshold, broker working-order's stopPrice MUST be updated to the floor-equivalent. Verify via `client.get_working_orders` showing the new stopPrice after each tier crossing. Existing software polling stays as belt-and-suspenders.
+  Auto-merge: yes if tests pass and no HIGH_RISK_FILES touched. (`tools/projectx_client.py` IS HIGH_RISK — if modify_order isn't already there, file a sub-item requesting user approval instead of editing.)
+  Also tighten tier table while you're in there: user is flagging $100→$30 as too much give-back. Consider:
+    - (80, 50) instead of (80, 40) → $100 peak → $50 floor → $50 give-back
+    - Or add (90, 55) → $100 peak → $55 floor → $45 give-back
+    - Or the proper answer: % retrace cap. e.g., "never give back >40% of peak above $50."
+  Recommend exploring the % retrace option since it's truly logic-based vs tier-based.
+
+## 🆕 Queued 2026-05-14 evening
+
+- [P1] [effort: 15min] [risk: none] [status: open] [autonomous-eligible: no — needs user GitHub auth]
+  **Wire FundWeeklyAudit as a remote Claude routine** — instructions are written in `vault/_meta/weekly_audit.md`. Tried to create the routine 2026-05-14 but Anthropic's GitHub App isn't connected for Aidanshag/AI-trading-team yet. Once user connects GitHub at https://claude.ai/code/onboarding?magic=github-app-setup or runs /web-setup, the routine can be created with `cron_expression: "0 22 * * 0"` (= Sun 18:00 ET = Sun 22:00 UTC), repo `https://github.com/Aidanshag/AI-trading-team`, model `claude-sonnet-4-6`, and the prompt: "Read vault/_meta/weekly_audit.md for full instructions and execute the weekly audit. Working directory: repo root."
+  Why: prevents the "Claude codebase becomes a mess" failure mode (the article the user mentioned 2026-05-13 about Claude code that accumulated duplicate logic + brittle coupling). The audit dedupes, kills dead code, flags Pattern A/B bugs, keeps `scripts/live_trader.py` under the 600-line ceiling.
+  Acceptance: routine exists at https://claude.ai/code/routines, fires every Sun 22:00 UTC, writes `vault/_meta/weekly_audit_YYYY-MM-DD.md`, posts Discord summary.
+
 ## 🆕 Queued 2026-05-13 evening
 
 - [P1] [effort: 120-180min] [risk: low] [status: open] [autonomous-eligible: yes]

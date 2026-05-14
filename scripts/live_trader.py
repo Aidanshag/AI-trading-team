@@ -80,7 +80,13 @@ SAME_SYMBOL_COOLDOWN_OVERRIDES = {  # per-symbol overrides 2026-05-14: smaller-r
                                       # the dollar-per-trade ceiling is lower.
     "MGC": 15,                       # micro gold — 1/10 risk of GC, fire 3× more often
 }
-MAX_TRADES_PER_DAY = 8            # hard cap on entries per UTC day
+MAX_TRADES_PER_DAY = 15           # hard cap on entries per TOPSTEP trading day (5pm
+                                  # CT to 5pm CT). Raised from 8 → 15 on 2026-05-14
+                                  # — the new $150 max-risk + $250 internal DLL +
+                                  # 30s profit-poll bound downside at ~$300 per day
+                                  # even with 15 trades, so the lower count was
+                                  # overly conservative and was actively blocking
+                                  # MGC trades.
 MIN_SIGNAL_R_TICKS = 6            # reject signals whose stop OR target distance is < N ticks
                                   # (rationale: place_bracket adds a 5-tick marketable-limit
                                   # buffer; if the strategy R-distance is smaller than the buffer,
