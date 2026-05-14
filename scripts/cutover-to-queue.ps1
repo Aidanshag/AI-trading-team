@@ -109,8 +109,9 @@ if (-not $brainAlive -or -not $traderAlive) {
     exit 5
 }
 
-Write-Log "cutover SUCCESS — brain PID $($brain.Id), trader PID $($trader.Id)"
+Write-Log "cutover SUCCESS -- brain PID $($brain.Id), trader PID $($trader.Id)"
 try {
-    & $Python -m tools.alert "Queue cutover complete. brain_signaler PID $($brain.Id), live_trader --use-queue PID $($trader.Id). Watch logs/live_trader_queue.log + logs/brain_signaler.log." --level=info | Out-Null
+    $alertMsg = "Queue cutover complete. brain_signaler PID $($brain.Id), live_trader queue mode PID $($trader.Id). Watch logs/live_trader_queue.log and logs/brain_signaler.log."
+    & $Python -m tools.alert $alertMsg --level=info | Out-Null
 } catch { }
 exit 0
