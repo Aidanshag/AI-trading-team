@@ -64,7 +64,16 @@ from state.db import get_db  # noqa: E402
 
 SCAN_INTERVAL_SEC = 300          # 5-minute cadence
 POSITION_POLL_SEC = 10            # baseline poll cadence when FLAT.
-POSITION_POLL_SEC_IN_TRADE = 2    # tight cadence when a position is OPEN.
+POSITION_POLL_SEC_IN_TRADE = 1    # tightest reasonable REST cadence when
+                                  # a position is OPEN. 2026-05-14: was 2,
+                                  # tightened to 1 to halve the worst-case
+                                  # latency before profit-lock fires. The
+                                  # real eliminator of polling latency is
+                                  # the trailing BROKER stop — broker
+                                  # processes ticks at microsecond speed.
+                                  # See vault/_meta/improvement_backlog.md
+                                  # for the WebSocket / real-time-quote
+                                  # investigation queued as P0.
                                   # 2026-05-13: 30s initial polling. 2026-05-14:
                                   # tightened to 10s. Then 2026-05-14 (later):
                                   # user observation that 10s was too slow for fast
