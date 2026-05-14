@@ -206,13 +206,12 @@ def test_consume_skips_when_in_position(stub_environment, monkeypatch):
 
 
 def test_consume_shadow_signal_records_not_places(stub_environment):
-    _enqueue_sig(symbol="GC", entry_price=4716.5, stop_price=4716.0,
-                  cell_key="narrow_range_break|GC|Asian|long")
-    # Mark experimental — should record to shadow_trades, not place
-    sq.clear()  # restart fresh
+    # GC tick=0.10, tick_value=$10. 8-tick stop = $80 risk (under $150 cap).
+    # 8 ticks > MIN_SIGNAL_R_TICKS=6, so passes the floor.
     sig = sq.make_signal(
         symbol="GC", side="long",
-        entry_price=4716.5, stop_price=4716.0, target_price=4717.0,
+        entry_price=4716.5, stop_price=4715.7,  # 0.8 points = 8 ticks
+        target_price=4717.9,                      # 1.4 points = 14 ticks
         strategy="narrow_range_break", session="Asian",
         cell_key="narrow_range_break|GC|Asian|long",
         shadow_only=True,
@@ -220,8 +219,13 @@ def test_consume_shadow_signal_records_not_places(stub_environment):
     sq.enqueue(sig)
     broker = stub_environment
     result = lt.consume_pending_signals()
-    assert result.get("shadow", 0) == 1
-    assert len(broker.place_order_calls) == 0
+    assert result.get("shadow", 0) == 1, (
+        f"shadow_only signal not recorded as shadow: {result}"
+    )
+    assert len(broker.place_order_calls) == 0, (
+        f"shadow_only signal triggered broker place_order: "
+        f"{broker.place_order_calls}"
+    )
 
 
 def test_consume_halt_returns_halt_status(stub_environment, monkeypatch):
