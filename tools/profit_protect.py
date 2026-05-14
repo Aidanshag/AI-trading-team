@@ -227,19 +227,30 @@ def _compute_active_floor(prev_peak: float,
     return active
 
 
+# Track which contract → which floor we've already trailed to.
+# Prevents repeated cancel+replace cycles on every poll for the same
+# floor (the broker's working-orders endpoint can lag a few seconds
+# between cancel and the next get_working_orders call).
+_trailed_floor_by_contract: dict[str, float] = {}
+
+
 def _trail_broker_stop_to_floor(client, account_id, position: dict,
                                   active_floor_usd: float,
                                   tick_size: float, tick_value: float,
                                   log: Callable[[str], None]) -> None:
     """Move the broker-side protective stop UP (closer to entry) to lock
-    in `active_floor_usd` of profit. Never moves it the other direction
-    (= can only ever TIGHTEN protection).
+    in `active_floor_usd` of profit. Never moves it the other direction.
 
-    Why this exists (2026-05-14): software polling has latency. When peak
-    hit $61 and floor was $25, the position retraced past $25 before our
-    poll caught it; we ended up closing at $12, giving back $49. The
-    proper fix is to make the BROKER enforce the floor server-side via
-    a tightened stop order — broker fills instantly when touched.
+    2026-05-14 rewrite: uses CANCEL + REPLACE instead of modify_order.
+    Earlier modify_order calls were silently ineffective — the broker
+    returned success but the stopPrice on the working order never
+    changed. Cancel-and-replace forces a fresh order that the broker
+    actually books. Verified by re-reading working orders after place.
+
+    Process-local memoization (`_trailed_floor_by_contract`) prevents
+    re-trailing the same contract to the same floor every poll —
+    important because the broker's working orders endpoint can lag a
+    few seconds between cancel and re-list.
     """
     contract_id = position.get("contractId")
     avg_price = float(position.get("averagePrice") or 0)
@@ -248,10 +259,6 @@ def _trail_broker_stop_to_floor(client, account_id, position: dict,
     type_code = int(position.get("type") or 0)
     is_long = type_code == 1
 
-    # Compute desired stop price: the price at which unrealized P&L would
-    # equal `active_floor_usd`. For a long, current must drop to entry +
-    # floor_pts (above entry); for a short, current must rise to entry -
-    # floor_pts (below entry).
     size = abs(int(position.get("size") or 1)) or 1
     dollars_per_point = (tick_value / tick_size) * size
     if dollars_per_point <= 0:
@@ -261,48 +268,105 @@ def _trail_broker_stop_to_floor(client, account_id, position: dict,
         desired_stop = avg_price + floor_points
     else:
         desired_stop = avg_price - floor_points
-    # Round to valid tick
     desired_stop = round(desired_stop / tick_size) * tick_size
+
+    # Skip if we've already trailed this contract to this floor (or tighter)
+    last_trailed = _trailed_floor_by_contract.get(contract_id, -1.0)
+    if last_trailed >= active_floor_usd:
+        return
 
     # Find current working stop for this contract
     try:
         working = client.get_working_orders(account_id) or []
-    except Exception:
+    except Exception as e:
+        log(f"  trailing_stop: get_working_orders failed: {e}")
         return
     stop_orders = [o for o in working
                     if o.get("contractId") == contract_id
                     and str(o.get("customTag", "")).endswith("_stop")]
     if not stop_orders:
+        log(f"  trailing_stop: no working stop found for {contract_id} "
+             f"(position unprotected at broker — relying on software cap)")
         return
     stop_order = stop_orders[0]
     current_stop = float(stop_order.get("stopPrice") or 0)
     if current_stop <= 0:
         return
 
-    # Only modify if the new stop is TIGHTER (closer to entry/lock in profit).
-    # For long: tighter = HIGHER stop. For short: tighter = LOWER stop.
+    # Only trail if the new stop is TIGHTER (closer to entry/lock in profit).
     if is_long and desired_stop <= current_stop:
+        _trailed_floor_by_contract[contract_id] = active_floor_usd
         return
     if (not is_long) and desired_stop >= current_stop:
+        _trailed_floor_by_contract[contract_id] = active_floor_usd
         return
 
-    # Compute limit price with 1-tick offset (same convention as place_bracket)
     new_limit = (desired_stop - tick_size) if is_long else (desired_stop + tick_size)
     new_limit = round(new_limit / tick_size) * tick_size
-
-    order_id = stop_order.get("id") or stop_order.get("orderId")
-    if not order_id:
+    old_stop_oid = stop_order.get("id") or stop_order.get("orderId")
+    old_stop_cid = str(stop_order.get("customTag") or "")
+    if not old_stop_oid:
         return
+
+    # === CANCEL + REPLACE pattern ===
+    # 1. Cancel the old stop
     try:
-        client.modify_order(
-            account_id=account_id, order_id=order_id,
-            stop_price=desired_stop, limit_price=new_limit,
-        )
-        log(f"  TRAILING_STOP: {contract_id} stop moved "
-             f"{current_stop} -> {desired_stop} (locks +${active_floor_usd:.0f})")
+        client.cancel_order(account_id, old_stop_oid)
     except Exception as e:
-        log(f"  trailing_stop modify failed for {contract_id}: "
-             f"{type(e).__name__}: {e}")
+        log(f"  trailing_stop: cancel old stop {old_stop_oid} failed: {e}")
+        return
+
+    # 2. Place a new stop at the desired price (same side, same qty,
+    #    new prices). Use a customTag suffix that still ends in "_stop"
+    #    so other code (cleanup_orphan_brackets, future trailing) recognizes it.
+    import uuid as _uuid
+    new_cid = f"{old_stop_cid.rsplit('_stop', 1)[0]}_stop_trail{_uuid.uuid4().hex[:4]}"
+    opp_side = "sell" if is_long else "buy"
+    try:
+        sr = client.place_order(
+            account_id=account_id, contract_id=contract_id,
+            side=opp_side, qty=int(size), order_type="stop_limit",
+            limit_price=new_limit, stop_price=desired_stop,
+            time_in_force="gtc", client_order_id=new_cid,
+        )
+        # Verify the broker actually accepted by checking response shape
+        if isinstance(sr, dict) and sr.get("success") is False:
+            err = sr.get("errorMessage") or "broker rejected"
+            log(f"  CRITICAL trailing_stop: replace REJECTED for "
+                 f"{contract_id} — {err}; position unprotected at broker")
+            try:
+                from tools.alert import send_alert as _alert
+                _alert(
+                    f"CRITICAL: trailing-stop replace REJECTED on {contract_id}. "
+                    f"Old stop cancelled, new stop NOT placed. Broker reason: "
+                    f"{err}. Position now ONLY protected by software cap.",
+                    level="crit",
+                )
+            except Exception:
+                pass
+            return
+        log(f"  TRAILING_STOP: {contract_id} cancel+replace "
+             f"{current_stop} -> {desired_stop} (locks +${active_floor_usd:.0f})")
+        _trailed_floor_by_contract[contract_id] = active_floor_usd
+    except Exception as e:
+        log(f"  CRITICAL trailing_stop: replace FAILED for {contract_id}: "
+             f"{type(e).__name__}: {e}; position unprotected at broker")
+        try:
+            from tools.alert import send_alert as _alert
+            _alert(
+                f"CRITICAL: trailing-stop replace FAILED on {contract_id}. "
+                f"Old stop cancelled, new stop placement raised: "
+                f"{type(e).__name__}: {e}. Position now ONLY protected by software cap.",
+                level="crit",
+            )
+        except Exception:
+            pass
+
+
+def reset_trailed_floor(contract_id: str) -> None:
+    """Reset the process-local trail memo for a contract. Called when a
+    position closes (by the same module) so the next entry starts fresh."""
+    _trailed_floor_by_contract.pop(contract_id, None)
 
 
 def _unrealized_usd(side: str, size: int, avg_price: float,
@@ -469,7 +533,7 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                 log(f"  CRITICAL: no tick economics for {symbol} ({contract_id}); "
                      f"profit-lock + loss-cap BLIND to this position")
                 try:
-                    from tools.alert import alert as _alert
+                    from tools.alert import send_alert as _alert
                     _alert(
                         f"CRITICAL: open position on {symbol} but no tick "
                         f"economics resolved. Profit-lock + loss-cap CANNOT "
@@ -598,9 +662,22 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                 log(f"  PROFIT_LOCK_CLOSE: {symbol} {side} {size}ct "
                      f"unrealized=${unrealized:+.2f} peak=${prev_peak:+.2f} "
                      f"-- {reason}")
+                # Discord alert — user wants visibility on every close
+                try:
+                    from tools.alert import send_alert as _alert
+                    emoji = "✅" if unrealized > 0 else "❌"
+                    _alert(
+                        f"{emoji} PROFIT_LOCK_CLOSE {symbol} {side} {size}ct "
+                        f"@ ${unrealized:+.0f} (peak ${prev_peak:+.0f}, "
+                        f"give-back ${prev_peak - unrealized:.0f})",
+                        level="info" if unrealized > 0 else "warn",
+                    )
+                except Exception:
+                    pass
                 _position_high_water.pop(key, None)
                 _position_consecutive_holds.pop(key, None)
                 _position_entry_ts_seen.pop(key, None)
+                reset_trailed_floor(contract_id)
                 closed.append({"symbol": symbol, "side": side, "size": size,
                                 "unrealized": unrealized, "peak": prev_peak,
                                 "reason": reason})

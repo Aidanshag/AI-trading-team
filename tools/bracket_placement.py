@@ -292,5 +292,16 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
 
     log(f"  PLACED {symbol} {side} qty={qty} entry≈{limit_px} stop={stop_px} "
           f"target={target_px or '—'} cid={cid}")
+    # Discord alert on trade open — user wants visibility on every fill
+    try:
+        from tools.alert import send_alert as _alert
+        risk_pts = abs(actual_fill - stop_px)
+        _alert(
+            f"📈 OPEN {symbol} {side} {qty}ct @ {actual_fill} "
+            f"stop={stop_px} (risk={risk_pts:.2f}pts)",
+            level="info",
+        )
+    except Exception:
+        pass
     return {"status": "submitted", "client_order_id": cid,
             "broker_order_id": broker_oid}

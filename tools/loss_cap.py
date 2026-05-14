@@ -73,7 +73,25 @@ def enforce_loss_cap(client, account_id,
                                      time_in_force="ioc", client_order_id=cid)
                 log(f"  LOSS-CAP CLOSE: {root} unrealized=${unrealized:+.2f} "
                      f"< -${per_trade_cap_usd:.0f}")
+                try:
+                    from tools.alert import send_alert as _alert
+                    _alert(
+                        f"🛑 LOSS-CAP CLOSE {root} @ ${unrealized:+.0f} "
+                        f"(cap -${per_trade_cap_usd:.0f})",
+                        level="warn",
+                    )
+                except Exception:
+                    pass
                 closed += 1
             except Exception as e:
                 log(f"  loss-cap close failed for {root}: {e}")
+                try:
+                    from tools.alert import send_alert as _alert
+                    _alert(
+                        f"CRITICAL: loss-cap close FAILED for {root} at "
+                        f"unrealized ${unrealized:+.0f}: {type(e).__name__}: {e}",
+                        level="crit",
+                    )
+                except Exception:
+                    pass
     return closed
