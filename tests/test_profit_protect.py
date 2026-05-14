@@ -44,16 +44,16 @@ def test_decide_hard_loss_cap_closes():
 
 
 def test_decide_lowest_tier_breakeven_protection():
-    """Peak crossed $50 (crosses (15,5), (25,12), (30,0)). Among crossed
-    tiers, the highest floor wins → (25, 12) → floor $12.
-    Current $-5 < $12 → close.
-    Updated 2026-05-12 after micro-tiers (15, 5) and (25, 12) were added —
-    the new tightest floor at peak $50 is $12, not $0."""
+    """Peak crossed $50 — crosses (15,5), (25,12), (40,18). Among crossed
+    tiers, the highest floor wins → (40, 18) → floor $18.
+    Current $-5 < $18 → close.
+    Updated 2026-05-13 after the (30, 0) tier was removed (dominated)
+    and the mid-small (40, 18) / (55, 25) / (70, 32) tiers were added."""
     should, reason = pp.decide(unrealized=-5.0, prev_peak=50.0)
     assert should is True
     assert "trailing_lock" in reason
     assert "$50" in reason   # peak shown
-    assert "floor $12" in reason  # active floor from (25, 12) tier
+    assert "floor $18" in reason  # active floor from (40, 18) tier
 
 
 def test_decide_mid_tier_protection():

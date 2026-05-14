@@ -49,26 +49,28 @@ TRAILING_PROFIT_TIERS: tuple[tuple[float, float], ...] = (
     # picks the highest-active floor. Trades stack: as peak grows, tighter
     # higher-floor tiers progressively replace looser low-floor tiers.
     #
-    # 2026-05-12: added MICRO tiers below $30 after exec_mirror analysis
-    # showed cells with target=$30-50 were getting clipped at $0 (break-
-    # even minus friction) instead of locking a small positive. The
-    # (15, 5) and (25, 12) tiers force closes to lock a small positive
-    # on retrace from low peaks. (30, 0) is retained for clarity but is
-    # dominated by (25, 12) above $25 peak. The user's "let runners run"
-    # is preserved — once peak >= $80 the original tier ladder takes
-    # over and the micro tiers become irrelevant.
-    # --- micro tiers (NEW 2026-05-12) — lock small wins, don't clip runners
-    ( 15.0,     5.0),    # peak $15 → lock $5 (small-quick-win protection)
-    ( 25.0,    12.0),    # peak $25 → lock $12 (closes the $30-$79 gap zone)
-    # --- 2026-05-11 expansion: runner-zone tiers (>$400 peak) after the
-    # +$2,616 GC trade revealed the prior cap was clipping runners.
-    # --- tight tiers (small/medium winners — never give back too much)
-    ( 30.0,     0.0),    # original "never let +$30 become a loss"
-    ( 80.0,    20.0),
+    # 2026-05-13 update: removed the (30, 0) tier — it was dominated by
+    # (25, 12) so it never actually fired (at peak >=30, both tiers are
+    # crossed and decide() picks max floor = 12). The "(30, 0) reverts
+    # break-even" semantic was illusory after the 5/12 micro-tier add.
+    # Also added graduated intermediate tiers between $25 and $80 peak
+    # so a mid-size winner doesn't ride the (25, 12) floor for too long.
+    #
+    # --- micro tiers (lock small wins, don't clip runners)
+    ( 15.0,     5.0),    # peak $15 → lock $5
+    ( 25.0,    12.0),    # peak $25 → lock $12
+    # --- mid-small tiers (added 2026-05-13 — bridge $25-$80 zone)
+    ( 40.0,    18.0),    # peak $40 → lock $18 (45% lock)
+    ( 55.0,    25.0),    # peak $55 → lock $25 (45% lock)
+    ( 70.0,    32.0),    # peak $70 → lock $32 (46% lock)
+    # --- mid tiers
+    ( 80.0,    40.0),    # peak $80 → lock $40 (50% lock; was 20, raised
+                          #   2026-05-13 to fit the graduated progression)
     (150.0,    50.0),
     (250.0,   100.0),
     (400.0,   200.0),
-    # --- runner zone (allow big winners to breathe)
+    # --- runner zone (allow big winners to breathe; tier added 2026-05-11
+    # after the +$2,616 GC trade revealed the prior cap was clipping runners)
     (750.0,   400.0),
     (1500.0,  900.0),
     (2500.0, 1500.0),
