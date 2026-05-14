@@ -43,6 +43,20 @@ def test_decide_hard_loss_cap_closes():
     assert "loss_hard_cap" in reason
 
 
+def test_software_target_registration_and_clear():
+    """register_software_target adds, _clear_software_target removes.
+    2026-05-14 take-profit-at-target feature."""
+    pp._target_usd_by_contract.clear()
+    pp.register_software_target("CON.TEST", 50.0)
+    assert pp._target_usd_by_contract["CON.TEST"] == 50.0
+    pp._clear_software_target("CON.TEST")
+    assert "CON.TEST" not in pp._target_usd_by_contract
+    # Zero/negative targets are ignored
+    pp.register_software_target("CON.TEST", 0.0)
+    pp.register_software_target("CON.TEST", -10.0)
+    assert "CON.TEST" not in pp._target_usd_by_contract
+
+
 def test_decide_lowest_tier_breakeven_protection():
     """Peak crossed $50 — crosses (15,5), (25,12), (40,18). Among crossed
     tiers, the highest floor wins → (40, 18) → floor $18.

@@ -227,6 +227,28 @@ def _compute_active_floor(prev_peak: float,
     return active
 
 
+# Per-position software take-profit target (in USD unrealized).
+# 2026-05-14: strategies emit a target_price on every signal, but we
+# don't place a broker target leg (5/11 anomaly: target limits auto-fill
+# at market). Instead, bracket_placement registers the target value in
+# USD here. check_and_close polls every 2-10s and force-closes when
+# unrealized >= target_usd. Captures wins at the strategy's own
+# prediction instead of waiting for the trailing-lock retrace.
+_target_usd_by_contract: dict[str, float] = {}
+
+
+def register_software_target(contract_id: str, target_usd: float) -> None:
+    """Set the software take-profit target (USD unrealized) for a position.
+    Called by tools.bracket_placement.place_bracket after entry fills.
+    Zero or negative values are ignored."""
+    if target_usd > 0:
+        _target_usd_by_contract[contract_id] = float(target_usd)
+
+
+def _clear_software_target(contract_id: str) -> None:
+    _target_usd_by_contract.pop(contract_id, None)
+
+
 # Track which contract → which floor we've already trailed to.
 # Prevents repeated cancel+replace cycles on every poll for the same
 # floor (the broker's working-orders endpoint can lag a few seconds
@@ -563,6 +585,49 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
             if unrealized > prev_peak:
                 _position_high_water[key] = unrealized
                 prev_peak = unrealized
+
+            # ── SOFTWARE TAKE-PROFIT AT TARGET (2026-05-14) ──
+            # Strategies emit a target_price on every signal. We don't
+            # place a broker target leg due to the 5/11 auto-fill anomaly,
+            # so honor it in software: when unrealized hits the target
+            # value, market-close immediately. This harvests wins at the
+            # strategy's own prediction instead of waiting for trailing-
+            # lock retrace (which has polling-latency slippage).
+            target_usd = _target_usd_by_contract.get(contract_id)
+            if target_usd is not None and unrealized >= target_usd:
+                opposite_side = "sell" if side == "long" else "buy"
+                cid = f"target_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+                try:
+                    client.place_order(
+                        account_id=account_id, contract_id=contract_id,
+                        side=opposite_side, qty=int(size),
+                        order_type="market", time_in_force="ioc",
+                        client_order_id=cid,
+                    )
+                    log(f"  TARGET_HIT: {symbol} {side} {size}ct "
+                         f"unrealized=${unrealized:+.2f} target=${target_usd:.0f}")
+                    try:
+                        from tools.alert import send_alert as _alert
+                        _alert(
+                            f"🎯 TARGET_HIT {symbol} {side} {size}ct @ "
+                            f"${unrealized:+.0f} (target ${target_usd:.0f})",
+                            level="info",
+                        )
+                    except Exception:
+                        pass
+                    _position_high_water.pop(key, None)
+                    _position_consecutive_holds.pop(key, None)
+                    _position_entry_ts_seen.pop(key, None)
+                    _clear_software_target(contract_id)
+                    reset_trailed_floor(contract_id)
+                    closed.append({"symbol": symbol, "side": side,
+                                    "size": size, "unrealized": unrealized,
+                                    "peak": prev_peak, "reason": "target_hit"})
+                    continue
+                except Exception as e:
+                    log(f"  target_hit close FAILED for {contract_id}: "
+                         f"{type(e).__name__}: {e}")
+                    # Fall through to trailing/loss-cap logic below
 
             should_close, reason = decide(unrealized, prev_peak)
             if not should_close:

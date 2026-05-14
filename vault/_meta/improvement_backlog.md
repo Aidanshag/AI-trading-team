@@ -31,6 +31,42 @@ Priority logic going forward:
 - Each change must specify: prediction → measurement plan → variance trigger
 - If a P0 item below adds complexity without enabling validation, demote it
 
+## 🆕 Queued 2026-05-14 — EXIT OPTIMIZATION ROADMAP
+
+User direction 2026-05-14: "eventually should all of these be implemented." All 6 exit-optimization options were laid out and the user asked them all to be done at some point. #1 (software take-profit at target) shipped 2026-05-14 0431 UTC. The remaining 5 are queued below in priority order. **Pick from this section first when the autonomous routine fires.**
+
+- [P0] [effort: 90min] [risk: low] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 2]
+  **Percent-of-peak retracement (replaces tier table)** — current static tiers leave too much give-back (peak $113 → exit $29 = $84 give-back overnight 2026-05-14). User wants a continuous rule: "never give back more than X% of peak above $20." e.g., 30% retrace cap means peak $100 → exit at $70 max. Replace `TRAILING_PROFIT_TIERS` with a continuous function `floor_for_peak(peak_usd) -> float` returning `max(20, peak * (1-X))` for peak above $20. Add a regression test: at peak $100, retrace to $69 closes; retrace to $71 holds. Calibrate X via walk-forward analysis on historical fills (start with X=0.30 = 30% retrace cap).
+  Files: `tools/profit_protect.py` (replace `_compute_active_floor`, keep `decide()` signature). Tests: extend `tests/test_profit_protect.py`.
+  Acceptance: peak $100 close happens at >= $70 unrealized (vs current $40 floor from (80,40) tier).
+  Auto-merge: yes if tests pass.
+
+- [P1] [effort: 120min] [risk: medium] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 5]
+  **Re-test broker target legs (5/11 anomaly may have lifted)** — currently `SKIP_TARGET_LEG = True` due to broker auto-filling target limits at next-available market. Test: place a target leg with limit ~10pts away from current price on a small MGC trade. Monitor for ~5 min. If it stays "working" without filling → broker is fixed, can re-enable target legs as a redundant exit layer (alongside the software take-profit added 2026-05-14). If it auto-fills → keep SKIP_TARGET_LEG=True, document the persisting anomaly.
+  Files: `scripts/live_trader.py:SKIP_TARGET_LEG`, observation log in `vault/research/analysis/`.
+  Acceptance: test result documented; SKIP_TARGET_LEG flipped to False ONLY if broker target legs behave correctly.
+  Auto-merge: no — requires manual observation of broker behavior. Autonomous routine should write the observation but leave the flag flip to a human.
+
+- [P1] [effort: 90min] [risk: low] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 4]
+  **Reversal detection exit** — if 3 consecutive 1-min bars close AGAINST a position's direction, market-close. Captures "momentum has died" patterns the tier rules can't see. For a long: 3 lower closes in a row → exit. Implementation in `tools/profit_protect.check_and_close` — after computing unrealized, fetch last 3 1-min bars, check direction. Add a min-peak gate (only fire if peak crossed $15 — otherwise too many false exits on noisy small wins).
+  Files: `tools/profit_protect.py`, tests with synthetic bars.
+  Acceptance: synthetic 3-bar reversal triggers close at any unrealized > $0; <3 bars of reversal doesn't trigger.
+  Auto-merge: yes if tests pass.
+
+- [P2] [effort: 150min] [risk: medium] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 3]
+  **Volatility-aware tier tightening** — adjust the retrace cap based on recent realized vol. High vol → wider tolerance (move could resume); dying vol → tighter (move likely over). Use 1-min ATR vs 14-bar baseline. Multiplier: floor = base_floor × (1 - 0.3 × low_vol_signal). Needs calibration via backtest.
+  Files: `tools/profit_protect.py` + new `tools/regime_signal.py` helper.
+  Acceptance: when realized vol drops below 50% of trailing baseline, profit-lock floor tightens by ~20%. Backtest shows reduced give-back without hurting hit rate.
+  Auto-merge: no — calibration choice needs human review. Autonomous routine implements + runs backtest; user reviews calibration.
+
+- [P2] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 6]
+  **Time-based profit decay** — if peak hit > N minutes ago AND current is still below peak by Y%, market-close. Stale-profit rule. Defaults: N=15 min, Y=30%. Implementation: track `_position_peak_ts` alongside `_position_high_water` in profit_protect.
+  Files: `tools/profit_protect.py`, tests.
+  Acceptance: peak hit 20 min ago at $80, current $50 (37% below peak) → close fires. Peak hit 5 min ago at $80, current $50 → hold (within time window).
+  Auto-merge: yes if tests pass.
+
+---
+
 ## 🆕 Queued 2026-05-14 late-night — HIGHEST PRIORITY (autonomous monitoring)
 
 - [P0] [effort: 180min] [risk: low] [status: open] [autonomous-eligible: yes]

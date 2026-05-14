@@ -290,15 +290,34 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
         except ProjectXError as e:
             log(f"  target placement failed: {e}")
 
+    # Register software take-profit target (2026-05-14).
+    # Brain emits a target_price; broker target leg is skipped due to the
+    # 5/11 auto-fill anomaly. Instead, profit_protect.check_and_close
+    # honors the target in software — when unrealized hits this value,
+    # it market-closes immediately. Captures the strategy's predicted
+    # exit instead of riding the trailing-lock retrace down.
+    if target_px is not None and tick > 0:
+        from tools.trader_utils import _tick_value
+        tval = _tick_value(symbol)
+        if tval > 0:
+            dollars_per_point = tval / tick
+            target_usd = abs(target_px - actual_fill) * dollars_per_point * qty
+            if target_usd > 0:
+                from tools.profit_protect import register_software_target
+                register_software_target(contract_id, target_usd)
+                log(f"  software take-profit registered: ${target_usd:.0f} "
+                      f"@ target_price={target_px}")
+
     log(f"  PLACED {symbol} {side} qty={qty} entry≈{limit_px} stop={stop_px} "
           f"target={target_px or '—'} cid={cid}")
     # Discord alert on trade open — user wants visibility on every fill
     try:
         from tools.alert import send_alert as _alert
         risk_pts = abs(actual_fill - stop_px)
+        target_str = f" target={target_px}" if target_px is not None else ""
         _alert(
             f"📈 OPEN {symbol} {side} {qty}ct @ {actual_fill} "
-            f"stop={stop_px} (risk={risk_pts:.2f}pts)",
+            f"stop={stop_px}{target_str} (risk={risk_pts:.2f}pts)",
             level="info",
         )
     except Exception:
