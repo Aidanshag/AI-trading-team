@@ -31,6 +31,17 @@ Priority logic going forward:
 - Each change must specify: prediction → measurement plan → variance trigger
 - If a P0 item below adds complexity without enabling validation, demote it
 
+## 🆕 Queued 2026-05-13 evening
+
+- [P1] [effort: 120-180min] [risk: low] [status: open] [autonomous-eligible: yes]
+  **Walk-forward validation of MGC cells** — 4 MGC shadow cells were added to `state/strategy_validation.json:live_allowlist` 2026-05-13 evening (narrow_range_break long/short, fair_value_gap_tuned short — all Asian; inside_bar_break long PostClose). They mirror existing GC cells and currently have `experimental: true` (shadow mode, no real fills). Need walk-forward OOS stats on MGC bars to graduate them out of shadow.
+  Why: tonight's GC fair_value_gap_tuned short emitted a 95-tick ($951) stop — over the $150 max-risk gate, so blocked. MGC tick value is 1/10 of GC ($1 vs $10), so the same strategy on MGC produces a $95 risk profile that fits inside the cap. Adds capacity without raising risk per trade. But: the existing OOS stats are from GC bars, not MGC — MGC has different liquidity, gappier bar shapes, lower volume. Pattern B says re-validate before deploying.
+  Files: pick the most relevant `scripts/walk_forward_*.py` and either parameterize for MGC or fork an MGC-specific copy. Bars come from ProjectX via `tools/bar_fetcher.fetch_bars(client, "MGC", ...)`. Output writes to `state/strategy_validation.json:cells` under keys `<strategy>|MGC|<session>|<side>` with `last_oos: {n, hit, e, t}` populated.
+  Acceptance: each MGC cell in live_allowlist has a `last_oos` entry. For cells meeting n≥25 AND t≥1.5 AND E>0, flip `experimental: false` to graduate to real fills. Failing cells stay shadow or get removed from allowlist.
+  Auto-merge: yes — backtest math only, no broker IO, no risk-config edits. Touches `state/strategy_validation.json` which the autonomous loop already updates.
+
+---
+
 ## 🎯 XFA-readiness checklist (target: ~30 days from 2026-05-12)
 
 User target 2026-05-12: pass Combine in ~1 month, then sustain XFA cash flow. Before XFA transition, all `XFA-readiness: required` items below MUST be resolved. The mistakes that bled tonight (orphan-leg, broker target-fill, stop on wrong side of fill, profit-take gap) must NOT recur in a real-payout context.
