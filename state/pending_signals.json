@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "81b69315859c4e2f97a10083aaf79c66",
-      "emitted_at": "2026-05-14T04:23:05+00:00",
-      "expires_at": "2026-05-14T04:26:05+00:00",
+      "id": "f6d661de473444019960ddcc02a6b4b1",
+      "emitted_at": "2026-05-14T04:24:08+00:00",
+      "expires_at": "2026-05-14T04:27:08+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4688.0,
@@ -17,9 +17,9 @@
       "notes": "experimental; reason=fvg_bear_mitigation gap=[4686.70,4688.80] age=6"
     },
     {
-      "id": "881ac64ac5524cecb56cb7f42bf9aa00",
-      "emitted_at": "2026-05-14T04:23:05+00:00",
-      "expires_at": "2026-05-14T04:26:05+00:00",
+      "id": "9f8a0c0d71db409d843ec35b29a87b2c",
+      "emitted_at": "2026-05-14T04:24:08+00:00",
+      "expires_at": "2026-05-14T04:27:08+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4678.3,
@@ -33,9 +33,9 @@
       "notes": "experimental; reason=nr7_break_short"
     },
     {
-      "id": "bfdad4805894428f8a9777cd4475eeb0",
-      "emitted_at": "2026-05-14T04:23:08+00:00",
-      "expires_at": "2026-05-14T04:26:08+00:00",
+      "id": "68f4264c10f94285a6c302487624c80b",
+      "emitted_at": "2026-05-14T04:24:10+00:00",
+      "expires_at": "2026-05-14T04:27:10+00:00",
       "symbol": "MGC",
       "side": "short",
       "entry_price": 4688.0,
@@ -49,9 +49,9 @@
       "notes": "reason=fvg_bear_mitigation gap=[4687.20,4688.90] age=6"
     },
     {
-      "id": "e10fe30005254060a373d2aefffb0638",
-      "emitted_at": "2026-05-14T04:23:08+00:00",
-      "expires_at": "2026-05-14T04:26:08+00:00",
+      "id": "5ae0f9e1405e46dcbae59d9ff21f8770",
+      "emitted_at": "2026-05-14T04:24:10+00:00",
+      "expires_at": "2026-05-14T04:27:10+00:00",
       "symbol": "MGC",
       "side": "short",
       "entry_price": 4678.4,
