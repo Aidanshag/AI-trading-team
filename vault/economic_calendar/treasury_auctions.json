@@ -1,35 +1,7 @@
 {
-  "generated_at": "2026-05-14T10:00:18.167170+00:00",
+  "generated_at": "2026-05-15T10:00:11.860245+00:00",
   "source": "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions?fields=record_date,security_type,security_term,auction_date,issue_date,offering_amt,announcemt_date,reopening&page[size]=100",
   "auctions": [
-    {
-      "auction_date": "2026-05-14",
-      "auction_time_et": "11:30",
-      "auction_dt_et": "2026-05-14T11:30",
-      "announcement_date": "2026-05-12",
-      "issue_date": "2026-05-19",
-      "security_type": "Bill",
-      "security_term": "4-Week",
-      "reopening": "Yes",
-      "offering_amt_usd": 100000000000.0,
-      "affected_futures": [],
-      "affected_primary": [],
-      "affected_basis": []
-    },
-    {
-      "auction_date": "2026-05-14",
-      "auction_time_et": "11:30",
-      "auction_dt_et": "2026-05-14T11:30",
-      "announcement_date": "2026-05-12",
-      "issue_date": "2026-05-19",
-      "security_type": "Bill",
-      "security_term": "8-Week",
-      "reopening": "Yes",
-      "offering_amt_usd": 95000000000.0,
-      "affected_futures": [],
-      "affected_primary": [],
-      "affected_basis": []
-    },
     {
       "auction_date": "2026-05-18",
       "auction_time_et": "11:30",
@@ -39,7 +11,7 @@
       "security_type": "Bill",
       "security_term": "13-Week",
       "reopening": "Yes",
-      "offering_amt_usd": null,
+      "offering_amt_usd": 89000000000.0,
       "affected_futures": [],
       "affected_primary": [],
       "affected_basis": []
@@ -53,7 +25,7 @@
       "security_type": "Bill",
       "security_term": "26-Week",
       "reopening": "No",
-      "offering_amt_usd": null,
+      "offering_amt_usd": 77000000000.0,
       "affected_futures": [],
       "affected_primary": [],
       "affected_basis": []
@@ -67,7 +39,7 @@
       "security_type": "Bill",
       "security_term": "6-Week",
       "reopening": "Yes",
-      "offering_amt_usd": null,
+      "offering_amt_usd": 85000000000.0,
       "affected_futures": [],
       "affected_primary": [],
       "affected_basis": []
@@ -81,7 +53,7 @@
       "security_type": "Bond",
       "security_term": "20-Year",
       "reopening": "No",
-      "offering_amt_usd": null,
+      "offering_amt_usd": 16000000000.0,
       "affected_futures": [
         "ZB"
       ],
@@ -102,7 +74,7 @@
       "security_type": "Note",
       "security_term": "9-Year 8-Month",
       "reopening": "Yes",
-      "offering_amt_usd": null,
+      "offering_amt_usd": 19000000000.0,
       "affected_futures": [],
       "affected_primary": [],
       "affected_basis": []

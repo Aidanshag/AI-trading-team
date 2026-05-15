@@ -1,27 +1,20 @@
 {
-  "generated_at": "2026-05-14T10:00:19.130113+00:00",
+  "generated_at": "2026-05-15T10:00:12.754034+00:00",
   "source": "https://www.federalreserve.gov/calendar/feed.ics",
   "events": [
     {
-      "ts_utc": "2026-05-14T13:00:00+00:00",
-      "summary": "Speech - Vice Chair for Supervision Michelle W. Bowman",
-      "description": "Opening Remarks",
-      "location": "At the Federal Reserve Bank of Kansas City&#8217;s Future of Banking Conference (via pre-recorded video)",
+      "ts_utc": "2026-05-19T08:00:00+00:00",
+      "summary": "Discussion - Governor Christopher J. Waller",
+      "description": "Policy Panel",
+      "location": "At the International Research Forum on Monetary Policy, Frankfurt am Main, Germany",
       "influence": "MEDIUM"
     },
     {
-      "ts_utc": "2026-05-14T19:00:00+00:00",
+      "ts_utc": "2026-05-20T09:15:00+00:00",
       "summary": "Speech - Governor Michael S. Barr",
-      "description": "Balance Sheet",
-      "location": "At a Money Marketeers FOMC Event, New York, N.Y.",
+      "description": "Consumer Financial Health Metrics",
+      "location": "At the Financial Health Network&#8217;s (FHN) EMERGE Financial Health 2026 Conference, Atlanta, Ga.",
       "influence": "MEDIUM"
-    },
-    {
-      "ts_utc": "2026-05-15T09:15:00+00:00",
-      "summary": "G.17 - Industrial Production and Capacity Utilization",
-      "description": "",
-      "location": "",
-      "influence": "LOW"
     },
     {
       "ts_utc": "2026-05-20T14:00:00+00:00",
@@ -29,6 +22,13 @@
       "description": "&lt;p&gt;Meeting of April 28-29&lt;/p&gt;",
       "location": "",
       "influence": "LOW"
+    },
+    {
+      "ts_utc": "2026-05-22T10:00:00+00:00",
+      "summary": "Lecture - Governor Christopher J. Waller",
+      "description": "Economic Outlook",
+      "location": "At the Centre for Central Banking Guest Lecture, Frankfurt am Main, Germany",
+      "influence": "MEDIUM"
     },
     {
       "ts_utc": "2026-05-25T12:00:00+00:00",

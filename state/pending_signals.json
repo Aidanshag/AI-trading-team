@@ -1,52 +1,20 @@
 {
   "signals": [
     {
-      "id": "da0cfe995af44859893312402fb221d9",
-      "emitted_at": "2026-05-15T06:23:30+00:00",
-      "expires_at": "2026-05-15T06:26:30+00:00",
-      "symbol": "6E",
-      "side": "short",
-      "entry_price": 1.1659,
-      "stop_price": 1.1662008928571428,
-      "target_price": 1.1652982142857142,
-      "qty": 1,
-      "strategy": "fair_value_gap",
-      "session": "Asian",
-      "cell_key": "fair_value_gap|6E|Asian|short",
-      "shadow_only": false,
-      "notes": "reason=fvg_bear_mitigation gap=[1.17,1.17] age=4"
-    },
-    {
-      "id": "1854f8e94ff946638017192f326f403c",
-      "emitted_at": "2026-05-15T06:23:30+00:00",
-      "expires_at": "2026-05-15T06:26:30+00:00",
-      "symbol": "MGC",
+      "id": "517e2f1b3ae542f18d0157609de21d35",
+      "emitted_at": "2026-05-15T15:31:08+00:00",
+      "expires_at": "2026-05-15T15:34:08+00:00",
+      "symbol": "MNQ",
       "side": "long",
-      "entry_price": 4575.0,
-      "stop_price": 4565.5,
-      "target_price": 4595.742857142857,
+      "entry_price": 29318.5,
+      "stop_price": 29222.29464285714,
+      "target_price": 29510.910714285717,
       "qty": 1,
-      "strategy": "narrow_range_break",
-      "session": "Asian",
-      "cell_key": "narrow_range_break|MGC|Asian|long",
+      "strategy": "pivot_reversal",
+      "session": "RTH",
+      "cell_key": "pivot_reversal|MNQ|RTH|long",
       "shadow_only": false,
-      "notes": "reason=nr7_break_long"
-    },
-    {
-      "id": "cb362df6df70431ca6d66c0f204ce8c2",
-      "emitted_at": "2026-05-15T06:24:31+00:00",
-      "expires_at": "2026-05-15T06:27:31+00:00",
-      "symbol": "GC",
-      "side": "long",
-      "entry_price": 4574.2,
-      "stop_price": 4565.5,
-      "target_price": 4594.671428571428,
-      "qty": 1,
-      "strategy": "narrow_range_break",
-      "session": "Asian",
-      "cell_key": "narrow_range_break|GC|Asian|long",
-      "shadow_only": true,
-      "notes": "experimental; reason=nr7_break_long"
+      "notes": "reason=pivot_low_rev"
     }
   ]
 }
