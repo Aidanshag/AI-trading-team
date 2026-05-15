@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "da5a9320ad704a22919ea6fcae86e980",
-      "emitted_at": "2026-05-15T21:54:56+00:00",
-      "expires_at": "2026-05-15T21:57:56+00:00",
+      "id": "3884d9cf43f046a4afe2f3a2d214b864",
+      "emitted_at": "2026-05-15T22:00:02+00:00",
+      "expires_at": "2026-05-15T22:03:02+00:00",
       "symbol": "6C",
       "side": "long",
       "entry_price": 0.72795,
