@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "ef2b5cae59eb4be9a908a659b2e000f0",
-      "emitted_at": "2026-05-15T03:54:27+00:00",
-      "expires_at": "2026-05-15T03:57:27+00:00",
+      "id": "fc11f7c5d80443d2b6520e4146015a83",
+      "emitted_at": "2026-05-15T04:02:48+00:00",
+      "expires_at": "2026-05-15T04:05:48+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4618.6,
@@ -17,9 +17,9 @@
       "notes": "experimental; reason=fvg_bear_mitigation gap=[4619.30,4620.50] age=3"
     },
     {
-      "id": "a2a545e8852b45b1a8228549b2008eef",
-      "emitted_at": "2026-05-15T03:54:27+00:00",
-      "expires_at": "2026-05-15T03:57:27+00:00",
+      "id": "8fb9c8df32f9462083cf75b014348aa4",
+      "emitted_at": "2026-05-15T04:02:49+00:00",
+      "expires_at": "2026-05-15T04:05:49+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4613.1,
@@ -33,9 +33,9 @@
       "notes": "experimental; reason=nr7_break_short"
     },
     {
-      "id": "54258eb5c557493683b06b0308816f03",
-      "emitted_at": "2026-05-15T03:54:28+00:00",
-      "expires_at": "2026-05-15T03:57:28+00:00",
+      "id": "7870e79598b6424d973417275cd34957",
+      "emitted_at": "2026-05-15T04:02:50+00:00",
+      "expires_at": "2026-05-15T04:05:50+00:00",
       "symbol": "MGC",
       "side": "short",
       "entry_price": 4613.0,
