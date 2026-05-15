@@ -256,20 +256,28 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
     opp = "sell" if side == "buy" else "buy"
 
     # ── 3b. POST-FILL SLIPPAGE CHECK (2026-05-14) ──
-    # A buy limit at 4698 should never fill at 4709. If the fill is many
-    # ticks adverse from the strategy's intended entry, the marketable-
-    # limit behavior is anomalous and the trade's R/R is suspect.
-    # Flatten immediately rather than trade on a destroyed edge.
-    fill_slippage_ticks = abs(actual_fill - entry_price) / tick
-    if fill_slippage_ticks > MAX_FILL_SLIPPAGE_TICKS:
+    # Direction-aware: only flatten on ADVERSE slippage (paid worse than
+    # the strategy's intended entry). Favorable slippage — fill BETTER
+    # than the signal entry — is a gift, not a reason to abort.
+    # 2026-05-15 fix: the original `abs()` check was killing favorable fills,
+    # e.g. MGC long signal @4622.3 filled @4620.2 (21t favorable), gate
+    # emergency-flattened it for −$3 + fees. Two trades destroyed tonight
+    # alone before the fix. Pattern A — gate ran with the wrong sign.
+    if side == "buy":
+        # paid more than intended = adverse
+        adverse_ticks = (actual_fill - entry_price) / tick
+    else:
+        # received less than intended = adverse
+        adverse_ticks = (entry_price - actual_fill) / tick
+    if adverse_ticks > MAX_FILL_SLIPPAGE_TICKS:
         log(f"  POST_FILL_SLIPPAGE: fill {actual_fill} is "
-             f"{fill_slippage_ticks:.1f}t from signal entry {entry_price} "
+             f"{adverse_ticks:.1f}t adverse from signal entry {entry_price} "
              f"(max {MAX_FILL_SLIPPAGE_TICKS}t allowed); emergency-flattening")
         try:
             from tools.alert import send_alert as _alert
             _alert(
                 f"⚠️ POST_FILL_SLIPPAGE {symbol} {side} filled @ {actual_fill} "
-                f"({fill_slippage_ticks:.0f}t adverse from {entry_price}); "
+                f"({adverse_ticks:.0f}t adverse from {entry_price}); "
                 f"flattened pre-stop. Investigate broker limit semantics.",
                 level="warn",
             )
@@ -278,11 +286,14 @@ def place_bracket(client, account_id, symbol: str, signal: dict,
         _emergency_flatten_position(
             client, account_id, contract_id,
             side_to_close=opp, qty=int(qty),
-            reason=f"fill slippage {fill_slippage_ticks:.1f}t > {MAX_FILL_SLIPPAGE_TICKS}t",
+            reason=f"adverse slippage {adverse_ticks:.1f}t > {MAX_FILL_SLIPPAGE_TICKS}t",
             log_fn=log,
         )
         return {"status": "post_fill_slippage_flattened",
-                "client_order_id": cid, "fill_slippage_ticks": fill_slippage_ticks}
+                "client_order_id": cid, "fill_slippage_ticks": adverse_ticks}
+    if adverse_ticks < 0:
+        log(f"  favorable fill {symbol} {side} {actual_fill} "
+            f"({-adverse_ticks:.1f}t better than signal {entry_price})")
 
     # ── 3c. POST-FILL R/R CHECK (2026-05-14) ──
     # If the strategy provided a target, verify there's enough upside

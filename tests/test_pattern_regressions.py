@@ -111,6 +111,136 @@ class _NoOpDB:
         return self
 
 
+class _FavorableFillBroker:
+    """Mock broker: entry order accepted, then reports a fill at a
+    price BETTER than the signal entry by far more than
+    MAX_FILL_SLIPPAGE_TICKS. Drives the regression test for the
+    2026-05-15 POST_FILL_SLIPPAGE direction-sign fix."""
+
+    def __init__(self, symbol: str, side: str, signal_entry: float,
+                 favorable_ticks: int, tick: float):
+        self.symbol = symbol
+        self.side = side  # 'buy' or 'sell'
+        self.tick = tick
+        self.signal_entry = signal_entry
+        # Favorable fill: buy lower than signal, sell higher.
+        if side == "buy":
+            self.fill_price = signal_entry - favorable_ticks * tick
+            self.pos_type = 1   # long
+        else:
+            self.fill_price = signal_entry + favorable_ticks * tick
+            self.pos_type = 2   # short
+        self.place_order_calls: list[dict] = []
+        self.cancel_order_calls: list[dict] = []
+        self.close_position_calls: list[dict] = []
+        self._working_orders: list[dict] = []
+        self._entry_placed = False
+
+    def front_month_contract_id(self, symbol):
+        return f"CON.F.US.{symbol}.M26"
+
+    def get_positions(self, account_id):
+        if not self._entry_placed:
+            return []
+        return [{
+            "contractId": f"CON.F.US.{self.symbol}.M26",
+            "size": 1, "type": self.pos_type,
+            "averagePrice": self.fill_price,
+        }]
+
+    def get_working_orders(self, account_id):
+        return list(self._working_orders)
+
+    def place_order(self, **kwargs):
+        self.place_order_calls.append(dict(kwargs))
+        # Mark the entry as filled after the first call so the next
+        # _position_signature() probe sees a position open.
+        if not self._entry_placed:
+            self._entry_placed = True
+        else:
+            # protective stop placement — track as a working order
+            self._working_orders.append({
+                "contractId": kwargs.get("contract_id"),
+                "type": 4, "customTag": kwargs.get("client_order_id"),
+            })
+        return {"success": True, "orderId": f"mock_{len(self.place_order_calls)}"}
+
+    def cancel_order(self, account_id, order_id):
+        self.cancel_order_calls.append({"account_id": account_id, "order_id": order_id})
+        return {"success": True}
+
+    def close_position(self, account_id, contract_id):
+        # If this fires, the regression has reappeared.
+        self.close_position_calls.append({"account_id": account_id,
+                                           "contract_id": contract_id})
+        return {"success": True}
+
+
+def test_post_fill_slippage_does_not_flatten_on_favorable_fill(monkeypatch):
+    """Regression: the POST_FILL_SLIPPAGE gate must be DIRECTION-AWARE.
+
+    2026-05-15 incident: brain emitted MGC long @ 4622.3; broker filled
+    @ 4620.2 (21 ticks BETTER than signal). The pre-fix gate computed
+    `abs(fill - entry) / tick = 21t > 10t MAX` and emergency-flattened
+    a favorable fill for -$3 + fees. Two trades destroyed in one hour
+    (5/14 22:24 + 22:39 ET) before the fix.
+
+    This test wires a broker that reports a fill 21t favorable on a
+    BUY and asserts place_bracket does NOT emergency-flatten — it
+    proceeds to place the protective stop instead.
+
+    If this regresses: every winning entry where the broker fills
+    better than signal will be killed at +$0 - fees. Pattern A —
+    a gate ran with the wrong sign and silently destroyed edge.
+    """
+    from scripts import live_trader as lt
+    import tools.bracket_placement as _bp
+
+    broker = _FavorableFillBroker(
+        symbol="MGC", side="buy",
+        signal_entry=4622.3, favorable_ticks=21, tick=0.10,
+    )
+
+    db_instance = _NoOpDB()
+    monkeypatch.setattr(lt, "get_db", lambda: db_instance)
+    monkeypatch.setattr(_bp, "get_db", lambda: db_instance)
+    monkeypatch.setattr(lt, "FILL_WAIT_TIMEOUT_S", 1)
+    monkeypatch.setattr(lt, "FILL_WAIT_POLL_S", 1)
+
+    signal = {
+        "side": "long",
+        "price": 4622.3,
+        "stop": 4613.5,
+        "target": 4641.7,
+    }
+    result = lt.place_bracket(
+        broker, account_id=1, symbol="MGC", signal=signal, qty=1, dry_run=False
+    )
+
+    # === Build-failing assertions ===
+
+    assert len(broker.close_position_calls) == 0, (
+        f"PATTERN A REGRESSION: POST_FILL_SLIPPAGE gate emergency-flattened "
+        f"a FAVORABLE fill ({broker.fill_price} on a long signal @ "
+        f"{signal['price']}, 21t better). close_position called "
+        f"{len(broker.close_position_calls)}x — should never fire on a "
+        f"favorable fill. The gate must be direction-aware, not abs(). "
+        f"See tools/bracket_placement.py:263 — fix landed 2026-05-15."
+    )
+    assert result.get("status") != "post_fill_slippage_flattened", (
+        f"PATTERN A REGRESSION: place_bracket returned "
+        f"{result.get('status')!r} after a favorable fill. Expected the "
+        f"trade to proceed to stop placement, not be flattened."
+    )
+
+    # The bracket should have placed entry + protective stop = 2 orders.
+    n_orders = len(broker.place_order_calls)
+    assert n_orders == 2, (
+        f"After a favorable fill, place_bracket should place 1 entry + "
+        f"1 protective stop = 2 orders. Got {n_orders}. calls={broker.place_order_calls}"
+    )
+
+
 def test_pattern_a_unfilled_entry_does_not_place_protective_legs(monkeypatch):
     """The build-failing CI check for Pattern A.
 

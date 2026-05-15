@@ -31,6 +31,29 @@ Priority logic going forward:
 - Each change must specify: prediction → measurement plan → variance trigger
 - If a P0 item below adds complexity without enabling validation, demote it
 
+## 🆕 Queued 2026-05-15 — EU6/6E symbol alias for tick economics
+
+- [P0] [effort: 30min] [risk: low] [status: open] [autonomous-eligible: yes]
+  **Add "EU6" alias to `_TICK_ECONOMICS` in `tools/profit_protect.py`** — 2026-05-14 EU6 (6E) short held 2h14m completely UNPROTECTED. Brain emits signal as `6E`, broker contract resolves to `CON.F.US.EU6.M26`, symbol extraction returns `EU6`. `_TICK_ECONOMICS` has `"6E": (0.00005, 6.25)` but NOT `"EU6"`. Result: profit-lock + loss-cap silently disabled for entire trade. Hundreds of "no tick economics for EU6 ... BLIND to this position" log lines from 02:20 to 02:23 UTC. Position got lucky: +$112 at MFE +$181, MAE -$50.
+  Files: `tools/profit_protect.py:147` (add `"EU6"` alias for `6E`, `"GCE"` for `GC`, `"NQM"` for `NQ` etc — audit all FX/equity symbol contracts on Topstep for alias drift). Add a test that any symbol the brain emits resolves to non-zero tick economics.
+  Acceptance: a unit test that iterates every symbol in `state/strategy_validation.json:live_strategies_filter` and asserts `_resolve_tick_economics(extracted_symbol_from_contract) > 0`.
+  Auto-merge: yes if tests pass.
+  Pattern: A — fail-silent default. Hit n=4 (after 4/29 DLL breach, 5/5 unrealized=0.0, 5/5 zero-target). Add a CI test in tests/test_pattern_regressions.py.
+
+## 🆕 Queued 2026-05-15 — profit-lock LIMIT order rejection
+
+- [P0] [effort: 90min] [risk: medium] [status: open] [autonomous-eligible: yes]
+  **Migrate profit-lock from `place_order(order_type="limit")` to `close_position`** — 13 `profitlock_*` LIMIT orders REJECTED by ProjectX over 2026-05-13/14, plus 1 `emergency_flat_*` LIMIT rejected. This is the broker quirk documented in `project_broker_order_semantics.md` (memory). The profit-lock code path still places marketable limits to lock gains — the broker rejects them. Net effect: when the mechanical profit-lock TRIES to fire, it FAILS. Trades retrace or stop out instead.
+  Files: `tools/profit_protect.py` — find every `place_order(...)` call in the close path and switch to `client.close_position(account_id, contract_id)` (the endpoint known to work). Audit logging so successful closes write to `agent_exit_vetoes`/`decisions` correctly.
+  Acceptance: a successful profit-lock close uses `close_position`; rejected-LIMIT path is gone. Test with a paper trade or replay.
+  Auto-merge: yes if existing profit_protect tests pass and a smoke test fires the new path.
+  Pattern: known broker quirk, not a new failure mode.
+
+## 🆕 Queued 2026-05-15 — POST_FILL_SLIPPAGE direction-aware fix (LANDED)
+
+- [P0] [effort: done] [risk: low] [status: merged 2026-05-15] [autonomous-eligible: n/a]
+  **Direction-aware POST_FILL_SLIPPAGE check — landed in `tools/bracket_placement.py`.** Pre-fix bug used `abs()` so favorable fills were treated as failures and emergency-flattened. At least 7 confirmed kills in 24h (5/14 04:44, 05:39, 05:54, 06:20, 23:13, 00:03, 02:24, 02:39 UTC) — all on favorable fills. Cost: ~$30-50 destroyed P&L + ~$300 unrealized MFE never captured. Regression test added to `tests/test_pattern_regressions.py`.
+
 ## 🆕 Queued 2026-05-14 late — REAL-TIME PRICE FEED (research)
 
 - [P0] [effort: 90min — investigation] [risk: none] [status: open] [autonomous-eligible: yes]

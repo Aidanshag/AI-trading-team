@@ -1,25 +1,9 @@
 {
   "signals": [
     {
-      "id": "e11a04703a454a27af18469bec64f345",
-      "emitted_at": "2026-05-15T02:44:58+00:00",
-      "expires_at": "2026-05-15T02:47:58+00:00",
-      "symbol": "GC",
-      "side": "short",
-      "entry_price": 4616.7,
-      "stop_price": 4622.4,
-      "target_price": 4601.528571428571,
-      "qty": 1,
-      "strategy": "narrow_range_break",
-      "session": "Asian",
-      "cell_key": "narrow_range_break|GC|Asian|short",
-      "shadow_only": true,
-      "notes": "experimental; reason=nr7_break_short"
-    },
-    {
-      "id": "d0d91930651e4790b6ac194053dbf2ab",
-      "emitted_at": "2026-05-15T02:47:03+00:00",
-      "expires_at": "2026-05-15T02:50:03+00:00",
+      "id": "f0c74e8162344efa95b8aa71f8bfa056",
+      "emitted_at": "2026-05-15T02:57:30+00:00",
+      "expires_at": "2026-05-15T03:00:30+00:00",
       "symbol": "GC",
       "side": "long",
       "entry_price": 4621.4,
@@ -33,9 +17,25 @@
       "notes": "experimental; reason=nr7_break_long"
     },
     {
-      "id": "4e3db39b8d084d86ae749e63b77bbf07",
-      "emitted_at": "2026-05-15T02:47:04+00:00",
-      "expires_at": "2026-05-15T02:50:04+00:00",
+      "id": "e90a4db2aaf24823bf66261660e1684d",
+      "emitted_at": "2026-05-15T02:57:32+00:00",
+      "expires_at": "2026-05-15T03:00:32+00:00",
+      "symbol": "6E",
+      "side": "short",
+      "entry_price": 1.1673,
+      "stop_price": 1.1675535714285714,
+      "target_price": 1.1667928571428572,
+      "qty": 1,
+      "strategy": "fair_value_gap",
+      "session": "Asian",
+      "cell_key": "fair_value_gap|6E|Asian|short",
+      "shadow_only": false,
+      "notes": "reason=fvg_bear_mitigation gap=[1.17,1.17] age=27"
+    },
+    {
+      "id": "79f9da6a49db4fe68068db266a0d6c24",
+      "emitted_at": "2026-05-15T02:57:32+00:00",
+      "expires_at": "2026-05-15T03:00:32+00:00",
       "symbol": "MGC",
       "side": "long",
       "entry_price": 4621.9,
