@@ -1,3 +1,20 @@
 {
-  "signals": []
+  "signals": [
+    {
+      "id": "222c329eed8047258e736cf97b09ffb9",
+      "emitted_at": "2026-05-15T20:47:25+00:00",
+      "expires_at": "2026-05-15T20:50:25+00:00",
+      "symbol": "6C",
+      "side": "long",
+      "entry_price": 0.72795,
+      "stop_price": 0.7278,
+      "target_price": 0.7282785714285713,
+      "qty": 1,
+      "strategy": "narrow_range_break",
+      "session": "PostClose",
+      "cell_key": "narrow_range_break|6C|PostClose|long",
+      "shadow_only": true,
+      "notes": "experimental; reason=nr7_break_long"
+    }
+  ]
 }
