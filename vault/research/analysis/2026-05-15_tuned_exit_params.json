@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-05-15T20:24:57.590936+00:00",
+  "baseline_params": {
+    "retrace_cap": 0.3,
+    "min_peak_floor": 20.0,
+    "reversal_bars": 3,
+    "reversal_min_peak": 15.0,
+    "time_decay_min": 15.0,
+    "time_decay_retrace": 0.3
+  },
+  "baseline_cf_total": 49.49999999999818,
+  "winning_params": {
+    "retrace_cap": 0.4,
+    "min_peak_floor": 30,
+    "reversal_bars": 4,
+    "reversal_min_peak": 10,
+    "time_decay_min": 20,
+    "time_decay_retrace": 0.15
+  },
+  "winning_cf_total": 153.49999999999454,
+  "improvement_vs_baseline": 103.99999999999636,
+  "n_trades": 27,
+  "sample_caveat": "27 trades only \u2014 risk of overfitting. Validate via live shadow."
+}
