@@ -54,7 +54,18 @@ def send_alert(message: str, level: str = "info") -> bool:
 
     Returns True on success, False if no webhook configured or send failed.
     Never raises — alert failures must not break the caller.
+
+    No-ops under pytest. 2026-05-15 incident: test_queue_consumer's
+    StubBroker-driven emergency-flatten failure path fired a real
+    CRITICAL Discord alert about a non-existent MNQ position because
+    every production alert site is reachable from tests via the same
+    code path. Detecting pytest at the alert layer is the cleanest
+    fix — every alert site is silenced uniformly without per-test
+    monkeypatching. Honored env var: FUND_ALERT_FORCE=1 overrides
+    the suppression for explicit test runs of the alert path itself.
     """
+    if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("FUND_ALERT_FORCE"):
+        return False
     _load_dotenv()
     webhook = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
     if not webhook:
