@@ -143,20 +143,22 @@ def test_micro_tier_15_5_locks_small_win_on_retrace():
     assert outcome == "profit_lock", f"expected profit_lock, got {outcome}"
 
 
-def test_micro_tier_does_not_clip_runner_above_150_peak():
-    """A trade that runs to peak $200 uses the (150, 50) tier, not micro
-    tiers. Micro tiers must not affect runner behavior.
+def test_continuous_floor_at_200_peak_closes_on_retrace():
+    """A trade peaking at $200 has a continuous floor at $140 (30% retrace).
+    Bar 2 retraces to +$40 < $140 → profit_lock close.
 
     GC math: 1 GC point = 10 ticks × $10/tick = $100 of P&L. So h=4002 is
-    +$200 unrealized from entry 4000."""
+    +$200 unrealized from entry 4000.
+    Updated 2026-05-15: was (150, 50) tier giving floor $50. New continuous
+    rule: peak $200 * 0.70 = floor $140 — captures $90 more of the peak."""
     from datetime import datetime, timedelta, timezone
     ts0 = datetime(2026, 5, 12, 14, 0, tzinfo=timezone.utc)
     bars = [
         # Entry bar: contained range, peak +$50 only
         _bar(ts0,                       h=4000.5, l=3999.5, c=4000),
-        # Bar 1: peak surges to +$200, unfav at +$150 (above $50 floor)
+        # Bar 1: peak surges to +$200, unfav at +$150 (above $140 floor — no close yet)
         _bar(ts0 + timedelta(minutes=1), h=4002,   l=4001.5, c=4001.8),
-        # Bar 2: unfav retraces to +$40 — below (150,50) floor of $50 → close
+        # Bar 2: unfav retraces to +$40 — below $140 continuous floor → close
         _bar(ts0 + timedelta(minutes=2), h=4001.8, l=4000.4, c=4000.5),
     ]
     outcome, _, note = evaluate_exec_mirror(
@@ -164,9 +166,8 @@ def test_micro_tier_does_not_clip_runner_above_150_peak():
         apply_friction=False,
     )
     assert outcome == "profit_lock"
-    # The (150, 50) tier's $50 floor must dominate the micro tiers' lower
-    # floors once peak >= $150.
-    assert "floor $50" in note, f"expected (150,50) tier active, got: {note}"
+    # Continuous 30% retrace from peak $200 → floor $140
+    assert "$140" in note, f"expected continuous $140 floor active, got: {note}"
 
 
 def test_friction_components_match_shadow_realism():

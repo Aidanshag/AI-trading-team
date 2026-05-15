@@ -44,39 +44,42 @@ from typing import Callable
 
 # ── Configuration ──────────────────────────────────────────────
 
-TRAILING_PROFIT_TIERS: tuple[tuple[float, float], ...] = (
-    # (peak_threshold_usd, floor_usd) — order doesn't matter, decide()
-    # picks the highest-active floor. Trades stack: as peak grows, tighter
-    # higher-floor tiers progressively replace looser low-floor tiers.
-    #
-    # 2026-05-13 update: removed the (30, 0) tier — it was dominated by
-    # (25, 12) so it never actually fired (at peak >=30, both tiers are
-    # crossed and decide() picks max floor = 12). The "(30, 0) reverts
-    # break-even" semantic was illusory after the 5/12 micro-tier add.
-    # Also added graduated intermediate tiers between $25 and $80 peak
-    # so a mid-size winner doesn't ride the (25, 12) floor for too long.
-    #
-    # --- micro tiers (lock small wins, don't clip runners)
-    ( 15.0,     5.0),    # peak $15 → lock $5
-    ( 25.0,    12.0),    # peak $25 → lock $12
-    # --- mid-small tiers (added 2026-05-13 — bridge $25-$80 zone)
-    ( 40.0,    18.0),    # peak $40 → lock $18 (45% lock)
-    ( 55.0,    25.0),    # peak $55 → lock $25 (45% lock)
-    ( 70.0,    32.0),    # peak $70 → lock $32 (46% lock)
-    # --- mid tiers
-    ( 80.0,    40.0),    # peak $80 → lock $40 (50% lock; was 20, raised
-                          #   2026-05-13 to fit the graduated progression)
-    (150.0,    50.0),
-    (250.0,   100.0),
-    (400.0,   200.0),
-    # --- runner zone (allow big winners to breathe; tier added 2026-05-11
-    # after the +$2,616 GC trade revealed the prior cap was clipping runners)
-    (750.0,   400.0),
-    (1500.0,  900.0),
-    (2500.0, 1500.0),
-    (5000.0, 3000.0),
-    (10000.0, 6500.0),
+# 2026-05-15: continuous percent-of-peak retracement replaces the static
+# sub-$750 tier table. The static table gave back too much — peak $113 →
+# floor $32 (72% give-back) was the user-noted incident. Trade analysis
+# of 2026-05-13/14 showed $626 of summed peak MFE captured only $98
+# realized (84% leakage). New formula:
+#
+#   for peak ∈ [$20, $750]: floor = max($20, peak * (1 - RETRACE_CAP_FRACTION))
+#   for peak < $20:         no floor (let it run / breakeven only)
+#   for peak > $750:        RUNNER_ZONE_TIERS (mechanical backstop, looser to
+#                           let big winners breathe per user direction)
+#
+# Default RETRACE_CAP_FRACTION = 0.30 (max 30% give-back from peak in
+# mid-zone). Calibration via walk-forward is a future cycle once we have
+# enough live data to compare — this is the starting value per user spec.
+RETRACE_CAP_FRACTION: float = 0.30
+MIN_PEAK_FOR_FLOOR_USD: float = 20.0
+MAX_PEAK_FOR_CONTINUOUS_USD: float = 750.0
+
+# Runner-zone tier table (peak > $750). Looser than continuous formula
+# because once a trade is into runner territory, momentum is the signal —
+# tightening too aggressively clips winners. 2026-05-11 expansion after
+# +$2,616 GC trade revealed the prior cap was clipping runners.
+# 2026-05-15: first tier raised from $400 → $525 to be continuous with
+# the new mid-zone formula at the $750 boundary (750 * 0.70 = 525).
+RUNNER_ZONE_TIERS: tuple[tuple[float, float], ...] = (
+    (750.0,   525.0),    # 30% retrace at boundary (continuous with mid-zone)
+    (1500.0,  900.0),    # 40% retrace
+    (2500.0, 1500.0),    # 40% retrace
+    (5000.0, 3000.0),    # 40% retrace
+    (10000.0, 6500.0),   # 35% retrace
 )
+
+# Legacy alias kept for any external import / test parameter that takes
+# a `tiers` argument. New code should call `_compute_active_floor()`
+# which encodes both the continuous formula and the runner-zone tiers.
+TRAILING_PROFIT_TIERS: tuple[tuple[float, float], ...] = RUNNER_ZONE_TIERS
 
 # 2026-05-11: hard cap REMOVED (set to None) per user direction. The old
 # $400 cap would have force-closed today's GC trade at $400 instead of
@@ -214,7 +217,7 @@ _TICK_ECONOMICS: dict[str, tuple[float, float]] = {
 # ── Decision logic (pure) ─────────────────────────────────────
 
 def decide(unrealized: float, prev_peak: float,
-            tiers: tuple[tuple[float, float], ...] = TRAILING_PROFIT_TIERS,
+            tiers: tuple[tuple[float, float], ...] = RUNNER_ZONE_TIERS,
             gain_cap: float | None = GAIN_TIER_HARD_CAP_USD,
             loss_cap: float = LOSS_TIER_HARD_CAP_USD,
             ) -> tuple[bool, str]:
@@ -224,37 +227,47 @@ def decide(unrealized: float, prev_peak: float,
     Closure rules (checked in order):
       1. Loss hard cap: unrealized <= -loss_cap → close (backstop)
       2. Gain hard cap: unrealized >= gain_cap → close (if cap is not None)
-      3. Trailing tiers: among tiers whose peak_threshold the position
-         has crossed, the TIGHTEST floor (highest floor) wins. Close iff
-         current unrealized < that floor.
+      3. Trailing floor:
+           - peak ∈ [$20, $750]: continuous floor = max($20, peak * 0.70)
+           - peak > $750:        runner-zone tier lookup (tightest wins)
+           - peak < $20:         no floor (let it run)
+         Close iff current unrealized < floor.
     """
     if gain_cap is not None and unrealized >= gain_cap:
         return True, f"hard_cap: unrealized ${unrealized:.2f} >= ${gain_cap:.0f}"
     if unrealized <= -loss_cap:
         return True, (f"loss_hard_cap: unrealized ${unrealized:.2f} "
                        f"<= -${loss_cap:.0f} (broker stop backstop)")
-    # Among crossed tiers, pick the one with the highest floor (tightest
-    # protection wins).
-    active_floor: float | None = None
-    active_peak: float | None = None
-    for peak_threshold, floor in tiers:
-        if prev_peak >= peak_threshold:
-            if active_floor is None or floor > active_floor:
-                active_floor = floor
-                active_peak = peak_threshold
+    active_floor = _compute_active_floor(prev_peak, tiers=tiers)
     if active_floor is not None and unrealized < active_floor:
-        return True, (f"trailing_lock: peak ${prev_peak:.2f} crossed "
-                       f"${active_peak:.0f}, current ${unrealized:.2f} "
-                       f"fell below floor ${active_floor:.0f}")
+        return True, (f"trailing_lock: peak ${prev_peak:.2f} → "
+                       f"floor ${active_floor:.2f}, current "
+                       f"${unrealized:.2f} fell below")
     return False, ""
 
 
 def _compute_active_floor(prev_peak: float,
-                            tiers: tuple[tuple[float, float], ...] = TRAILING_PROFIT_TIERS,
+                            tiers: tuple[tuple[float, float], ...] = RUNNER_ZONE_TIERS,
                             ) -> float | None:
-    """Return the tightest active floor given prev_peak (= highest floor
-    among tiers whose peak_threshold has been crossed). Returns None if
-    no tier crossed. Pure function — mirrors the inner logic of decide()."""
+    """Return the active floor for the given peak.
+
+    2026-05-15 — continuous percent-of-peak retracement:
+      - peak < MIN_PEAK_FOR_FLOOR_USD ($20): None (no floor, let it run)
+      - peak ∈ [$20, $750]:                   max($20, peak * 0.70)
+      - peak > $750:                          tier lookup (runner zone)
+
+    The continuous formula is much tighter than the old tier table —
+    user-noted incident: peak $113 used to give back to $32; now floors
+    at $79. Captures 84% of peak instead of 28%.
+
+    Pure function — no IO. Tested in tests/test_profit_protect.py.
+    """
+    if prev_peak < MIN_PEAK_FOR_FLOOR_USD:
+        return None
+    if prev_peak <= MAX_PEAK_FOR_CONTINUOUS_USD:
+        return max(MIN_PEAK_FOR_FLOOR_USD,
+                    prev_peak * (1.0 - RETRACE_CAP_FRACTION))
+    # Runner zone: tier lookup, tightest active wins.
     active: float | None = None
     for peak_threshold, floor in tiers:
         if prev_peak >= peak_threshold:

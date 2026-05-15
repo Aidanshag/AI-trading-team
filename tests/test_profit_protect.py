@@ -125,47 +125,123 @@ def test_software_target_registration_and_clear():
     assert "CON.TEST" not in pp._target_usd_by_contract
 
 
-def test_decide_lowest_tier_breakeven_protection():
-    """Peak crossed $50 — crosses (15,5), (25,12), (40,18). Among crossed
-    tiers, the highest floor wins → (40, 18) → floor $18.
-    Current $-5 < $18 → close.
-    Updated 2026-05-13 after the (30, 0) tier was removed (dominated)
-    and the mid-small (40, 18) / (55, 25) / (70, 32) tiers were added."""
+def test_decide_continuous_floor_at_50_peak():
+    """Peak $50 → continuous floor = max($20, $50 * 0.70) = $35.
+    Current $-5 < $35 → close.
+    Updated 2026-05-15: static tier table (40, 18) replaced by continuous
+    percent-of-peak retracement. Old behavior: floor $18. New: floor $35.
+    Captures $17 more of peak profit per the user-noted leakage incident."""
     should, reason = pp.decide(unrealized=-5.0, prev_peak=50.0)
     assert should is True
     assert "trailing_lock" in reason
     assert "$50" in reason   # peak shown
-    assert "floor $18" in reason  # active floor from (40, 18) tier
+    assert "$35" in reason   # continuous floor
 
 
-def test_decide_mid_tier_protection():
-    """Peak crossed $150 (= floor $50). Current $40 < $50 -> close."""
+def test_decide_continuous_floor_at_160_peak():
+    """Peak $160 → continuous floor = $160 * 0.70 = $112.
+    Current $40 < $112 → close.
+    Updated 2026-05-15: old (150, 50) tier gave floor $50; new continuous
+    rule floors at $112 — captures $62 more of the run."""
     should, reason = pp.decide(unrealized=40.0, prev_peak=160.0)
     assert should is True
-    assert "$50" in reason  # floor
+    assert "$112" in reason  # continuous floor at 30% retrace
 
 
-def test_decide_peak_below_lowest_tier_no_lock():
-    """Peak only reached $10 -- below the (15, 5) micro-tier threshold.
-    No lock. Current can drop to small negative without triggering close.
-    Updated 2026-05-12 after micro-tiers were added — the new lowest
-    tier threshold is $15 (was $30)."""
+def test_decide_peak_below_min_floor_no_lock():
+    """Peak only reached $10 — below MIN_PEAK_FOR_FLOOR_USD ($20).
+    No floor; trade can wander negative without auto-close (broker stop
+    still protects).
+    Updated 2026-05-15: was $15 (old micro-tier threshold), now $20."""
     should, reason = pp.decide(unrealized=-3.0, prev_peak=10.0)
-    assert should is False  # below lowest tier threshold, loss cap not breached
+    assert should is False  # below min-floor threshold, loss cap not breached
 
 
-def test_decide_picks_highest_active_tier():
-    """If peak crosses multiple tiers, the tightest active tier applies.
-    Peak $300 (crosses $250 -> floor $100). Current $80 < $100 -> close."""
+def test_decide_continuous_floor_at_300_peak():
+    """Peak $300 → continuous floor = $300 * 0.70 = $210.
+    Current $80 < $210 → close.
+    Updated 2026-05-15: old (250, 100) tier gave floor $100; new continuous
+    rule floors at $210 — much tighter protection of mid-size winners."""
     should, reason = pp.decide(unrealized=80.0, prev_peak=300.0)
     assert should is True
-    assert "$100" in reason  # floor=$100 from peak>=$250 tier
+    assert "$210" in reason  # continuous floor
 
 
 def test_decide_above_active_floor_no_close():
-    """Peak $300 (floor $100), current $120 > $100 -> no close yet."""
-    should, reason = pp.decide(unrealized=120.0, prev_peak=300.0)
+    """Peak $300, continuous floor $210. Current $220 > $210 → no close.
+    Updated 2026-05-15: was current=$120 vs $100 floor; new floor is
+    $210 so the test value needed to rise to stay above floor."""
+    should, reason = pp.decide(unrealized=220.0, prev_peak=300.0)
     assert should is False
+
+
+# ── Continuous percent-of-peak retracement (2026-05-15) ─────────
+
+def test_continuous_floor_at_25_peak_pins_to_min():
+    """Peak $25 → $25 * 0.70 = $17.50 < MIN_PEAK_FOR_FLOOR_USD ($20).
+    Floor clamps to $20."""
+    floor = pp._compute_active_floor(prev_peak=25.0)
+    assert floor == 20.0
+
+
+def test_continuous_floor_at_50_peak():
+    """Peak $50 → max($20, $50 * 0.70) = $35."""
+    floor = pp._compute_active_floor(prev_peak=50.0)
+    assert floor == 35.0
+
+
+def test_continuous_floor_at_100_peak():
+    """Peak $100 → max($20, $70) = $70."""
+    floor = pp._compute_active_floor(prev_peak=100.0)
+    assert floor == 70.0
+
+
+def test_continuous_floor_at_200_peak():
+    """Peak $200 → max($20, $140) = $140."""
+    floor = pp._compute_active_floor(prev_peak=200.0)
+    assert floor == 140.0
+
+
+def test_continuous_floor_at_500_peak():
+    """Peak $500 → max($20, $350) = $350."""
+    floor = pp._compute_active_floor(prev_peak=500.0)
+    assert floor == 350.0
+
+
+def test_continuous_floor_at_750_boundary():
+    """Peak $750 is the boundary: continuous formula gives $525.
+    The runner-zone tier (750, 525) gives the same — continuous design."""
+    floor = pp._compute_active_floor(prev_peak=750.0)
+    assert floor == 525.0
+
+
+def test_runner_zone_at_800_peak():
+    """Peak just over $750 enters runner zone. Tier (750, 525) is the
+    only crossed tier — floor $525. Matches the continuous formula at
+    the boundary, then loosens at higher tiers."""
+    floor = pp._compute_active_floor(prev_peak=800.0)
+    assert floor == 525.0
+
+
+def test_below_min_peak_no_floor():
+    """Peak $15 < MIN_PEAK_FOR_FLOOR_USD ($20): returns None (no floor)."""
+    floor = pp._compute_active_floor(prev_peak=15.0)
+    assert floor is None
+
+
+def test_user_incident_peak_113_now_floors_at_79():
+    """Regression-guard for the user-noted give-back incident:
+    overnight 2026-05-14, a trade peaked at +$113 and gave back to +$29
+    under the old static tiers — the (70, 32) tier was the active floor.
+    Under the new continuous rule, peak $113 floors at $113 * 0.70 = $79.10.
+    A retrace to $50 (still well above $29) now CLOSES the trade,
+    locking in 70% of peak instead of letting it bleed to 25%."""
+    floor = pp._compute_active_floor(prev_peak=113.0)
+    assert abs(floor - 79.10) < 0.01
+    # Trade retraces to $50 — should close under new rule.
+    should, reason = pp.decide(unrealized=50.0, prev_peak=113.0)
+    assert should is True
+    assert "$79" in reason  # continuous floor
 
 
 # ── Runner-zone tiers (2026-05-11 expansion) ──────────────────

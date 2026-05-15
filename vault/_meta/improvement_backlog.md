@@ -84,8 +84,8 @@ Priority logic going forward:
 
 User direction 2026-05-14: "eventually should all of these be implemented." All 6 exit-optimization options were laid out and the user asked them all to be done at some point. #1 (software take-profit at target) shipped 2026-05-14 0431 UTC. The remaining 5 are queued below in priority order. **Pick from this section first when the autonomous routine fires.**
 
-- [P0] [effort: 90min] [risk: low] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 2]
-  **Percent-of-peak retracement (replaces tier table)** — current static tiers leave too much give-back (peak $113 → exit $29 = $84 give-back overnight 2026-05-14). User wants a continuous rule: "never give back more than X% of peak above $20." e.g., 30% retrace cap means peak $100 → exit at $70 max. Replace `TRAILING_PROFIT_TIERS` with a continuous function `floor_for_peak(peak_usd) -> float` returning `max(20, peak * (1-X))` for peak above $20. Add a regression test: at peak $100, retrace to $69 closes; retrace to $71 holds. Calibrate X via walk-forward analysis on historical fills (start with X=0.30 = 30% retrace cap).
+- [P0] [effort: 90min] [risk: low] [status: merged 2026-05-15] [autonomous-eligible: yes] [exit-roadmap-step: 2]
+  **Percent-of-peak retracement (replaces tier table)** — SHIPPED 2026-05-15. Continuous formula `max($20, peak * 0.70)` replaces the sub-$750 static tiers. Runner-zone tiers (peak > $750) preserved per user direction (big winners breathe). New tests: 8 new in `test_profit_protect.py` covering peak $25/$50/$100/$200/$500/$750/$800 + the user-incident regression-guard (peak $113 → floor $79). Old tier-specific assertions in `test_exec_mirror.py` updated to new floors. 483 tests green. Mechanical exits now capture ~70% of peak instead of ~30%. Patch lands at trader restart.
   Files: `tools/profit_protect.py` (replace `_compute_active_floor`, keep `decide()` signature). Tests: extend `tests/test_profit_protect.py`.
   Acceptance: peak $100 close happens at >= $70 unrealized (vs current $40 floor from (80,40) tier).
   Auto-merge: yes if tests pass.
