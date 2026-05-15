@@ -645,13 +645,28 @@ def _record_close_decision(symbol: str, side: str, size: int, contract_id: str,
     row that `place_order` used to produce — the native `close_position`
     endpoint doesn't create an order row in the same way.
 
+    2026-05-15: rationale text now includes `peak_pct_captured` —
+    realized / peak for positive-peak trades. The sentinel rolls this
+    up weekly so we can measure whether the exit rebuild actually
+    captures peak P&L over time (the "close the gap between backtest
+    and prod" measurement loop).
+
     Fail-safe: any DB error is swallowed (the close itself already
     succeeded at the broker; logging failure must not raise)."""
     try:
         from state.db import get_db
         summary = (f"{symbol} {side} {size}ct flattened via close_position "
                     f"@ unrealized=${unrealized:+.2f}")
+        # Peak-capture metric: what fraction of peak unrealized we kept.
+        # Only meaningful for positive peaks. Negative peaks (i.e. trade
+        # never went positive) get marked as 'n/a'.
+        if peak > 0:
+            peak_pct = unrealized / peak
+            peak_pct_str = f"peak_pct_captured={peak_pct:.3f}"
+        else:
+            peak_pct_str = "peak_pct_captured=n/a"
         rationale = (f"reason={reason} | peak=${peak:+.2f} | "
+                      f"realized=${unrealized:+.2f} | {peak_pct_str} | "
                       f"contract_id={contract_id}")
         get_db().record_decision(
             agent="profit_lock",

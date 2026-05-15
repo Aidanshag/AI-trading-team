@@ -222,6 +222,92 @@ def test_check_slippage_flags_significant_drop_past_floor(inmem_db):
     assert findings[0].detail["slippage_usd"] == 30.0
 
 
+# ── check_peak_capture_weekly (the measurement loop) ──────────────
+
+def test_peak_capture_warns_when_below_threshold(inmem_db):
+    """Avg capture < 30% over the week → warn-level finding."""
+    # Three closes, capture rates 10%, 15%, 20% → avg 15%
+    for pct in (0.10, 0.15, 0.20):
+        inmem_db.execute(
+            "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
+            "VALUES (datetime('now','-1 day'), 'profit_lock', 'close', 'MGC', "
+            f"'reason=trailing_lock | peak=$100 | realized=$50 | "
+            f"peak_pct_captured={pct} | contract_id=x')"
+        )
+    inmem_db.commit()
+    findings = sn.check_peak_capture_weekly(inmem_db)
+    assert len(findings) == 1
+    assert findings[0].severity == "warn"
+    assert findings[0].check_name == "peak_capture_weekly"
+    # 15% rendered as 15% in the summary
+    assert "15%" in findings[0].summary
+
+
+def test_peak_capture_info_when_healthy(inmem_db):
+    """Avg capture ≥ 30% → info-level (for daily report visibility)."""
+    for pct in (0.40, 0.50, 0.60):
+        inmem_db.execute(
+            "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
+            "VALUES (datetime('now','-1 day'), 'profit_lock', 'close', 'MGC', "
+            f"'reason=trailing_lock | peak=$100 | realized=$50 | "
+            f"peak_pct_captured={pct} | contract_id=x')"
+        )
+    inmem_db.commit()
+    findings = sn.check_peak_capture_weekly(inmem_db)
+    assert len(findings) == 1
+    assert findings[0].severity == "info"
+    assert "50%" in findings[0].summary  # avg of 40/50/60 = 50
+
+
+def test_peak_capture_skips_na_rows(inmem_db):
+    """Trades with peak_pct_captured=n/a (negative peak) excluded from avg."""
+    # 2 n/a + 1 measurable @ 50% → avg should be 50% not affected by n/a
+    inmem_db.execute(
+        "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
+        "VALUES (datetime('now','-1 day'), 'profit_lock', 'close', 'MGC', "
+        "'reason=stop_hit | peak=$0 | realized=$-50 | "
+        "peak_pct_captured=n/a | contract_id=x')"
+    )
+    inmem_db.execute(
+        "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
+        "VALUES (datetime('now','-1 day'), 'profit_lock', 'close', 'MGC', "
+        "'reason=stop_hit | peak=$0 | realized=$-30 | "
+        "peak_pct_captured=n/a | contract_id=x')"
+    )
+    inmem_db.execute(
+        "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
+        "VALUES (datetime('now','-1 day'), 'profit_lock', 'close', 'MGC', "
+        "'reason=trailing_lock | peak=$100 | realized=$50 | "
+        "peak_pct_captured=0.5 | contract_id=x')"
+    )
+    inmem_db.commit()
+    findings = sn.check_peak_capture_weekly(inmem_db)
+    assert len(findings) == 1
+    assert "n=1" in findings[0].summary  # only 1 measurable trade
+    assert "50%" in findings[0].summary
+
+
+def test_peak_capture_silent_when_no_data(inmem_db):
+    """No profit_lock closes in window → no finding (not a fail-safe alert)."""
+    findings = sn.check_peak_capture_weekly(inmem_db)
+    assert findings == []
+
+
+def test_peak_capture_window_respected(inmem_db):
+    """Only counts closes within the `days` window."""
+    # 1 measurable close 30 days ago
+    inmem_db.execute(
+        "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
+        "VALUES (datetime('now','-30 day'), 'profit_lock', 'close', 'MGC', "
+        "'reason=trailing_lock | peak=$100 | realized=$10 | "
+        "peak_pct_captured=0.1 | contract_id=x')"
+    )
+    inmem_db.commit()
+    findings = sn.check_peak_capture_weekly(inmem_db, days=7)
+    # The 30-day-old close is outside the 7-day window → no data
+    assert findings == []
+
+
 # ── run_all_checks aggregator ─────────────────────────────────────
 
 def test_run_all_checks_returns_list_without_crashing(monkeypatch, tmp_path):

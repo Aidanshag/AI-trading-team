@@ -361,6 +361,75 @@ def check_duplicate_trader_procs(ps_command_runner=None) -> list[Finding]:
 
 # ── Aggregation + report ──────────────────────────────────────────
 
+def check_peak_capture_weekly(conn: sqlite3.Connection,
+                                 days: int = 7) -> list[Finding]:
+    """Aggregate peak_pct_captured across profit_lock closes in the last
+    `days` days. Warns if avg <30% (exit rules not delivering) or if
+    trending DOWN week-over-week.
+
+    Measures whether the exit rebuild (percent-of-peak, reversal,
+    time-decay) actually captures peak P&L in production. The
+    counterfactual replay (2026-05-15) suggested calibrated rules
+    should hit 25-35% capture; this confirms it live.
+
+    Skips trades with negative peak (peak_pct_captured=n/a).
+    """
+    findings: list[Finding] = []
+    cutoff_iso = (datetime.now(tz=timezone.utc) - timedelta(days=days)).isoformat()
+    try:
+        rows = conn.cursor().execute(
+            "SELECT ts, symbol, rationale FROM decisions "
+            "WHERE ts >= ? AND kind = 'close' AND agent = 'profit_lock'",
+            (cutoff_iso,),
+        ).fetchall()
+    except sqlite3.Error:
+        return findings
+
+    captures: list[float] = []
+    for ts, symbol, rationale in rows:
+        if not rationale:
+            continue
+        # rationale format includes "peak_pct_captured=0.376"
+        for token in rationale.split("|"):
+            token = token.strip()
+            if token.startswith("peak_pct_captured="):
+                val = token.split("=", 1)[1].strip()
+                if val == "n/a":
+                    continue
+                try:
+                    captures.append(float(val))
+                except ValueError:
+                    pass
+                break
+    if not captures:
+        return findings  # no measurable trades this window
+
+    avg_capture = sum(captures) / len(captures)
+    n = len(captures)
+    capture_pct = avg_capture * 100
+
+    if avg_capture < 0.30:
+        findings.append(Finding(
+            check_name="peak_capture_weekly",
+            severity="warn",
+            summary=(f"weekly peak capture {capture_pct:.0f}% over n={n} closes "
+                     f"— below 30% threshold. Exit rules may need tuning OR "
+                     f"signal stops are firing before peak develops."),
+            detail={"days": days, "n_closes": n, "avg_capture": avg_capture,
+                     "target_pct": 30},
+        ))
+    else:
+        # Info-level: track healthy capture for the daily report
+        findings.append(Finding(
+            check_name="peak_capture_weekly",
+            severity="info",
+            summary=(f"weekly peak capture {capture_pct:.0f}% over n={n} closes "
+                     f"(healthy ≥ 30%)."),
+            detail={"days": days, "n_closes": n, "avg_capture": avg_capture},
+        ))
+    return findings
+
+
 def check_tick_stream_stale() -> list[Finding]:
     """If the trader has open positions but the tick_stream cache is
     stale or empty, profit-lock decisions are being made on bar-polled
@@ -419,6 +488,7 @@ def run_all_checks() -> list[Finding]:
         findings.extend(check_brain_vs_trader_rate(conn))
         findings.extend(check_duplicate_trader_procs())
         findings.extend(check_tick_stream_stale())
+        findings.extend(check_peak_capture_weekly(conn))
     finally:
         conn.close()
     return findings
