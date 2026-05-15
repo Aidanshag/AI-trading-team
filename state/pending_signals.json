@@ -1,20 +1,3 @@
 {
-  "signals": [
-    {
-      "id": "801b64576d764cdba8d1a2a6dbbf982c",
-      "emitted_at": "2026-05-15T19:59:51+00:00",
-      "expires_at": "2026-05-15T20:02:51+00:00",
-      "symbol": "MNQ",
-      "side": "long",
-      "entry_price": 29300.5,
-      "stop_price": 29260.821428571428,
-      "target_price": 29379.857142857145,
-      "qty": 1,
-      "strategy": "pivot_reversal",
-      "session": "RTH",
-      "cell_key": "pivot_reversal|MNQ|RTH|long",
-      "shadow_only": false,
-      "notes": "reason=pivot_low_rev"
-    }
-  ]
+  "signals": []
 }
