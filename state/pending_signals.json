@@ -1,52 +1,36 @@
 {
   "signals": [
     {
-      "id": "4a68d2c0886d4b928837bef5d6040407",
-      "emitted_at": "2026-05-14T05:36:23+00:00",
-      "expires_at": "2026-05-14T05:39:23+00:00",
+      "id": "ec6ddb0a6e1648d7b6d3b18548980744",
+      "emitted_at": "2026-05-15T02:22:49+00:00",
+      "expires_at": "2026-05-15T02:25:49+00:00",
       "symbol": "GC",
-      "side": "short",
-      "entry_price": 4700.8,
-      "stop_price": 4705.8,
-      "target_price": 4689.628571428571,
+      "side": "long",
+      "entry_price": 4622.4,
+      "stop_price": 4613.5,
+      "target_price": 4641.5428571428565,
       "qty": 1,
       "strategy": "narrow_range_break",
       "session": "Asian",
-      "cell_key": "narrow_range_break|GC|Asian|short",
+      "cell_key": "narrow_range_break|GC|Asian|long",
       "shadow_only": true,
-      "notes": "experimental; reason=nr7_break_short"
+      "notes": "experimental; reason=nr7_break_long"
     },
     {
-      "id": "614e8d5eb1d644c29ccf5e5afcbe143c",
-      "emitted_at": "2026-05-14T05:36:25+00:00",
-      "expires_at": "2026-05-14T05:39:25+00:00",
-      "symbol": "6E",
-      "side": "short",
-      "entry_price": 1.1729,
-      "stop_price": 1.1730883928571427,
-      "target_price": 1.1725232142857147,
-      "qty": 1,
-      "strategy": "fair_value_gap",
-      "session": "Asian",
-      "cell_key": "fair_value_gap|6E|Asian|short",
-      "shadow_only": false,
-      "notes": "reason=fvg_bear_mitigation gap=[1.17,1.17] age=13"
-    },
-    {
-      "id": "f532836ca99541a595bf9a7fdcf1ab34",
-      "emitted_at": "2026-05-14T05:36:25+00:00",
-      "expires_at": "2026-05-14T05:39:25+00:00",
+      "id": "0660a2b8605048e0a50f5de61bc1686a",
+      "emitted_at": "2026-05-15T02:22:51+00:00",
+      "expires_at": "2026-05-15T02:25:51+00:00",
       "symbol": "MGC",
-      "side": "short",
-      "entry_price": 4700.6,
-      "stop_price": 4705.8,
-      "target_price": 4689.328571428572,
+      "side": "long",
+      "entry_price": 4622.3,
+      "stop_price": 4613.5,
+      "target_price": 4641.714285714286,
       "qty": 1,
       "strategy": "narrow_range_break",
       "session": "Asian",
-      "cell_key": "narrow_range_break|MGC|Asian|short",
+      "cell_key": "narrow_range_break|MGC|Asian|long",
       "shadow_only": false,
-      "notes": "reason=nr7_break_short"
+      "notes": "reason=nr7_break_long"
     }
   ]
 }
