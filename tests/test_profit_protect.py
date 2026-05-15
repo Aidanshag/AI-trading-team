@@ -539,3 +539,138 @@ def test_profit_lock_close_writes_decisions_row():
     finally:
         db_mod.get_db = real_get_db
         test_conn.close()
+
+
+# ── Reversal-detection exit (2026-05-15, exit-roadmap step 4) ────
+
+def test_detect_reversal_long_3_lower_closes_returns_true():
+    """LONG with 3 strictly-descending closes (4700 → 4699 → 4698) = reversal."""
+    bars = _FakeBars([4701.0, 4700.5, 4700.0, 4699.0, 4698.0])
+    assert pp._detect_reversal("long", bars) is True
+
+
+def test_detect_reversal_short_3_higher_closes_returns_true():
+    """SHORT with 3 strictly-ascending closes = reversal."""
+    bars = _FakeBars([4700.0, 4700.5, 4701.0, 4702.0, 4703.0])
+    assert pp._detect_reversal("short", bars) is True
+
+
+def test_detect_reversal_long_2_lower_closes_returns_false():
+    """LONG with only 2 lower closes — not enough evidence."""
+    # closes: 4700, 4699, 4700.5 — only one lower close in last 3
+    bars = _FakeBars([4700.0, 4699.0, 4700.5])
+    assert pp._detect_reversal("long", bars) is False
+
+
+def test_detect_reversal_long_3_higher_closes_returns_false():
+    """LONG with 3 HIGHER closes — that's WITH the position, not against."""
+    bars = _FakeBars([4698.0, 4699.0, 4700.0, 4701.0, 4702.0])
+    assert pp._detect_reversal("long", bars) is False
+
+
+def test_detect_reversal_insufficient_bars_returns_false():
+    """Fewer than REVERSAL_BARS_REQUIRED bars — no signal."""
+    bars = _FakeBars([4700.0, 4699.0])  # only 2 bars, need 3
+    assert pp._detect_reversal("long", bars) is False
+
+
+def test_detect_reversal_flat_close_returns_false():
+    """Strictly-descending required — flat closes don't trigger.
+    closes 4700, 4700, 4700 — not strictly lower → no reversal."""
+    bars = _FakeBars([4700.0, 4700.0, 4700.0])
+    assert pp._detect_reversal("long", bars) is False
+
+
+def test_check_and_close_fires_reversal_exit_on_long():
+    """End-to-end: long position with peak $40, then 3 strictly-descending
+    1-min closes → REVERSAL_EXIT fires close_position.
+
+    First call uses ASCENDING bars to push peak to $40 without triggering
+    reversal (peak-set call). Second call uses descending bars to trigger.
+    """
+    pp._position_high_water.clear()
+    pp._target_usd_by_contract.clear()
+    contract_id = "CON.F.US.MGC.M26"
+    # MGC math: tick=$0.10, tick_value=$1.00 → 1pt = 10ticks = $10.
+    # 4700 → 4704 = +$40
+    client = _FakeClient(
+        positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                    "averagePrice": 4700.0}],
+        # Ascending closes — peak gets pushed to +$40, but the last 3
+        # closes are strictly INCREASING (not against the long) → no reversal.
+        bars_by_symbol={"MGC": _FakeBars([4700.5, 4701.5, 4702.5, 4703.5, 4704.0])},
+    )
+    pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert pp._position_high_water["MGC_long"] == pytest.approx(40.0, abs=1.0), (
+        f"peak should be $40 from 4704 close, got "
+        f"{pp._position_high_water.get('MGC_long')}"
+    )
+    # Now feed 3 strictly descending closes — reversal pattern, peak >= $15
+    client._bars["MGC"] = _FakeBars([4703.5, 4703.0, 4702.5])
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert len(closed) == 1, (
+        f"expected REVERSAL_EXIT to fire 1 close, got {len(closed)}"
+    )
+    assert closed[0]["reason"] == "reversal_exit", (
+        f"reason should be 'reversal_exit', got {closed[0]['reason']!r}"
+    )
+    assert client.closed_contracts == [contract_id], (
+        f"must use close_position, got close_position={client.closed_contracts} "
+        f"place_order={client.placed}"
+    )
+    assert client.placed == [], (
+        f"must NOT use place_order, got {client.placed}"
+    )
+
+
+def test_check_and_close_skips_reversal_below_min_peak():
+    """If peak < REVERSAL_MIN_PEAK_USD ($15), reversal pattern is ignored.
+    Avoids false exits on noisy small wins where bar-to-bar wobble is normal."""
+    pp._position_high_water.clear()
+    contract_id = "CON.F.US.MGC.M26"
+    # Push peak to only $10 (below the $15 floor for reversal)
+    client = _FakeClient(
+        positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                    "averagePrice": 4700.0}],
+        # +$1 — peak only $10 (MGC: 1 pt = $10? No — 1 pt = 10t × $1/tick = $10)
+        # 4700 → 4701 = +$10 unrealized
+        bars_by_symbol={"MGC": _FakeBars([4701.0])},
+    )
+    pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert pp._position_high_water["MGC_long"] == pytest.approx(10.0, abs=1.0)
+    # Now feed 3 lower closes — reversal pattern but peak too small
+    client._bars["MGC"] = _FakeBars([4700.8, 4700.5, 4700.2])
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    # Reversal should NOT have fired (peak < $15). May or may not close
+    # on other rules (loss cap or trailing), but the reason must NOT be
+    # reversal_exit.
+    for c in closed:
+        assert c["reason"] != "reversal_exit", (
+            f"reversal_exit fired below MIN peak ($10 < $15): {c}"
+        )
+
+
+def test_check_and_close_reversal_uses_close_position_not_place_order():
+    """Regression-guard mirroring test_software_target — reversal_exit must
+    use the close_position endpoint, not place_order. The latter was the
+    known-broken path that caused profitlock_* rejections (2026-05-13/14).
+    This guards against the same regression in the new exit path."""
+    pp._position_high_water.clear()
+    contract_id = "CON.F.US.MGC.M26"
+    # Push peak to $30 (above min) then trigger reversal
+    client = _FakeClient(
+        positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                    "averagePrice": 4700.0}],
+        bars_by_symbol={"MGC": _FakeBars([4703.0])},  # +$30 peak
+    )
+    pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    client._bars["MGC"] = _FakeBars([4702.5, 4702.0, 4701.5])
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert closed[0]["reason"] == "reversal_exit"
+    assert client.closed_contracts == [contract_id]
+    # Critical: no place_order call with limit-marketable tag pattern
+    for call in client.placed:
+        tag = call.get("client_order_id") or ""
+        assert "reversal" not in tag.lower(), (
+            f"reversal_exit must use close_position, not place_order: {call}"
+        )

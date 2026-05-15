@@ -96,8 +96,8 @@ User direction 2026-05-14: "eventually should all of these be implemented." All 
   Acceptance: test result documented; SKIP_TARGET_LEG flipped to False ONLY if broker target legs behave correctly.
   Auto-merge: no — requires manual observation of broker behavior. Autonomous routine should write the observation but leave the flag flip to a human.
 
-- [P1] [effort: 90min] [risk: low] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 4]
-  **Reversal detection exit** — if 3 consecutive 1-min bars close AGAINST a position's direction, market-close. Captures "momentum has died" patterns the tier rules can't see. For a long: 3 lower closes in a row → exit. Implementation in `tools/profit_protect.check_and_close` — after computing unrealized, fetch last 3 1-min bars, check direction. Add a min-peak gate (only fire if peak crossed $15 — otherwise too many false exits on noisy small wins).
+- [P1] [effort: 90min] [risk: low] [status: merged 2026-05-15] [autonomous-eligible: yes] [exit-roadmap-step: 4]
+  **Reversal detection exit** — SHIPPED 2026-05-15. `_detect_reversal()` checks last REVERSAL_BARS_REQUIRED (3) closes for strict descent (long) / ascent (short). Min peak gate $15 prevents noise-triggered false exits. Wired into `check_and_close` AFTER target_hit and BEFORE the tier-based decide(). Uses `close_position` endpoint (regression-guarded against place_order). 8 new tests (6 unit + 2 end-to-end). 494 tests green. Patch lands at trader restart.
   Files: `tools/profit_protect.py`, tests with synthetic bars.
   Acceptance: synthetic 3-bar reversal triggers close at any unrealized > $0; <3 bars of reversal doesn't trigger.
   Auto-merge: yes if tests pass.

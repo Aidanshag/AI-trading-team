@@ -88,6 +88,15 @@ TRAILING_PROFIT_TIERS: tuple[tuple[float, float], ...] = RUNNER_ZONE_TIERS
 GAIN_TIER_HARD_CAP_USD: float | None = None
 LOSS_TIER_HARD_CAP_USD: float = 150.0   # belt-and-suspenders for broker stop
 
+# 2026-05-15 — Reversal-detection exit (exit-roadmap step 4).
+# If N consecutive 1-min bars close AGAINST a winning position's direction,
+# market-close. Captures "momentum has died" patterns the tier rules can't
+# see directly. Only fires when peak >= REVERSAL_MIN_PEAK_USD — small wins
+# get false signals from normal bar-by-bar noise.
+ENABLE_REVERSAL_EXIT: bool = True
+REVERSAL_BARS_REQUIRED: int = 3       # 3 lower closes (long) / higher closes (short)
+REVERSAL_MIN_PEAK_USD: float = 15.0   # below this, noise > signal
+
 # Per-position high-water mark (process-local; resets on trader restart).
 # Key: "SYMBOL_SIDE". Value: peak unrealized $ seen this session.
 _position_high_water: dict[str, float] = {}
@@ -244,6 +253,37 @@ def decide(unrealized: float, prev_peak: float,
                        f"floor ${active_floor:.2f}, current "
                        f"${unrealized:.2f} fell below")
     return False, ""
+
+
+def _detect_reversal(side: str, bars,
+                       bars_required: int = REVERSAL_BARS_REQUIRED) -> bool:
+    """Return True if the last `bars_required` 1-min bars show a continuous
+    move AGAINST the position direction.
+
+    For a LONG position: last N closes form a strictly descending sequence
+        (each close lower than the prior). 3 lower closes → reversal.
+    For a SHORT position: last N closes form a strictly ascending sequence.
+
+    `bars` is a pandas DataFrame with a 'Close' column (the format
+    `tools.bar_fetcher.fetch_bars` returns). If fewer than N bars are
+    available, return False (insufficient evidence).
+
+    Pure function — no IO. Tested in tests/test_profit_protect.py.
+    """
+    if bars is None or len(bars) < bars_required:
+        return False
+    try:
+        closes = bars["Close"].iloc[-bars_required:].tolist()
+    except Exception:
+        return False
+    if len(closes) < bars_required:
+        return False
+    if side == "long":
+        # Each close strictly lower than the prior = 3 lower closes
+        return all(closes[i] < closes[i - 1] for i in range(1, bars_required))
+    if side == "short":
+        return all(closes[i] > closes[i - 1] for i in range(1, bars_required))
+    return False
 
 
 def _compute_active_floor(prev_peak: float,
@@ -723,6 +763,63 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                     log(f"  target_hit close FAILED for {contract_id}: "
                          f"{type(e).__name__}: {e}")
                     # Fall through to trailing/loss-cap logic below
+
+            # ── REVERSAL-DETECTION EXIT (2026-05-15) ──
+            # If N consecutive bars close against the position direction
+            # AND peak >= REVERSAL_MIN_PEAK_USD, market-close. Captures
+            # "momentum has died" patterns the tier system can't see.
+            # Only fires for trades that have shown intent (peak > $15) —
+            # below that, noise > signal.
+            if (ENABLE_REVERSAL_EXIT
+                and prev_peak >= REVERSAL_MIN_PEAK_USD
+                and _detect_reversal(side, bars)):
+                try:
+                    result = client.close_position(account_id, contract_id)
+                    if isinstance(result, dict) and result.get("success") is False:
+                        err = result.get("errorMessage") or "broker rejected"
+                        log(f"  reversal close REJECTED for {contract_id}: {err}")
+                        try:
+                            from tools.alert import send_alert as _alert
+                            _alert(
+                                f"CRITICAL: reversal-exit close REJECTED for "
+                                f"{symbol}: {err}. Position still OPEN.",
+                                level="crit",
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        log(f"  REVERSAL_EXIT: {symbol} {side} {size}ct "
+                             f"unrealized=${unrealized:+.2f} peak=${prev_peak:.2f} "
+                             f"({REVERSAL_BARS_REQUIRED} bars against)")
+                        try:
+                            from tools.alert import send_alert as _alert
+                            _alert(
+                                f"🔄 REVERSAL_EXIT {symbol} {side} {size}ct @ "
+                                f"${unrealized:+.0f} (peak ${prev_peak:.0f}, "
+                                f"{REVERSAL_BARS_REQUIRED} bars against)",
+                                level="info",
+                            )
+                        except Exception:
+                            pass
+                        _position_high_water.pop(key, None)
+                        _position_consecutive_holds.pop(key, None)
+                        _position_entry_ts_seen.pop(key, None)
+                        _clear_software_target(contract_id)
+                        reset_trailed_floor(contract_id)
+                        _record_close_decision(
+                            symbol=symbol, side=side, size=size,
+                            contract_id=contract_id, unrealized=unrealized,
+                            peak=prev_peak, reason="reversal_exit", kind="close",
+                        )
+                        closed.append({"symbol": symbol, "side": side,
+                                        "size": size, "unrealized": unrealized,
+                                        "peak": prev_peak,
+                                        "reason": "reversal_exit"})
+                        continue
+                except Exception as e:
+                    log(f"  reversal_exit close FAILED for {contract_id}: "
+                         f"{type(e).__name__}: {e}")
+                    # Fall through to mechanical logic below
 
             should_close, reason = decide(unrealized, prev_peak)
             if not should_close:
