@@ -702,6 +702,156 @@ def test_projected_dll_breach_uses_unrealized_in_day_pl(monkeypatch):
 
 
 # ════════════════════════════════════════════════════════════════════
+#  Pattern A — tick-economics alias coverage  (n=4, 2026-05-14)
+# ════════════════════════════════════════════════════════════════════
+#
+# 2026-05-14 ~20:08 ET: brain emitted a 6E short. Topstep filled the
+# contract `CON.F.US.EU6.M26`. tools/profit_protect._contract_to_symbol
+# extracted "EU6" from the contract ID, but `_TICK_ECONOMICS` only had
+# the "6E" entry — not "EU6". Result: `_resolve_tick_economics("EU6")`
+# returned (0,0) at both layers; profit-lock and loss-cap silently
+# disabled. The position rode UNPROTECTED for 2h14m. Got lucky:
+# realized +$112 vs MFE +$181 vs MAE -$50. Could have been catastrophic.
+#
+# Pattern A — fail-silent default. The check above logs CRITICAL and
+# sends a Discord alert, but does not fail the build. n=4 escalation:
+# enforce alias coverage as a build-failing CI invariant.
+
+def test_pattern_a_every_live_filter_symbol_has_tick_economics():
+    """Build-failing check that every symbol the brain might emit AND
+    every plausible Topstep contract-alias resolves to non-zero tick
+    economics.
+
+    Two failure modes guarded:
+      1. A symbol in `state/strategy_validation.json:live_strategies_filter`
+         emits a signal but `_resolve_tick_economics(symbol)` returns
+         (0,0) — would blind profit-lock to live positions.
+      2. A Topstep contract-alias variant (e.g. EU6 for 6E) extracted
+         by `_contract_to_symbol` from a contract ID returns (0,0).
+         This is the 2026-05-14 incident shape exactly.
+
+    If this fails, add the missing alias to
+    `tools/profit_protect.py:_TICK_ECONOMICS`. Mirror the empirically
+    verified map in `hooks/risk_gate.py:_normalize_root` — that map is
+    confirmed live against the broker. See
+    `vault/lessons/2026-05-14_eu6_unprotected_position.md` (if added)
+    and CLAUDE.md → "Pattern A — fail-silent defaults".
+    """
+    import json
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from tools.profit_protect import (
+        _resolve_tick_economics, _contract_to_symbol, _strip_exchange_suffix,
+    )
+
+    # ── Layer 1: every symbol in live_strategies_filter ──
+    val_path = (Path(__file__).resolve().parent.parent /
+                "state" / "strategy_validation.json")
+    with open(val_path, "r", encoding="utf-8") as f:
+        validation = json.load(f)
+    live_filter = validation.get("live_strategies_filter") or []
+    brain_symbols: set[str] = set()
+    for cell in live_filter:
+        for sym in (cell.get("symbols") or []):
+            if sym:
+                brain_symbols.add(sym)
+    assert brain_symbols, (
+        "TEST FIXTURE STALE: state/strategy_validation.json"
+        ":live_strategies_filter contained no symbols. The Pattern A "
+        "alias-coverage check is vacuously passing. Investigate."
+    )
+
+    missing_brain: list[str] = []
+    for sym in sorted(brain_symbols):
+        ts, tv = _resolve_tick_economics(sym)
+        if not (ts > 0 and tv > 0):
+            missing_brain.append(sym)
+
+    assert not missing_brain, (
+        f"PATTERN A REGRESSION (n=4): brain-emitted symbol(s) missing "
+        f"from tick economics: {missing_brain!r}. With (tick_size, "
+        f"tick_value) == (0,0), profit-lock and loss-cap silently "
+        f"disable for any open position on that symbol. This is the "
+        f"2026-05-14 EU6 incident shape.\n\n"
+        f"FIX: add the symbol to `tools/profit_protect.py:_TICK_ECONOMICS` "
+        f"or to `config/symbols.yaml`. Verify the tick values against "
+        f"the CME contract spec before merging."
+    )
+
+    # ── Layer 2: empirically-confirmed Topstep contract aliases ──
+    # Sourced from hooks/risk_gate.py:_normalize_root, which is verified
+    # against live broker contract IDs. Each alias is encoded as a
+    # synthetic contract ID we'd see from `client.get_positions()`. If
+    # `_contract_to_symbol → _strip_exchange_suffix → _resolve_tick_economics`
+    # returns (0,0) for any of these, we have an unprotected-position
+    # bug in the making. Empirical sources cited at each alias.
+    confirmed_aliases = [
+        # ─ FX (2026-05-14 EU6 incident; brain emits 6E/6B/6J/6A/6C/6M/E7)
+        "CON.F.US.EU6.M26",   # → 6E (the 2026-05-14 incident contract)
+        "CON.F.US.BP6.M26",   # → 6B
+        "CON.F.US.JY6.M26",   # → 6J
+        "CON.F.US.DA6.M26",   # → 6A
+        "CON.F.US.CA6.M26",   # → 6C
+        "CON.F.US.MX6.M26",   # → 6M
+        "CON.F.US.EEU.M26",   # → E7
+        # ─ Energies (verified hooks/risk_gate)
+        "CON.F.US.MCLE.M26",  # → MCL  (4-char suffix; not handled by _strip)
+        "CON.F.US.MNGE.M26",  # → MNG
+        "CON.F.US.HOE.M26",   # → HO
+        "CON.F.US.RBE.M26",   # → RB
+        "CON.F.US.CLE.M26",   # → CL   (handled by _strip)
+        "CON.F.US.NGE.M26",   # → NG   (handled by _strip)
+        # ─ Metals (verified hooks/risk_gate)
+        "CON.F.US.GCE.M26",   # → GC   (handled by _strip)
+        "CON.F.US.CPE.M26",   # → HG
+        # ─ Rates (verified hooks/risk_gate)
+        "CON.F.US.TYA.M26",   # → ZN
+        "CON.F.US.FVA.M26",   # → ZF
+        # ─ Equity index (verified hooks/risk_gate)
+        "CON.F.US.EP.M26",    # → ES
+        "CON.F.US.ENQ.M26",   # → NQ
+        # ─ Grains/livestock (verified hooks/risk_gate)
+        "CON.F.US.ZCE.M26",   # → ZC
+        "CON.F.US.GLE.M26",   # → LE
+        # ─ Other roots seen live
+        "CON.F.US.NQG.M26",   # → QG
+        "CON.F.US.NQM.M26",   # → QM
+        # ─ Native contract IDs (no alias, but live-filter symbols)
+        "CON.F.US.MGC.M26",   # → MGC (2026-05-14 same-day fix)
+        "CON.F.US.MNQ.M26",   # → MNQ
+    ]
+
+    missing_alias: list[tuple[str, str]] = []
+    for cid in confirmed_aliases:
+        raw = _contract_to_symbol(cid) or ""
+        stripped = _strip_exchange_suffix(raw)
+        ts, tv = _resolve_tick_economics(stripped)
+        if not (ts > 0 and tv > 0):
+            missing_alias.append((cid, stripped or raw))
+
+    assert not missing_alias, (
+        f"PATTERN A REGRESSION (n=4): Topstep contract alias(es) "
+        f"missing from tick economics:\n"
+        + "\n".join(f"  {cid} → extracts to {sym!r} → "
+                    f"_resolve_tick_economics returned (0,0)"
+                    for cid, sym in missing_alias)
+        + "\n\nThis is the 2026-05-14 EU6 incident shape: brain emits a "
+        "symbol, broker fills under a different contract-root token, "
+        "and `_resolve_tick_economics` returns (0,0) → profit-lock + "
+        "loss-cap silently disabled. A position can ride UNPROTECTED.\n\n"
+        "FIX: add the alias to `tools/profit_protect.py:_TICK_ECONOMICS` "
+        "pointing at the same (tick_size, tick_value) tuple as the "
+        "canonical symbol. Mirror the map in "
+        "`hooks/risk_gate.py:_normalize_root` — that's the empirically-"
+        "confirmed source of truth. See "
+        "vault/_meta/improvement_backlog.md 'Queued 2026-05-15 — EU6/6E "
+        "symbol alias for tick economics' for context."
+    )
+
+
+# ════════════════════════════════════════════════════════════════════
 #  Escalation surface for future Pattern incidents
 # ════════════════════════════════════════════════════════════════════
 #

@@ -144,15 +144,32 @@ def _resolve_tick_economics(symbol: str) -> tuple[float, float]:
         return 0.0, 0.0
 
 
+# 2026-05-15: Topstep contract-ID alias addition (Pattern A n=4 fix).
+# Brain emits strategy signals using the canonical CME root (e.g. "6E");
+# Topstep's contract IDs use platform-specific root tokens (e.g. "EU6").
+# `_contract_to_symbol("CON.F.US.EU6.M26")` returns "EU6", which previously
+# missed every entry in this table → profit-lock + loss-cap silently
+# disabled (Pattern A: fail-silent default). The 2026-05-14 EU6 short held
+# 2h14m completely unprotected as a result. Empirically-confirmed
+# alias mapping is mirrored from `hooks/risk_gate._normalize_root`
+# (which is verified live against the broker). When in doubt about an
+# alias, consult that map first.
 _TICK_ECONOMICS: dict[str, tuple[float, float]] = {
     # Rates
     "ZN": (0.015625, 15.625), "ZB": (0.03125, 31.25),
     "ZT": (0.0078125, 15.625), "ZF": (0.0078125, 7.8125),
     "UB": (0.03125, 31.25),
+    # Rates — Topstep aliases (TYA=ZN, FVA=ZF; verified hooks/risk_gate)
+    "TYA": (0.015625, 15.625), "FVA": (0.0078125, 7.8125),
     # Energies
     "NG": (0.001, 10.0), "MNG": (0.005, 1.25), "QG": (0.005, 12.50),
     "CL": (0.01, 10.0), "MCL": (0.01, 1.0),
     "RB": (0.0001, 4.20), "HO": (0.0001, 4.20),
+    # Energies — Topstep aliases (already handled by _strip_exchange_suffix
+    # for 2-char roots GCE/NGE/CLE/SIE; MCLE/MNGE/HOE/RBE pass through
+    # unstripped and need explicit aliases). Verified hooks/risk_gate.
+    "MCLE": (0.01, 1.0), "MNGE": (0.005, 1.25),
+    "HOE": (0.0001, 4.20), "RBE": (0.0001, 4.20),
     # Metals — 2026-05-14 fix: MGC was missing, broke profit-lock for the
     # MGC short opened 2026-05-14 01:05 UTC.
     "GC": (0.10, 10.0), "MGC": (0.10, 1.0),
@@ -165,13 +182,32 @@ _TICK_ECONOMICS: dict[str, tuple[float, float]] = {
     "RTY": (0.10, 5.00), "M2K": (0.10, 0.50),
     "YM": (1.00, 5.00),  "MYM": (0.50, 0.50),
     "NKD": (5.00, 25.00),
-    # FX futures
-    "6E": (0.00005, 6.25), "6B": (0.0001, 6.25),
-    "6J": (0.0000005, 6.25), "6A": (0.0001, 10.00), "6C": (0.0001, 10.00),
+    # Equity index — Topstep aliases (EP=ES, ENQ=NQ; verified hooks/risk_gate)
+    "EP": (0.25, 12.50), "ENQ": (0.25, 5.00),
+    # FX futures — Topstep contract IDs use EU6/BP6/etc instead of 6E/6B.
+    # 2026-05-15: aliases added after EU6 short held 2h14m unprotected
+    # (Pattern A n=4). Both forms point at the same tuple. Tick values
+    # mirror config/symbols.yaml — note 6A/6C are $5/tick at the micro
+    # FX (config/symbols.yaml) but the established figure here is $10;
+    # leaving the existing $10 in place to preserve current behavior and
+    # flagging the discrepancy as a separate audit item in the backlog.
+    "6E": (0.00005, 6.25),  "EU6": (0.00005, 6.25),
+    "6B": (0.0001, 6.25),   "BP6": (0.0001, 6.25),
+    "6J": (0.0000005, 6.25), "JY6": (0.0000005, 6.25),
+    "6A": (0.0001, 10.00),  "DA6": (0.0001, 10.00),
+    "6C": (0.0001, 10.00),  "CA6": (0.0001, 10.00),
+    "6M": (0.00001, 5.00),  "MX6": (0.00001, 5.00),
+    "E7": (0.0001, 6.25),   "EEU": (0.0001, 6.25),
     # Grains / livestock (sector: ag)
     "ZC": (0.0025, 12.50), "ZS": (0.0025, 12.50),
     "ZW": (0.0025, 12.50), "ZL": (0.0001, 6.00), "ZM": (0.10, 10.0),
     "LE": (0.025, 10.0), "HE": (0.025, 10.0),
+    # Grains/livestock — Topstep aliases (ZCE=ZC, GLE=LE; verified hooks/risk_gate)
+    "ZCE": (0.0025, 12.50), "GLE": (0.025, 10.0),
+    # Metals — Topstep alias (CPE=HG; verified hooks/risk_gate)
+    "CPE": (0.0005, 12.5),
+    # Other Topstep contract roots seen live (NQG=QG, NQM=QM, GMET=METK)
+    "NQG": (0.005, 12.50), "NQM": (0.025, 12.50),
 }
 
 

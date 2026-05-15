@@ -33,7 +33,7 @@ Priority logic going forward:
 
 ## 🆕 Queued 2026-05-15 — EU6/6E symbol alias for tick economics
 
-- [P0] [effort: 30min] [risk: low] [status: open] [autonomous-eligible: yes]
+- [P0] [effort: 30min] [risk: low] [status: in-progress] [autonomous-eligible: yes]
   **Add "EU6" alias to `_TICK_ECONOMICS` in `tools/profit_protect.py`** — 2026-05-14 EU6 (6E) short held 2h14m completely UNPROTECTED. Brain emits signal as `6E`, broker contract resolves to `CON.F.US.EU6.M26`, symbol extraction returns `EU6`. `_TICK_ECONOMICS` has `"6E": (0.00005, 6.25)` but NOT `"EU6"`. Result: profit-lock + loss-cap silently disabled for entire trade. Hundreds of "no tick economics for EU6 ... BLIND to this position" log lines from 02:20 to 02:23 UTC. Position got lucky: +$112 at MFE +$181, MAE -$50.
   Files: `tools/profit_protect.py:147` (add `"EU6"` alias for `6E`, `"GCE"` for `GC`, `"NQM"` for `NQ` etc — audit all FX/equity symbol contracts on Topstep for alias drift). Add a test that any symbol the brain emits resolves to non-zero tick economics.
   Acceptance: a unit test that iterates every symbol in `state/strategy_validation.json:live_strategies_filter` and asserts `_resolve_tick_economics(extracted_symbol_from_contract) > 0`.
