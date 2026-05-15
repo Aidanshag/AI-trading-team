@@ -650,6 +650,94 @@ def test_check_and_close_skips_reversal_below_min_peak():
         )
 
 
+# ── Time-based profit decay (2026-05-15, exit-roadmap step 6) ──
+
+def test_is_profit_stale_both_conditions_met_returns_true():
+    """Peak hit >15 min ago AND current is below peak by >30% → True."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    peak_ts = now - timedelta(minutes=20)  # 20 min stale
+    # peak $80, current $50 (37% retrace) → > 30% threshold
+    assert pp._is_profit_stale(peak=80.0, peak_ts=peak_ts,
+                                  current=50.0, now=now) is True
+
+
+def test_is_profit_stale_within_time_window_returns_false():
+    """Peak hit <15 min ago — too fresh to call stale even with retrace."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    peak_ts = now - timedelta(minutes=5)  # only 5 min
+    assert pp._is_profit_stale(peak=80.0, peak_ts=peak_ts,
+                                  current=50.0, now=now) is False
+
+
+def test_is_profit_stale_insufficient_retrace_returns_false():
+    """Peak hit 20 min ago BUT current still within 30% of peak."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    peak_ts = now - timedelta(minutes=20)
+    # peak $80, current $60 — 25% retrace, below 30% threshold
+    assert pp._is_profit_stale(peak=80.0, peak_ts=peak_ts,
+                                  current=60.0, now=now) is False
+
+
+def test_is_profit_stale_handles_none_peak_ts():
+    """Defensive: missing peak_ts returns False without crashing."""
+    assert pp._is_profit_stale(peak=80.0, peak_ts=None, current=40.0) is False
+
+
+def test_is_profit_stale_handles_negative_peak():
+    """Defensive: peak <= 0 returns False (no decay rule for losers)."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    peak_ts = now - timedelta(minutes=20)
+    assert pp._is_profit_stale(peak=0.0, peak_ts=peak_ts,
+                                  current=-10.0, now=now) is False
+
+
+def test_is_profit_stale_fires_on_small_peak_below_continuous_floor():
+    """KEY VALUE-ADD over percent-of-peak: time-based fires on sub-$20
+    peaks where percent-of-peak intentionally returns no floor.
+    Peak $10, stale 20 min, retraced to $5 (50% retrace) → close.
+    Percent-of-peak would do nothing here (peak below MIN_PEAK)."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    peak_ts = now - timedelta(minutes=20)
+    # percent-of-peak: peak $10 < $20 MIN → returns None
+    assert pp._compute_active_floor(prev_peak=10.0) is None
+    # but time-decay catches it
+    assert pp._is_profit_stale(peak=10.0, peak_ts=peak_ts,
+                                  current=5.0, now=now) is True
+
+
+def test_check_and_close_time_decay_clears_peak_ts():
+    """After a close, _position_peak_ts must be cleared so the next
+    position on the same key starts fresh."""
+    from datetime import datetime, timezone, timedelta
+    pp._position_high_water.clear()
+    pp._position_peak_ts.clear()
+    pp._target_usd_by_contract.clear()
+    contract_id = "CON.F.US.MGC.M26"
+    # Seed peak directly to avoid two scan calls
+    pp._position_high_water["MGC_long"] = 50.0
+    pp._position_peak_ts["MGC_long"] = datetime.now(tz=timezone.utc) - timedelta(minutes=20)
+    # Now current at +$25 (50% retrace from peak $50)
+    client = _FakeClient(
+        positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                    "averagePrice": 4700.0}],
+        bars_by_symbol={"MGC": _FakeBars([4702.5])},  # +$25 unrealized
+    )
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert len(closed) == 1
+    assert closed[0]["reason"] == "time_decay_exit", (
+        f"expected time_decay_exit, got {closed[0]['reason']!r}"
+    )
+    assert client.closed_contracts == [contract_id]
+    # State cleared
+    assert "MGC_long" not in pp._position_high_water
+    assert "MGC_long" not in pp._position_peak_ts
+
+
 def test_check_and_close_reversal_uses_close_position_not_place_order():
     """Regression-guard mirroring test_software_target — reversal_exit must
     use the close_position endpoint, not place_order. The latter was the

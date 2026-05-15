@@ -108,8 +108,8 @@ User direction 2026-05-14: "eventually should all of these be implemented." All 
   Acceptance: when realized vol drops below 50% of trailing baseline, profit-lock floor tightens by ~20%. Backtest shows reduced give-back without hurting hit rate.
   Auto-merge: no — calibration choice needs human review. Autonomous routine implements + runs backtest; user reviews calibration.
 
-- [P2] [effort: 60min] [risk: low] [status: open] [autonomous-eligible: yes] [exit-roadmap-step: 6]
-  **Time-based profit decay** — if peak hit > N minutes ago AND current is still below peak by Y%, market-close. Stale-profit rule. Defaults: N=15 min, Y=30%. Implementation: track `_position_peak_ts` alongside `_position_high_water` in profit_protect.
+- [P2] [effort: 60min] [risk: low] [status: merged 2026-05-15] [autonomous-eligible: yes] [exit-roadmap-step: 6]
+  **Time-based profit decay** — SHIPPED 2026-05-15. `_is_profit_stale(peak, peak_ts, current)` returns True iff peak >TIME_DECAY_MINUTES_STALE (15) min ago AND current is below peak by >=TIME_DECAY_RETRACE_FRACTION (30%). `_position_peak_ts` tracked alongside `_position_high_water`, both cleared on every close path. KEY value-add over percent-of-peak: time-decay fires on sub-$20 peaks (which percent-of-peak ignores by design). 7 new tests covering both-conditions / time-only / retrace-only / None-handling / sub-$20-peak / state-cleanup. 501 tests green.
   Files: `tools/profit_protect.py`, tests.
   Acceptance: peak hit 20 min ago at $80, current $50 (37% below peak) → close fires. Peak hit 5 min ago at $80, current $50 → hold (within time window).
   Auto-merge: yes if tests pass.

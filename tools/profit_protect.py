@@ -97,9 +97,25 @@ ENABLE_REVERSAL_EXIT: bool = True
 REVERSAL_BARS_REQUIRED: int = 3       # 3 lower closes (long) / higher closes (short)
 REVERSAL_MIN_PEAK_USD: float = 15.0   # below this, noise > signal
 
+# 2026-05-15 — Time-based profit decay (exit-roadmap step 6).
+# If peak was hit > TIME_DECAY_MINUTES_STALE minutes ago AND current is
+# below peak by >= TIME_DECAY_RETRACE_FRACTION, market-close. Stale-profit
+# rule: the trade ISN'T expanding the peak, momentum is gone, take what's
+# left. Distinct value-add over percent-of-peak: this rule has NO peak-size
+# floor — it fires even on small peaks ($5, $10) once they're stale, which
+# the percent-of-peak rule explicitly ignores (peak < $20 returns no floor).
+ENABLE_TIME_DECAY_EXIT: bool = True
+TIME_DECAY_MINUTES_STALE: int = 15
+TIME_DECAY_RETRACE_FRACTION: float = 0.30  # 30% retrace from peak triggers
+
 # Per-position high-water mark (process-local; resets on trader restart).
 # Key: "SYMBOL_SIDE". Value: peak unrealized $ seen this session.
 _position_high_water: dict[str, float] = {}
+
+# Per-position timestamp when peak was last updated. Used by the time-based
+# profit-decay rule (2026-05-15) to detect stale peaks. Cleared on position
+# close alongside _position_high_water.
+_position_peak_ts: dict[str, datetime] = {}
 
 # Per-position agent-veto state (process-local).
 # `_position_consecutive_holds`: how many times the agent has held this position
@@ -253,6 +269,32 @@ def decide(unrealized: float, prev_peak: float,
                        f"floor ${active_floor:.2f}, current "
                        f"${unrealized:.2f} fell below")
     return False, ""
+
+
+def _is_profit_stale(peak: float, peak_ts, current: float, now=None,
+                       minutes_stale: int = TIME_DECAY_MINUTES_STALE,
+                       retrace_fraction: float = TIME_DECAY_RETRACE_FRACTION,
+                       ) -> bool:
+    """Return True if peak was hit > `minutes_stale` ago AND current is
+    below peak by >= `retrace_fraction` of peak.
+
+    Two conditions must BOTH hold:
+      1. Time: (now - peak_ts).total_seconds() / 60 >= minutes_stale
+      2. Magnitude: current <= peak * (1 - retrace_fraction)
+
+    `now` defaults to datetime.now(timezone.utc). Pure function modulo
+    that default — pass `now` explicitly to make tests deterministic.
+
+    Returns False if any required input is None or peak <= 0.
+    """
+    if peak is None or peak_ts is None or peak <= 0:
+        return False
+    if current >= peak * (1.0 - retrace_fraction):
+        return False
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elapsed_min = (now - peak_ts).total_seconds() / 60.0
+    return elapsed_min >= minutes_stale
 
 
 def _detect_reversal(side: str, bars,
@@ -705,6 +747,7 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
             prev_peak = _position_high_water.get(key, 0.0)
             if unrealized > prev_peak:
                 _position_high_water[key] = unrealized
+                _position_peak_ts[key] = datetime.now(tz=timezone.utc)
                 prev_peak = unrealized
 
             # ── SOFTWARE TAKE-PROFIT AT TARGET (2026-05-14) ──
@@ -744,6 +787,7 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                     except Exception:
                         pass
                     _position_high_water.pop(key, None)
+                    _position_peak_ts.pop(key, None)
                     _position_consecutive_holds.pop(key, None)
                     _position_entry_ts_seen.pop(key, None)
                     _clear_software_target(contract_id)
@@ -763,6 +807,67 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                     log(f"  target_hit close FAILED for {contract_id}: "
                          f"{type(e).__name__}: {e}")
                     # Fall through to trailing/loss-cap logic below
+
+            # ── TIME-BASED PROFIT DECAY (2026-05-15) ──
+            # If peak was hit >TIME_DECAY_MINUTES_STALE min ago AND current
+            # is below peak by >=TIME_DECAY_RETRACE_FRACTION, close.
+            # Stale-profit rule — the trade isn't expanding; take what's
+            # left. Adds value over percent-of-peak for sub-$20 peaks
+            # (which percent-of-peak intentionally ignores).
+            if ENABLE_TIME_DECAY_EXIT:
+                peak_ts = _position_peak_ts.get(key)
+                if _is_profit_stale(prev_peak, peak_ts, unrealized):
+                    try:
+                        result = client.close_position(account_id, contract_id)
+                        if isinstance(result, dict) and result.get("success") is False:
+                            err = result.get("errorMessage") or "broker rejected"
+                            log(f"  time_decay close REJECTED for {contract_id}: {err}")
+                            try:
+                                from tools.alert import send_alert as _alert
+                                _alert(
+                                    f"CRITICAL: time-decay close REJECTED for "
+                                    f"{symbol}: {err}. Position still OPEN.",
+                                    level="crit",
+                                )
+                            except Exception:
+                                pass
+                        else:
+                            elapsed_min = (datetime.now(tz=timezone.utc) - peak_ts).total_seconds() / 60.0
+                            log(f"  TIME_DECAY_EXIT: {symbol} {side} {size}ct "
+                                 f"unrealized=${unrealized:+.2f} peak=${prev_peak:.2f} "
+                                 f"({elapsed_min:.0f}min stale, retrace "
+                                 f"{(1 - unrealized/prev_peak)*100:.0f}%)")
+                            try:
+                                from tools.alert import send_alert as _alert
+                                _alert(
+                                    f"⏱️ TIME_DECAY_EXIT {symbol} {side} {size}ct @ "
+                                    f"${unrealized:+.0f} (peak ${prev_peak:.0f}, "
+                                    f"{elapsed_min:.0f}min stale)",
+                                    level="info",
+                                )
+                            except Exception:
+                                pass
+                            _position_high_water.pop(key, None)
+                            _position_peak_ts.pop(key, None)
+                            _position_consecutive_holds.pop(key, None)
+                            _position_entry_ts_seen.pop(key, None)
+                            _clear_software_target(contract_id)
+                            reset_trailed_floor(contract_id)
+                            _record_close_decision(
+                                symbol=symbol, side=side, size=size,
+                                contract_id=contract_id, unrealized=unrealized,
+                                peak=prev_peak, reason="time_decay_exit",
+                                kind="close",
+                            )
+                            closed.append({"symbol": symbol, "side": side,
+                                            "size": size, "unrealized": unrealized,
+                                            "peak": prev_peak,
+                                            "reason": "time_decay_exit"})
+                            continue
+                    except Exception as e:
+                        log(f"  time_decay close FAILED for {contract_id}: "
+                             f"{type(e).__name__}: {e}")
+                        # Fall through to other rules
 
             # ── REVERSAL-DETECTION EXIT (2026-05-15) ──
             # If N consecutive bars close against the position direction
@@ -802,6 +907,7 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                         except Exception:
                             pass
                         _position_high_water.pop(key, None)
+                        _position_peak_ts.pop(key, None)
                         _position_consecutive_holds.pop(key, None)
                         _position_entry_ts_seen.pop(key, None)
                         _clear_software_target(contract_id)
@@ -943,6 +1049,7 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                 except Exception:
                     pass
                 _position_high_water.pop(key, None)
+                _position_peak_ts.pop(key, None)
                 _position_consecutive_holds.pop(key, None)
                 _position_entry_ts_seen.pop(key, None)
                 reset_trailed_floor(contract_id)
