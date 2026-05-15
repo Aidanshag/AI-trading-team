@@ -653,6 +653,10 @@ def main() -> int:
             from tools.tick_stream import get_stream
             _client = get_client()
             _account_id = get_account_id()
+            # get_client returns an unauthenticated cached instance —
+            # auth must be called before reading _jwt
+            if not getattr(_client, "_jwt", None):
+                _client.authenticate()
             stream = get_stream(jwt=_client._jwt)
             stream.start()
             # Subscribe to contracts for symbols in the live filter so
