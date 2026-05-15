@@ -26,7 +26,7 @@ Success criteria:
 - No catastrophic operational failures (process crashes, OCO race losses, missed trades > 1 night)
 - Documented per-cell live vs OOS variance so we know which cells actually work
 
-Active strategy: `gap_fill_wide` on extended set (ZN/ZB/ZT/ZF/NG/6E), 26 cells.
+**As of 2026-05-15** — for current live state, see `state/strategy_validation.json:live_allowlist` (authoritative). High-level summary: ~14 Asian-session cells across narrow_range_break, fair_value_gap_tuned, vol_spike_fade, inside_bar_break, keltner_breakout, pivot_reversal, liquidity_sweep_tuned + RTH cells (pivot_reversal MNQ long, fair_value_gap NG short + fair_value_gap MES long as of 2026-05-15). `gap_fill_wide` was REMOVED from live_strategies_filter 2026-05-11 after corrected-pipeline analysis showed neither gap_fill variant produces a deployable parameter set. See `vault/research/strategy_retirement/gap_fill_2026-05-11_retirement.md`.
 
 ### Phase 2: Build replication infrastructure
 **Months 2-6 post-Combine pass**
@@ -49,7 +49,7 @@ Build out:
 **6-12 months out**
 
 5-10 accounts running same strategy with possible decorrelation tweaks:
-- Vary parameters per account (account A: gap_fill_wide; account B: pairs strategy; account C: multi-day swing)
+- Vary parameters per account (account A: FVG-focused; account B: pairs strategy; account C: multi-day swing). Note: `gap_fill_wide` was originally hypothesized for the lead-strategy slot; replaced by FVG/NRB after the 2026-05-11 retirement.
 - Stagger account activation (not all 5 firing at once)
 - Monthly net P&L = N × per-account-P&L − N × subscriptions
 

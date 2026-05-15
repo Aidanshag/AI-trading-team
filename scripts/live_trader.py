@@ -92,8 +92,12 @@ SAME_SYMBOL_COOLDOWN_OVERRIDES = {  # per-symbol overrides 2026-05-14: smaller-r
                                       # the dollar-per-trade ceiling is lower.
     "MGC": 15,                       # micro gold — 1/10 risk of GC, fire 3× more often
 }
-MAX_TRADES_PER_DAY = 15           # hard cap on entries per TOPSTEP trading day (5pm
-                                  # CT to 5pm CT). Raised from 8 → 15 on 2026-05-14
+MAX_TRADES_PER_DAY = 25           # hard cap on entries per TOPSTEP trading day (5pm
+                                  # CT to 5pm CT). Raised from 8 → 15 on 2026-05-14,
+                                  # then 15 → 25 on 2026-05-15 (user-directed temp
+                                  # lift to give the new MES fair_value_gap cell room
+                                  # to fire during today's RTH). REVERT to 15 if not
+                                  # explicitly kept by user.
                                   # — the new $150 max-risk + $250 internal DLL +
                                   # 30s profit-poll bound downside at ~$300 per day
                                   # even with 15 trades, so the lower count was

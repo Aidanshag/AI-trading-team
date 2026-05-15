@@ -26,6 +26,8 @@ If the answer is no, don't do it.
 | Minimum trading days | **≥ 5 days with at least one trade** | Topstep |
 | Submit + payout | request payout once eligible | Topstep |
 
+**Authoritative Topstep reference:** [[topstep_combine_rules]] (200+ line complete spec with edge cases). The table above is TL;DR. `current_goal.md` and `economics.md` should cite the combine_rules doc rather than restate; the auto-vault-audit (2026-05-15) flags duplicate-rule statements.
+
 ## What "as fast as safely possible" means
 
 - **Win small, win consistently.** Even +$100/day passes in 30 trading days. Even +$200/day passes in 15. The game is repetition, not heroics.
