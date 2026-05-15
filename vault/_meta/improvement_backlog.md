@@ -59,8 +59,8 @@ Priority logic going forward:
 
 ## 🆕 Queued 2026-05-14 — BROKER LIMIT FILL ANOMALY (investigate)
 
-- [P0] [effort: 60min — investigation] [risk: none — just observation] [status: open] [autonomous-eligible: yes]
-  **Investigate why buy-limit orders fill at prices above the limit** — concrete incident 2026-05-14 04:28:06: MGC buy limit @ 4698.0 filled at 4709.0 (11 points / 110 ticks ADVERSE slippage on a buy limit). This should be impossible under standard limit semantics (buy limit fills at limit price or BELOW). Either ProjectX has a non-standard "marketable limit" treatment that allows arbitrary slippage, or there's a bug in how we're calling place_order. Investigation steps:
+- [P0] [effort: 60min — investigation] [risk: none — just observation] [status: research-complete 2026-05-15 — premise was wrong] [autonomous-eligible: yes]
+  **Investigate why buy-limit orders fill at prices above the limit** — RESEARCH COMPLETE 2026-05-15. Full analysis at `vault/research/analysis/2026-05-15_broker_limit_fill_anomaly.md`. **Finding: the premise was wrong.** Zero adverse-fill limit orders in the 75-order audit; the cited 5/14 04:28:06 incident was `type=2 (Market)`, not Limit. Separately, the `profitlock_*` rejections had a DIFFERENT root cause (type=1 with limitPrice=None) and were fixed at commit 326ab7f. No code change needed; existing mitigations cover. Old description preserved below for audit:
   1. Read ProjectX API docs (or test directly) for `order_type="limit"` behavior at the broker
   2. Check if marketable buy limits act like market orders (= fill at any ask)
   3. Test placing a deliberately non-marketable limit (way below current price) and verifying it sits as working
