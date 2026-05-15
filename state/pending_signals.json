@@ -1,20 +1,3 @@
 {
-  "signals": [
-    {
-      "id": "6875db59cce242dd96d94153b901668e",
-      "emitted_at": "2026-05-15T17:59:26+00:00",
-      "expires_at": "2026-05-15T18:02:26+00:00",
-      "symbol": "NG",
-      "side": "short",
-      "entry_price": 2.964,
-      "stop_price": 2.968339285714286,
-      "target_price": 2.955321428571428,
-      "qty": 1,
-      "strategy": "fair_value_gap",
-      "session": "RTH",
-      "cell_key": "fair_value_gap|NG|RTH|short",
-      "shadow_only": false,
-      "notes": "reason=fvg_bear_mitigation gap=[2.96,2.97] age=1"
-    }
-  ]
+  "signals": []
 }
