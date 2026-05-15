@@ -1,52 +1,36 @@
 {
   "signals": [
     {
-      "id": "845e0d3c21564de096ea978a2a4f4f18",
-      "emitted_at": "2026-05-15T03:04:47+00:00",
-      "expires_at": "2026-05-15T03:07:47+00:00",
+      "id": "7da27b3cc2e142da9e8f8f992d7fd1cd",
+      "emitted_at": "2026-05-15T03:28:31+00:00",
+      "expires_at": "2026-05-15T03:31:31+00:00",
       "symbol": "GC",
-      "side": "long",
-      "entry_price": 4621.4,
-      "stop_price": 4615.5,
-      "target_price": 4634.485714285714,
-      "qty": 1,
-      "strategy": "narrow_range_break",
-      "session": "Asian",
-      "cell_key": "narrow_range_break|GC|Asian|long",
-      "shadow_only": true,
-      "notes": "experimental; reason=nr7_break_long"
-    },
-    {
-      "id": "7b2214bac0c244a18e8f764532768380",
-      "emitted_at": "2026-05-15T03:04:48+00:00",
-      "expires_at": "2026-05-15T03:07:48+00:00",
-      "symbol": "6E",
       "side": "short",
-      "entry_price": 1.1673,
-      "stop_price": 1.1675535714285714,
-      "target_price": 1.1667928571428572,
-      "qty": 1,
-      "strategy": "fair_value_gap",
-      "session": "Asian",
-      "cell_key": "fair_value_gap|6E|Asian|short",
-      "shadow_only": false,
-      "notes": "reason=fvg_bear_mitigation gap=[1.17,1.17] age=27"
-    },
-    {
-      "id": "5839462ec7574e64b0857aff42eb6344",
-      "emitted_at": "2026-05-15T03:04:48+00:00",
-      "expires_at": "2026-05-15T03:07:48+00:00",
-      "symbol": "MGC",
-      "side": "long",
-      "entry_price": 4621.9,
-      "stop_price": 4616.3,
-      "target_price": 4635.228571428571,
+      "entry_price": 4618.7,
+      "stop_price": 4624.0,
+      "target_price": 4607.085714285714,
       "qty": 1,
       "strategy": "narrow_range_break",
       "session": "Asian",
-      "cell_key": "narrow_range_break|MGC|Asian|long",
+      "cell_key": "narrow_range_break|GC|Asian|short",
+      "shadow_only": true,
+      "notes": "experimental; reason=nr7_break_short"
+    },
+    {
+      "id": "26113c603165492ebff5d0a39c86e6ea",
+      "emitted_at": "2026-05-15T03:28:32+00:00",
+      "expires_at": "2026-05-15T03:31:32+00:00",
+      "symbol": "MGC",
+      "side": "short",
+      "entry_price": 4618.8,
+      "stop_price": 4624.2,
+      "target_price": 4606.942857142857,
+      "qty": 1,
+      "strategy": "narrow_range_break",
+      "session": "Asian",
+      "cell_key": "narrow_range_break|MGC|Asian|short",
       "shadow_only": false,
-      "notes": "reason=nr7_break_long"
+      "notes": "reason=nr7_break_short"
     }
   ]
 }
