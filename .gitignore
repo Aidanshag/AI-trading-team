@@ -50,3 +50,4 @@ vault/economic_calendar/2*.json
 .idea/
 *.swp
 *~
+state/bars/
