@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "7da27b3cc2e142da9e8f8f992d7fd1cd",
-      "emitted_at": "2026-05-15T03:28:31+00:00",
-      "expires_at": "2026-05-15T03:31:31+00:00",
+      "id": "de29c95ec6b749cd82afd5bba18e47f1",
+      "emitted_at": "2026-05-15T03:34:44+00:00",
+      "expires_at": "2026-05-15T03:37:44+00:00",
       "symbol": "GC",
       "side": "short",
       "entry_price": 4618.7,
@@ -17,9 +17,9 @@
       "notes": "experimental; reason=nr7_break_short"
     },
     {
-      "id": "26113c603165492ebff5d0a39c86e6ea",
-      "emitted_at": "2026-05-15T03:28:32+00:00",
-      "expires_at": "2026-05-15T03:31:32+00:00",
+      "id": "d64671bf91e24ab68fcb45fd93907b40",
+      "emitted_at": "2026-05-15T03:34:46+00:00",
+      "expires_at": "2026-05-15T03:37:46+00:00",
       "symbol": "MGC",
       "side": "short",
       "entry_price": 4618.8,
