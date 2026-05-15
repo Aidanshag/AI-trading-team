@@ -298,7 +298,10 @@ def check_brain_vs_trader_rate(conn: sqlite3.Connection,
                                      "halt active",
                                      "thin-tape regime block",
                                      "outside autonomous RTH window",
-                                     "snapshot stale"):
+                                     "snapshot stale",
+                                     "skipped (recent thesis)",
+                                     "skipped (cooldown)",
+                                     "queue: no pending signals"):
                         if marker in line:
                             benign_reason = marker
                             break
