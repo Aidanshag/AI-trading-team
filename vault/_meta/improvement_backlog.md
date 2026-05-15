@@ -54,17 +54,8 @@ Priority logic going forward:
 
 ## 🆕 Queued 2026-05-14 late — REAL-TIME PRICE FEED (research)
 
-- [P0] [effort: 90min — investigation] [risk: none] [status: open] [autonomous-eligible: yes]
-  **Real-time price feed: WebSocket or quote endpoint?** — current in-position polling reads 1-min bar closes via `tools/bar_fetcher.fetch_bars(client, sym, 1, 5)`. That means we have up to ~60s of staleness in the price data even though the poll itself runs every 1s. For exit timing (profit-lock fires when unrealized crosses tier, software take-profit fires when unrealized hits target), this latency matters — tonight 10+ trades had positive peaks but execution slippage cost most of them.
-  Investigation steps:
-  1. Check ProjectX API for a real-time quote endpoint (single-symbol, sub-second). e.g., `GET /api/MarketData/quote/{contractId}`. Test with a sample call.
-  2. Check ProjectX for a WebSocket / SignalR feed for live ticks. Look at `tools/projectx_client.py:_ENDPOINTS` and the API base URL `https://api.topstepx.com` for any streaming endpoint hints.
-  3. If a quote endpoint exists: easy swap in `tools/bar_fetcher.py` or a new `tools/quote_fetcher.py` for the in-position path only.
-  4. If only WebSocket: more engineering but bigger win. Subscribe-on-open, unsubscribe-on-close, handle reconnects.
-  Files: `tools/projectx_client.py`, possibly new `tools/quote_fetcher.py` or `tools/tick_stream.py`. Observation log in `vault/research/analysis/`.
-  Acceptance: documented mechanism for getting sub-second price data + recommendation on swap-in path.
-  Auto-merge: no — research, not a code change yet. The autonomous routine writes findings; user reviews.
-  Mitigation already in place 2026-05-14: in-position polling tightened to 1s (was 2s), and trailing BROKER stop handles execution at native tick speed once the stop is placed correctly. So even with 60s-stale poll data, the broker is the real exit engine — polling is just for updating the trailed stop.
+- [P0] [effort: 90min — investigation] [risk: none] [status: research-complete 2026-05-15] [autonomous-eligible: yes]
+  **Real-time price feed: WebSocket or quote endpoint?** — RESEARCH COMPLETE 2026-05-15. Full analysis at `vault/research/analysis/2026-05-15_realtime_price_feed.md`. **Finding: ProjectX has SignalR hubs at `rtc.topstepx.com/hubs/user` and `rtc.topstepx.com/hubs/market`** — both confirmed live via negotiate probe. REST API is intentionally bars-only (19 endpoints in swagger; no quote/tick/stream). Recommendation: build `tools/tick_stream.py` (signalrcore lib, ~4-8h) for 100-1000× latency reduction vs current 1-min bar polling. **User action needed: greenlight implementation cycle.**
 
 ## 🆕 Queued 2026-05-14 — BROKER LIMIT FILL ANOMALY (investigate)
 
