@@ -388,6 +388,10 @@ def test_pattern_b_gap_fill_floor_active_emits_no_sub_floor_signals():
     bars = _quiet_bars_with_gap(tick=tick, gap_ticks=10)
     sigs = list(strats.gap_fill(
         bars, tick_size=tick, min_stop_ticks=min_stop_ticks,
+        # 2026-05-15: session_boundary_only=False — synthetic fixture has no
+        # real session boundary; we're testing the FLOOR behavior here,
+        # not the boundary filter
+        session_boundary_only=False,
     ))
 
     # If any signals were emitted, every one of them must respect the floor.
@@ -420,6 +424,7 @@ def test_pattern_b_gap_fill_wide_floor_active_emits_no_sub_floor_signals():
     bars = _quiet_bars_with_gap(tick=tick, gap_ticks=10)
     sigs = list(strats.gap_fill_wide(
         bars, tick_size=tick, min_stop_ticks=min_stop_ticks,
+        session_boundary_only=False,  # see note in gap_fill test above
     ))
 
     for sig in sigs:
@@ -445,7 +450,9 @@ def test_pattern_b_floor_actually_matters_baseline_check():
 
     bars = _quiet_bars_with_gap(tick=tick, gap_ticks=10)
     # No tick_size → no floor → strategy uses raw 0.5×ATR stop
-    sigs_no_floor = list(strats.gap_fill(bars))
+    # session_boundary_only=False: synthetic fixture has no real boundary;
+    # we're verifying that WITHOUT the floor, sub-tick stops DO emit
+    sigs_no_floor = list(strats.gap_fill(bars, session_boundary_only=False))
 
     # We want SOME signals with sub-floor stops to be emittable when
     # the floor is off. If this assertion fails, the test fixture is

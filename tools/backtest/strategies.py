@@ -820,6 +820,8 @@ def gap_fill(
     rr_target: float = 1.5,
     min_stop_ticks: int = 3,
     tick_size: float | None = None,
+    session_boundary_only: bool = True,
+    session_gap_minutes: float = 30.0,
 ) -> Iterator[Signal]:
     """Open gap > min_gap_atr × ATR → fade back toward prior close.
 
@@ -827,22 +829,33 @@ def gap_fill(
     to fill within the first 1–2 hours. Defined risk: stop beyond gap
     extreme; target = prior close (the gap fill).
 
+    2026-05-15: `session_boundary_only=True` (default) restricts firing
+    to bars that ARE at a real session boundary. Without this restriction
+    the strategy fires on every intraday bar where consecutive bar
+    open-vs-prior-close differs by min_gap_atr × ATR — but in continuous
+    24h futures sessions, that's ALWAYS bar-to-bar noise, not a real
+    "gap." The Pattern B inflation that led to gap_fill retirement
+    2026-05-11 partially traced to this — strategy mislabeling intraday
+    bar noise as gaps. Session-boundary detection: prior bar's
+    timestamp + session_gap_minutes < current bar's timestamp.
+
     2026-05-11: added `min_stop_ticks` / `tick_size` parameters. When
-    `tick_size` is provided, the stop distance is floored at
-    `min_stop_ticks × tick_size`. This prevents the strategy from
-    emitting degenerate signals during low-vol sessions where
-    `0.5 × ATR < 1 tick` collapses stop to the same price as entry
-    (which then guarantees a sub-buffer loss on any live fill and
-    creates orphan-leg conditions). When `tick_size` is None the floor
-    is inactive (backwards-compatible). The trader layer also has a
-    redundant `MIN_SIGNAL_R_TICKS` gate as defense-in-depth.
-    See `vault/research/analysis/2026-05-11_*.md` for full incident
-    diagnosis and `gap_fill_wide` for the same logic pre-existing in
-    a sibling variant.
+    `tick_size` is provided, stop distance is floored at
+    `min_stop_ticks × tick_size`. Engine-level floor (2026-05-15) also
+    catches this defense-in-depth.
+
+    See `vault/research/strategy_retirement/gap_fill_2026-05-11_retirement.md`
+    for the full retirement narrative.
     """
     o, c, h, l = bars["Open"], bars["Close"], bars["High"], bars["Low"]
     prev_c = c.shift(1)
     atr = _atr(bars, 14)
+    # Compute bar-to-bar time gaps for session-boundary detection
+    if session_boundary_only:
+        ts = bars.index.to_series()
+        gap_minutes = (ts - ts.shift(1)).dt.total_seconds() / 60.0
+    else:
+        gap_minutes = None
 
     # Hard min stop in price (active only when tick_size known). Mirrors
     # the gap_fill_wide pattern so plain gap_fill no longer emits
@@ -854,6 +867,13 @@ def gap_fill(
         a = atr.iloc[i]
         if pd.isna(a) or a == 0:
             continue
+        # Session-boundary gate: only fire when current bar is preceded by
+        # a >= session_gap_minutes break. In continuous bars this filters
+        # out 95%+ of "gap" signals that were just bar-to-bar noise.
+        if session_boundary_only and gap_minutes is not None:
+            bar_gap_min = gap_minutes.iloc[i]
+            if pd.isna(bar_gap_min) or bar_gap_min < session_gap_minutes:
+                continue
         gap = float(o.iloc[i] - prev_c.iloc[i])
         if abs(gap) < min_gap_atr * a:
             continue
@@ -1277,6 +1297,8 @@ def gap_fill_wide(
     stop_atr_mult: float = 1.5,
     min_stop_ticks: int = 3,
     tick_size: float = None,
+    session_boundary_only: bool = True,
+    session_gap_minutes: float = 30.0,
 ) -> Iterator[Signal]:
     """gap_fill variant with TRADABLE stops.
 
@@ -1292,10 +1314,19 @@ def gap_fill_wide(
 
     Designed 2026-05-08 to address the 'tiny stop' issue blocking live
     trading on the treasury curve.
+
+    2026-05-15: session_boundary_only=True (default) restricts to real
+    session-boundary bars (consecutive timestamps > session_gap_minutes
+    apart). Filters out intraday bar noise misread as gaps.
     """
     o, c, h, l = bars["Open"], bars["Close"], bars["High"], bars["Low"]
     prev_c = c.shift(1)
     atr = _atr(bars, 14)
+    if session_boundary_only:
+        ts = bars.index.to_series()
+        gap_minutes = (ts - ts.shift(1)).dt.total_seconds() / 60.0
+    else:
+        gap_minutes = None
 
     # Hard min stop in price (when tick_size known)
     min_stop_price = (min_stop_ticks * tick_size) if tick_size else 0
@@ -1305,6 +1336,10 @@ def gap_fill_wide(
         a = atr.iloc[i]
         if pd.isna(a) or a == 0:
             continue
+        if session_boundary_only and gap_minutes is not None:
+            bar_gap_min = gap_minutes.iloc[i]
+            if pd.isna(bar_gap_min) or bar_gap_min < session_gap_minutes:
+                continue
         gap = float(o.iloc[i] - prev_c.iloc[i])
         if abs(gap) < min_gap_atr * a:
             continue
