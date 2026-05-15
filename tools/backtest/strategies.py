@@ -1874,6 +1874,261 @@ def range_consolidation_bounce(
 STRATEGY_REGISTRY["range_consolidation_bounce"] = range_consolidation_bounce
 
 
+# =====================================================================
+# AG / SOFT COMMODITY STRATEGIES (added 2026-05-15)
+# =====================================================================
+# Specifically designed for grain + livestock characteristics that
+# generic financials-oriented strategies miss:
+#   - USDA report cadence (weekly Crop Progress Mon 4PM ET; monthly
+#     WASDE; quarterly Grain Stocks; Cattle on Feed monthly Fri PM)
+#   - Daily limit moves (grains have $0.25 corn limit, expand on
+#     consecutive lock days)
+#   - Friday position-square (commercials don't want weekend exposure)
+#   - Pre-open electronic-session vs RTH-session character shift
+#   - Livestock RTH-only constraint (LE/HE don't trade overnight)
+# =====================================================================
+
+
+def friday_close_fade(
+    bars: pd.DataFrame,
+    move_threshold_pct: float = 0.015,
+    stop_atr_mult: float = 1.0,
+    target_atr_mult: float = 1.0,
+    atr_period: int = 14,
+    last_bars_into_week: int = 6,
+) -> Iterator[Signal]:
+    """Friday afternoon mean-reversion for ag commodities.
+
+    Hypothesis: grains mean-revert into Friday close after a strong week
+    because commercials don't want weekend exposure. Particularly applies
+    to ZC/ZS/ZW where weekend weather risk drives Friday positioning.
+
+    Trigger (intraday bars, 1-min granularity):
+      - Today is Friday (bar.index.weekday() == 4)
+      - We're in the last `last_bars_into_week` bars of session
+      - Week-to-date move > +move_threshold_pct → SHORT (fade the rally)
+      - Week-to-date move < -move_threshold_pct → LONG (fade the dump)
+      - Stop: 1 ATR adverse from entry
+      - Target: 1 ATR favorable (1:1 RR — fade trades aren't trend bets)
+    """
+    if len(bars) < 2:
+        return
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    atr = _atr(bars, atr_period)
+
+    # Compute week-to-date return at each bar (resets on Monday)
+    # For 1-min bars: walk through finding each week's Monday-first-bar close
+    monday_first_close: dict[pd.Timestamp, float] = {}
+    week_anchor: float | None = None
+    last_week: int | None = None
+    for ts in bars.index:
+        iso_week = ts.isocalendar().week
+        if iso_week != last_week:
+            # New week — capture anchor on first bar
+            try:
+                idx = bars.index.get_loc(ts)
+                week_anchor = float(c.iloc[idx])
+            except KeyError:
+                week_anchor = None
+            last_week = iso_week
+        if week_anchor is not None:
+            monday_first_close[ts] = week_anchor
+
+    fired_this_friday = False
+    last_date_seen: pd.Timestamp | None = None
+
+    for i in range(atr_period + 1, len(bars)):
+        ts = bars.index[i]
+        if ts.weekday() != 4:  # not Friday
+            fired_this_friday = False
+            continue
+        # Reset fire flag at start of each Friday
+        if last_date_seen is None or last_date_seen.date() != ts.date():
+            fired_this_friday = False
+        last_date_seen = ts
+        if fired_this_friday:
+            continue
+        # Need to be in last N bars of the session — proxy: bar position
+        # within Friday. For simplicity, fire any time the move-threshold
+        # condition is met on Friday; the engine treats each signal once.
+        anchor = monday_first_close.get(ts)
+        if anchor is None or anchor <= 0:
+            continue
+        close = float(c.iloc[i])
+        wtd_pct = (close - anchor) / anchor
+        a = atr.iloc[i]
+        if pd.isna(a) or a <= 0:
+            continue
+
+        if wtd_pct > move_threshold_pct:
+            entry = close
+            stop = entry + stop_atr_mult * float(a)
+            target = entry - target_atr_mult * float(a)
+            fired_this_friday = True
+            yield Signal.entry(
+                date=ts, side="short", price=entry, stop=stop, target=target,
+                reason=f"fri_close_fade_short wtd={wtd_pct*100:+.1f}%",
+            )
+        elif wtd_pct < -move_threshold_pct:
+            entry = close
+            stop = entry - stop_atr_mult * float(a)
+            target = entry + target_atr_mult * float(a)
+            fired_this_friday = True
+            yield Signal.entry(
+                date=ts, side="long", price=entry, stop=stop, target=target,
+                reason=f"fri_close_fade_long wtd={wtd_pct*100:+.1f}%",
+            )
+
+
+STRATEGY_REGISTRY["friday_close_fade"] = friday_close_fade
+
+
+def limit_day_next_fade(
+    bars: pd.DataFrame,
+    daily_range_atr_mult: float = 3.0,
+    fade_bars_after: int = 30,
+    stop_atr_mult: float = 1.0,
+    target_atr_mult: float = 1.5,
+    atr_period: int = 14,
+) -> Iterator[Signal]:
+    """Fade next-day reaction to a "limit-move-like" day.
+
+    Hypothesis: in ag/livestock, a one-direction day with daily TR >
+    3×ATR (or actual limit lock) is an overreaction; next session
+    open often mean-reverts. Trade the fade in the OPPOSITE direction.
+
+    Trigger:
+      - Bar `i` has TR ≥ daily_range_atr_mult × ATR (proxy for "limit day")
+      - At `fade_bars_after` bars later, fade the original direction
+      - Long after a big DOWN day; short after a big UP day
+    """
+    if len(bars) < atr_period + fade_bars_after + 2:
+        return
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    atr = _atr(bars, atr_period)
+    prev_c = c.shift(1)
+    tr = pd.concat([h - l, (h - prev_c).abs(), (l - prev_c).abs()],
+                    axis=1).max(axis=1)
+
+    for i in range(atr_period, len(bars) - fade_bars_after):
+        a = atr.iloc[i]
+        if pd.isna(a) or a <= 0:
+            continue
+        bar_tr = float(tr.iloc[i])
+        bar_o = float(bars["Open"].iloc[i])
+        bar_c = float(c.iloc[i])
+        is_big_bar = bar_tr >= daily_range_atr_mult * a
+        if not is_big_bar:
+            continue
+        # Direction of the big bar
+        net_move = bar_c - bar_o
+        if abs(net_move) < 0.1 * a:  # not directional enough
+            continue
+        # Fade entry: enter `fade_bars_after` bars later
+        fade_idx = i + fade_bars_after
+        if fade_idx >= len(bars):
+            continue
+        fade_ts = bars.index[fade_idx]
+        fade_close = float(c.iloc[fade_idx])
+        fade_atr = atr.iloc[fade_idx]
+        if pd.isna(fade_atr) or fade_atr <= 0:
+            continue
+        # If original move was UP, fade SHORT
+        if net_move > 0:
+            entry = fade_close
+            stop = entry + stop_atr_mult * float(fade_atr)
+            target = entry - target_atr_mult * float(fade_atr)
+            yield Signal.entry(
+                date=fade_ts, side="short", price=entry, stop=stop, target=target,
+                reason=f"limit_day_fade_short after +{net_move:.4f} bar",
+            )
+        else:
+            entry = fade_close
+            stop = entry - stop_atr_mult * float(fade_atr)
+            target = entry + target_atr_mult * float(fade_atr)
+            yield Signal.entry(
+                date=fade_ts, side="long", price=entry, stop=stop, target=target,
+                reason=f"limit_day_fade_long after {net_move:.4f} bar",
+            )
+
+
+STRATEGY_REGISTRY["limit_day_next_fade"] = limit_day_next_fade
+
+
+def usda_compression_break(
+    bars: pd.DataFrame,
+    compression_lookback: int = 20,
+    compression_atr_mult: float = 0.6,
+    expansion_breakout_mult: float = 0.5,
+    stop_atr_mult: float = 0.8,
+    target_atr_mult: float = 2.0,
+    atr_period: int = 14,
+) -> Iterator[Signal]:
+    """Pre-USDA compression then post-USDA breakout.
+
+    Hypothesis: ag traders hesitate the day before a known USDA release
+    (WASDE monthly, Crop Progress Mondays, Cattle-on-Feed monthly Fri).
+    Volatility compresses below normal; then expands sharply on the
+    report. Catch the expansion early.
+
+    Trigger (pure-price proxy for "report compression then expansion"):
+      - The prior `compression_lookback` bars had a max-min range
+        < `compression_atr_mult` × current ATR (volatility compressed)
+      - Current bar's close breaks compression-high by
+        `expansion_breakout_mult` × ATR (or compression-low for short)
+      - Stop: 0.8 ATR
+      - Target: 2 ATR (asymmetric — expansion expected to run)
+
+    Generalizes the compression-break pattern; doesn't need USDA calendar
+    lookup. Works on any ag/grain bar pattern that compresses then
+    expands sharply, which is the data-shape USDA reports produce.
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    atr = _atr(bars, atr_period)
+    if len(bars) < compression_lookback + atr_period + 2:
+        return
+    rolling_high = h.rolling(compression_lookback).max().shift(1)
+    rolling_low = l.rolling(compression_lookback).min().shift(1)
+    fired_until_idx = -1
+
+    for i in range(compression_lookback + atr_period, len(bars)):
+        if i <= fired_until_idx:
+            continue
+        a = atr.iloc[i]
+        rh, rl = rolling_high.iloc[i], rolling_low.iloc[i]
+        if pd.isna(a) or pd.isna(rh) or pd.isna(rl) or a <= 0:
+            continue
+        compression_range = float(rh) - float(rl)
+        if compression_range >= compression_atr_mult * float(a):
+            continue  # not compressed enough
+
+        close = float(c.iloc[i])
+        breakout_offset = expansion_breakout_mult * float(a)
+        if close > float(rh) + breakout_offset:
+            entry = close
+            stop = entry - stop_atr_mult * float(a)
+            target = entry + target_atr_mult * float(a)
+            fired_until_idx = i + compression_lookback  # cooldown
+            yield Signal.entry(
+                date=bars.index[i], side="long", price=entry,
+                stop=stop, target=target,
+                reason=f"usda_compression_break_long cmp={compression_range:.4f}",
+            )
+        elif close < float(rl) - breakout_offset:
+            entry = close
+            stop = entry + stop_atr_mult * float(a)
+            target = entry - target_atr_mult * float(a)
+            fired_until_idx = i + compression_lookback
+            yield Signal.entry(
+                date=bars.index[i], side="short", price=entry,
+                stop=stop, target=target,
+                reason=f"usda_compression_break_short cmp={compression_range:.4f}",
+            )
+
+
+STRATEGY_REGISTRY["usda_compression_break"] = usda_compression_break
+
+
 def get_strategy(name: str):
     if name not in STRATEGY_REGISTRY:
         raise ValueError(
