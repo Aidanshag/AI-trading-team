@@ -6,7 +6,11 @@
 
 # Master enable. False = always defer to mechanical tier (the current
 # behavior). True = check `enabled_cells` per-trade.
-enabled: false
+# 2026-05-15: activated in shadow/report_only mode to gather decision
+# data while the trader continues to act mechanically. After ≥1 week of
+# data in agent_exit_vetoes, audit and decide whether to flip
+# report_only:false on a subset of cells.
+enabled: true
 
 # Report-only mode. When true, the agent IS called and its decision is
 # LOGGED to agent_exit_vetoes, but the trader still acts on the mechanical
@@ -18,8 +22,11 @@ report_only: true
 
 # Per-cell allowlist (only these cells route through the agent).
 # Format: "<strategy>/<symbol>/<side>". Use ['*'] to enable for all cells.
-# Until Phase 2 validation passes, leave this list empty.
-enabled_cells: []
+# 2026-05-15: '*' enabled for shadow-mode data gathering. The trader
+# still acts mechanically (report_only:true above); the agent's calls
+# are logged to `agent_exit_vetoes` for offline analysis.
+enabled_cells:
+  - '*'
 
 # Per-cell denylist — these never go through the agent regardless of
 # enabled_cells. Used to surgically EXCLUDE cells while keeping the

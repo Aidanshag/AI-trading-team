@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "f0c74e8162344efa95b8aa71f8bfa056",
-      "emitted_at": "2026-05-15T02:57:30+00:00",
-      "expires_at": "2026-05-15T03:00:30+00:00",
+      "id": "845e0d3c21564de096ea978a2a4f4f18",
+      "emitted_at": "2026-05-15T03:04:47+00:00",
+      "expires_at": "2026-05-15T03:07:47+00:00",
       "symbol": "GC",
       "side": "long",
       "entry_price": 4621.4,
@@ -17,9 +17,9 @@
       "notes": "experimental; reason=nr7_break_long"
     },
     {
-      "id": "e90a4db2aaf24823bf66261660e1684d",
-      "emitted_at": "2026-05-15T02:57:32+00:00",
-      "expires_at": "2026-05-15T03:00:32+00:00",
+      "id": "7b2214bac0c244a18e8f764532768380",
+      "emitted_at": "2026-05-15T03:04:48+00:00",
+      "expires_at": "2026-05-15T03:07:48+00:00",
       "symbol": "6E",
       "side": "short",
       "entry_price": 1.1673,
@@ -33,9 +33,9 @@
       "notes": "reason=fvg_bear_mitigation gap=[1.17,1.17] age=27"
     },
     {
-      "id": "79f9da6a49db4fe68068db266a0d6c24",
-      "emitted_at": "2026-05-15T02:57:32+00:00",
-      "expires_at": "2026-05-15T03:00:32+00:00",
+      "id": "5839462ec7574e64b0857aff42eb6344",
+      "emitted_at": "2026-05-15T03:04:48+00:00",
+      "expires_at": "2026-05-15T03:07:48+00:00",
       "symbol": "MGC",
       "side": "long",
       "entry_price": 4621.9,
