@@ -28,6 +28,63 @@ import pandas as pd
 Side = Literal["long", "short"]
 
 
+# 2026-05-15: min_stop_ticks floor enforced at the engine level to kill
+# the sub-tick stop collapse bug. Strategies using ATR-based stops
+# can compute stop distance ≈ 0 in low-vol regimes; division-by-tiny-epsilon
+# in r-multiple computation inflated t-stats by orders of magnitude.
+# Pattern B failure shape (see vault/_meta/analysis/2026-05-07_lesson_meta_patterns.md).
+#
+# Symbol-aware tick sizes mirror hooks/risk_gate._normalize_root +
+# tools/profit_protect._TICK_ECONOMICS. Any entry signal whose stop is
+# closer than MIN_STOP_TICKS_DEFAULT * tick_size from entry is DROPPED
+# at signal-processing time — it never becomes a Trade and never
+# pollutes the t-stat.
+_TICK_SIZES_BY_SYMBOL: dict[str, float] = {
+    # Metals
+    "MGC": 0.10, "GC": 0.10, "GCE": 0.10,
+    "SI": 0.005, "SIL": 0.005, "SIE": 0.005,
+    "HG": 0.0005, "MHG": 0.0005, "CPE": 0.0005,
+    "PL": 0.10, "PLE": 0.10,
+    # Equity index
+    "ES": 0.25, "MES": 0.25, "EP": 0.25,
+    "NQ": 0.25, "MNQ": 0.25, "ENQ": 0.25,
+    "RTY": 0.10, "M2K": 0.10, "TNA": 0.10,
+    "YM": 1.00, "MYM": 0.50,
+    "NKD": 5.00,
+    "MBT": 5.0,
+    # Energies
+    "CL": 0.01, "MCL": 0.01, "CLE": 0.01, "MCLE": 0.01,
+    "NG": 0.001, "MNG": 0.005, "NGE": 0.001,
+    "QG": 0.005, "NQG": 0.005, "QM": 0.025, "NQM": 0.025,
+    "HO": 0.0001, "HOE": 0.0001, "RB": 0.0001, "RBE": 0.0001,
+    # Rates
+    "ZN": 0.015625, "TYA": 0.015625,
+    "ZB": 0.03125, "ZF": 0.0078125, "FVA": 0.0078125,
+    "ZT": 0.0078125, "TUA": 0.0078125,
+    "US": 0.03125, "USA": 0.03125, "UL": 0.03125, "ULA": 0.03125,
+    # FX
+    "6E": 0.00005, "EU6": 0.00005, "M6E": 0.00005,
+    "6B": 0.0001, "BP6": 0.0001, "M6B": 0.0001,
+    "6A": 0.0001, "DA6": 0.0001, "M6A": 0.0001,
+    "6C": 0.00005, "CA6": 0.00005,
+    "6J": 0.0000005, "JY6": 0.0000005,
+    "6S": 0.00005, "SF6": 0.00005,
+    "6N": 0.0001, "NE6": 0.0001,
+    "MX6": 0.00001, "E7": 0.0001, "EEU": 0.0001,
+    # Grains / livestock
+    "ZC": 0.0025, "ZCE": 0.0025,
+    "ZS": 0.0025, "ZSE": 0.0025,
+    "ZW": 0.0025, "ZWA": 0.0025,
+    "ZL": 0.0001, "ZLE": 0.0001,
+    "ZM": 0.10, "ZME": 0.10,
+    "LE": 0.025, "GLE": 0.025,
+    "HE": 0.025,
+    "GMET": 0.10,
+}
+
+MIN_STOP_TICKS_DEFAULT = 6   # matches scripts/live_trader.MIN_SIGNAL_R_TICKS
+
+
 @dataclass
 class Signal:
     """Signal emitted by a strategy."""
@@ -142,19 +199,34 @@ def backtest_strategy(
     bars: pd.DataFrame,
     symbol: str = "",
     params: dict | None = None,
+    min_stop_ticks: int | None = None,
 ) -> BacktestResult:
     """Run a strategy against historical bars and return aggregate results.
 
     Assumes one open trade at a time (serial). Multi-position books are a
     future extension.
+
+    2026-05-15: applies min_stop_ticks floor — entry signals whose stop
+    is < `min_stop_ticks * tick_size_for_symbol` from entry are SKIPPED.
+    Kills the sub-tick-stop t-stat inflation Pattern B failure. Default
+    is MIN_STOP_TICKS_DEFAULT (6); pass 0 to disable the floor (regression
+    tests + research that wants raw output).
     """
     params = params or {}
+    if min_stop_ticks is None:
+        min_stop_ticks = MIN_STOP_TICKS_DEFAULT
+    tick_size = _TICK_SIZES_BY_SYMBOL.get(symbol, 0.0)
+    min_stop_distance = (min_stop_ticks * tick_size) if tick_size > 0 else 0.0
+
     result = BacktestResult(
         strategy_name=getattr(strategy, "__name__", "strategy"),
         symbol=symbol,
         params=params,
         bars=bars,
     )
+    # Counters for the dropped-signal floor (informational; could surface
+    # via BacktestResult later if needed)
+    result._floor_dropped_count = 0  # type: ignore[attr-defined]
 
     open_trade: Trade | None = None
     closed_trades: list[Trade] = []
@@ -199,6 +271,13 @@ def backtest_strategy(
         # (2) Process signals for this bar
         for sig in signals_by_date.get(date, []):
             if sig.kind == "entry" and open_trade is None:
+                # Floor check: drop signals with sub-tick stops. Kills
+                # the t-stat inflation Pattern B from sub-tick ATR collapse.
+                if min_stop_distance > 0 and sig.stop is not None:
+                    stop_distance = abs(sig.price - sig.stop)
+                    if stop_distance < min_stop_distance:
+                        result._floor_dropped_count += 1  # type: ignore[attr-defined]
+                        continue
                 open_trade = Trade(
                     entry_date=date,
                     entry_price=sig.price,
