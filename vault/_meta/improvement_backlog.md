@@ -118,8 +118,9 @@ User direction 2026-05-14: "eventually should all of these be implemented." All 
 
 ## 🆕 Queued 2026-05-14 late-night — HIGHEST PRIORITY (autonomous monitoring)
 
-- [P0] [effort: 180min] [risk: low] [status: open] [autonomous-eligible: yes]
-  **Sentinel — continuous autonomous anomaly watcher** — user direct quote 2026-05-14: "nothing improves unless I directly work on it." Multiple bugs tonight (tests writing 24 mock orders to production DB, MGC missing from `_TICK_ECONOMICS`, peak reporting glitch, profit-lock that fired but with $49 slippage from polling latency) all went undetected until the user manually flagged them. The system has watchdog (process-death) and Discord (some events) but no behavior-level monitoring.
+- [P0] [effort: 180min] [risk: low] [status: merged 2026-05-15] [autonomous-eligible: yes]
+  **Sentinel — continuous autonomous anomaly watcher** — SHIPPED 2026-05-15. `tools/sentinel.py` with 6 invariant checks: mock_orders_in_db / open_position_economics / close_slippage_vs_floor / orphan_working_orders / brain_vs_trader_rate / duplicate_trader_procs. Each finding posts to Discord with severity, daily report appended to `vault/_meta/sentinel_YYYY-MM-DD.md`. 18 new tests cover every check with injectable mocks. 519 tests green. Smoke test on live state: 0 findings (clean). Standalone: `python -m tools.sentinel [--dry] [--report]`.
+  **STILL NEEDED (cannot do autonomously):** register `FundSentinel` Windows scheduled task to run every 10 min. Suggested command: `schtasks /create /tn FundSentinel /tr ".venv\Scripts\python.exe -m tools.sentinel --report" /sc minute /mo 10 /sd 2026-05-15 /ru SYSTEM`.
   Build `tools/sentinel.py` + `FundSentinel` scheduled task running every 10 min that:
   1. Scans the orders table for `broker_order_id LIKE 'mock_%'` → critical Discord alert (= tests are polluting production)
   2. Scans for open positions where `_resolve_tick_economics` returns (0,0) → critical alert (= profit-lock is blind)
