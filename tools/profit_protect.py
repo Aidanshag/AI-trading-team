@@ -542,6 +542,34 @@ def _open_db_connection():
         return None
 
 
+def _record_close_decision(symbol: str, side: str, size: int, contract_id: str,
+                            unrealized: float, peak: float, reason: str,
+                            kind: str = "close") -> None:
+    """Write a `decisions` row when profit-lock fires a close via
+    `close_position`. Provides an audit trail equivalent to the orders-table
+    row that `place_order` used to produce — the native `close_position`
+    endpoint doesn't create an order row in the same way.
+
+    Fail-safe: any DB error is swallowed (the close itself already
+    succeeded at the broker; logging failure must not raise)."""
+    try:
+        from state.db import get_db
+        summary = (f"{symbol} {side} {size}ct flattened via close_position "
+                    f"@ unrealized=${unrealized:+.2f}")
+        rationale = (f"reason={reason} | peak=${peak:+.2f} | "
+                      f"contract_id={contract_id}")
+        get_db().record_decision(
+            agent="profit_lock",
+            kind=kind,
+            summary=summary,
+            rationale=rationale,
+            symbol=symbol,
+        )
+    except Exception:
+        # Never block close flow on audit-log failure
+        pass
+
+
 # ── Main entrypoint ───────────────────────────────────────────
 
 def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = None,
@@ -667,6 +695,13 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                     _position_entry_ts_seen.pop(key, None)
                     _clear_software_target(contract_id)
                     reset_trailed_floor(contract_id)
+                    # Audit-trail row in decisions table (close_position
+                    # doesn't produce an orders row the way place_order did).
+                    _record_close_decision(
+                        symbol=symbol, side=side, size=size,
+                        contract_id=contract_id, unrealized=unrealized,
+                        peak=prev_peak, reason="target_hit", kind="close",
+                    )
                     closed.append({"symbol": symbol, "side": side,
                                     "size": size, "unrealized": unrealized,
                                     "peak": prev_peak, "reason": "target_hit"})
@@ -801,6 +836,13 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                 _position_consecutive_holds.pop(key, None)
                 _position_entry_ts_seen.pop(key, None)
                 reset_trailed_floor(contract_id)
+                # Audit-trail row in decisions table (close_position doesn't
+                # produce an orders row the way the pre-2026-05-14 path did).
+                _record_close_decision(
+                    symbol=symbol, side=side, size=size,
+                    contract_id=contract_id, unrealized=unrealized,
+                    peak=prev_peak, reason=reason, kind="close",
+                )
                 closed.append({"symbol": symbol, "side": side, "size": size,
                                 "unrealized": unrealized, "peak": prev_peak,
                                 "reason": reason})

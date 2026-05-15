@@ -39,7 +39,7 @@ Priority logic going forward:
 
 ## 🆕 Queued 2026-05-15 — profit-lock LIMIT order rejection
 
-- [P0] [effort: 90min] [risk: medium] [status: open] [autonomous-eligible: yes]
+- [P0] [effort: 90min] [risk: medium] [status: in-progress] [autonomous-eligible: yes]
   **Migrate profit-lock from `place_order(order_type="limit")` to `close_position`** — 13 `profitlock_*` LIMIT orders REJECTED by ProjectX over 2026-05-13/14, plus 1 `emergency_flat_*` LIMIT rejected. This is the broker quirk documented in `project_broker_order_semantics.md` (memory). The profit-lock code path still places marketable limits to lock gains — the broker rejects them. Net effect: when the mechanical profit-lock TRIES to fire, it FAILS. Trades retrace or stop out instead.
   Files: `tools/profit_protect.py` — find every `place_order(...)` call in the close path and switch to `client.close_position(account_id, contract_id)` (the endpoint known to work). Audit logging so successful closes write to `agent_exit_vetoes`/`decisions` correctly.
   Acceptance: a successful profit-lock close uses `close_position`; rejected-LIMIT path is gone. Test with a paper trade or replay.

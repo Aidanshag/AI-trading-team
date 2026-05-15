@@ -319,3 +319,147 @@ def test_check_and_close_short_position_math():
     assert closed == []
     # Peak captured
     assert pp._position_high_water.get("MNQ_short", 0) == pytest.approx(20.0, abs=0.01)
+
+
+# ── Regression guard: profit-lock close primitive (2026-05-15) ─
+
+def test_profit_lock_close_uses_close_position_not_limit_order():
+    """Hard regression guard against the 13-rejected-LIMIT-order incident
+    (2026-05-13/14) — see `vault/_meta/improvement_backlog.md` + memory
+    `project_broker_order_semantics.md`.
+
+    The pre-fix code path used `place_order(order_type="market", ioc, tag=
+    "profitlock_*")` which Topstep's schema treats as a LIMIT (type=1)
+    and rejects with "limit price not set" — across 2026-05-13/14 this
+    cost 13 missed profit-lock fires. Fix landed at commit 326ab7f.
+
+    This test asserts the primitive used to flatten a profit-locked
+    position is `close_position`, NOT `place_order(...)` with any limit-
+    type or profitlock_* tag. If a future refactor reintroduces the bad
+    path, this test breaks the build before it can ship."""
+    pp._position_high_water.clear()
+    pp._target_usd_by_contract.clear()
+    contract_id = "CON.F.US.GCE.M26"
+    client = _FakeClient(
+        positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                    "averagePrice": 4750.0}],
+        bars_by_symbol={"GC": _FakeBars([4790.0])},  # +$4000 peak
+    )
+    # Scan 1: peak captured, no close yet.
+    pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+    assert pp._position_high_water["GC_long"] >= 3999
+    # Scan 2: drop below tier floor → trailing_lock fires.
+    client._bars["GC"] = _FakeBars([4760.0])    # +$1000 < $1500 floor
+    closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+
+    # === Build-failing assertions ===
+    assert len(closed) == 1, (
+        f"profit-lock should fire exactly once after retracement, got "
+        f"{len(closed)} closes"
+    )
+    assert "trailing_lock" in closed[0]["reason"], (
+        f"close reason must be trailing_lock, got {closed[0]['reason']!r}"
+    )
+    # Primary assertion: close_position was the primitive used.
+    assert client.closed_contracts == [contract_id], (
+        f"profit-lock close MUST use client.close_position(). "
+        f"close_position calls: {client.closed_contracts}"
+    )
+    # Negative assertion: NO place_order call with a profitlock_* tag OR
+    # any limit-typed flatten attempt. (The fake client records every
+    # place_order call as a dict of kwargs.)
+    for kwargs in client.placed:
+        tag = str(kwargs.get("client_order_id") or "")
+        otype = str(kwargs.get("order_type") or "")
+        assert not tag.startswith("profitlock_"), (
+            f"REGRESSION: place_order called with profitlock_* tag — "
+            f"this is the 2026-05-13/14 broker-rejection path that was "
+            f"fixed in commit 326ab7f. kwargs={kwargs}"
+        )
+        assert otype != "limit" or not tag.startswith("profitlock"), (
+            f"REGRESSION: profit-lock close used a LIMIT order, broker "
+            f"rejects these. kwargs={kwargs}"
+        )
+
+
+def test_profit_lock_close_writes_decisions_row():
+    """Audit-trail guard: when profit-lock fires a close, a `decisions`
+    row must be recorded so the close is auditable (close_position
+    doesn't produce an orders-table row the way the old place_order
+    path did).
+
+    Uses an in-memory sqlite DB monkey-patched into state.db.get_db so
+    the test doesn't touch fund.db. Asserts a decisions row exists with
+    agent='profit_lock' and kind='close' after the trailing_lock fires."""
+    import sqlite3
+    pp._position_high_water.clear()
+    pp._target_usd_by_contract.clear()
+
+    # Build an in-memory DB with the same `decisions` schema the real
+    # fund.db uses (see state/schema.sql). Just the columns record_decision
+    # writes — kept minimal to avoid a heavy schema-import dep.
+    test_conn = sqlite3.connect(":memory:")
+    test_conn.execute("""
+        CREATE TABLE decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            agent TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            symbol TEXT,
+            summary TEXT,
+            rationale TEXT,
+            vault_path TEXT,
+            model TEXT,
+            tokens_in INTEGER,
+            tokens_out INTEGER
+        )
+    """)
+    test_conn.commit()
+
+    # Monkey-patch get_db() so _record_close_decision writes to test_conn.
+    import state.db as db_mod
+    real_get_db = db_mod.get_db
+
+    class _StubDB:
+        def record_decision(self, agent, kind, summary, rationale, *,
+                              symbol=None, vault_path=None, model=None,
+                              tokens_in=None, tokens_out=None):
+            from datetime import datetime, timezone
+            cur = test_conn.execute(
+                """INSERT INTO decisions
+                    (ts, agent, kind, symbol, summary, rationale, vault_path,
+                     model, tokens_in, tokens_out)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (datetime.now(tz=timezone.utc).isoformat(), agent, kind, symbol,
+                 summary, rationale, vault_path, model, tokens_in, tokens_out),
+            )
+            test_conn.commit()
+            return int(cur.lastrowid or 0)
+
+    db_mod.get_db = lambda: _StubDB()
+    try:
+        contract_id = "CON.F.US.GCE.M26"
+        client = _FakeClient(
+            positions=[{"contractId": contract_id, "size": 1, "type": 1,
+                        "averagePrice": 4750.0}],
+            bars_by_symbol={"GC": _FakeBars([4790.0])},  # +$4000 peak
+        )
+        pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+        client._bars["GC"] = _FakeBars([4760.0])
+        closed = pp.check_and_close(client, 1, fetch_bars_fn=_fake_fetch)
+
+        assert len(closed) == 1
+        rows = test_conn.execute(
+            "SELECT agent, kind, symbol FROM decisions WHERE agent=?",
+            ("profit_lock",),
+        ).fetchall()
+        assert len(rows) == 1, (
+            f"expected exactly one decisions row from profit_lock, got "
+            f"{len(rows)}: {rows}"
+        )
+        assert rows[0] == ("profit_lock", "close", "GC"), (
+            f"decisions row content unexpected: {rows[0]}"
+        )
+    finally:
+        db_mod.get_db = real_get_db
+        test_conn.close()
