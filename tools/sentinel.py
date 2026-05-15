@@ -284,12 +284,36 @@ def check_brain_vs_trader_rate(conn: sqlite3.Connection,
     # Only flag if brain is producing signals but trader is producing zero
     # orders (proposed OR cancelled). 0 emissions = normal idle, not a bug.
     if n_emissions >= 5 and n_orders == 0:
+        # Check if a known benign cause is in the trader stdout log:
+        # daily trade cap, halted, snapshot stale, etc. If so, skip the
+        # warning — trader is correctly blocking everything by design.
+        benign_reason = None
+        trader_log = _PROJECT_ROOT / "logs" / "livetrader_morning_stdout.log"
+        if trader_log.exists():
+            try:
+                tail = trader_log.read_text(encoding="utf-8",
+                                              errors="replace").splitlines()[-50:]
+                for line in tail:
+                    for marker in ("daily trade cap hit",
+                                     "halt active",
+                                     "thin-tape regime block",
+                                     "outside autonomous RTH window",
+                                     "snapshot stale"):
+                        if marker in line:
+                            benign_reason = marker
+                            break
+                    if benign_reason:
+                        break
+            except Exception:
+                pass
+        if benign_reason:
+            return findings  # known-benign, no warning
         findings.append(Finding(
             check_name="brain_vs_trader_rate",
             severity="warn",
             summary=f"brain emitted {n_emissions} signals in last {minutes}min "
-                     f"but trader produced 0 orders (proposed or otherwise). "
-                     f"Trader scan loop may be stuck or every signal blocked.",
+                     f"but trader produced 0 orders. Not in daily-cap / halt / "
+                     f"regime-block / window state — scan loop may be stuck.",
             detail={"n_emissions": n_emissions, "n_orders": n_orders,
                       "window_minutes": minutes},
         ))
