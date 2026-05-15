@@ -1,25 +1,25 @@
 {
   "signals": [
     {
-      "id": "ec6ddb0a6e1648d7b6d3b18548980744",
-      "emitted_at": "2026-05-15T02:22:49+00:00",
-      "expires_at": "2026-05-15T02:25:49+00:00",
+      "id": "ec523842c3ea452ba9e76c1e5746db87",
+      "emitted_at": "2026-05-15T02:34:18+00:00",
+      "expires_at": "2026-05-15T02:37:18+00:00",
       "symbol": "GC",
-      "side": "long",
-      "entry_price": 4622.4,
-      "stop_price": 4613.5,
-      "target_price": 4641.5428571428565,
+      "side": "short",
+      "entry_price": 4616.7,
+      "stop_price": 4622.4,
+      "target_price": 4601.528571428571,
       "qty": 1,
       "strategy": "narrow_range_break",
       "session": "Asian",
-      "cell_key": "narrow_range_break|GC|Asian|long",
+      "cell_key": "narrow_range_break|GC|Asian|short",
       "shadow_only": true,
-      "notes": "experimental; reason=nr7_break_long"
+      "notes": "experimental; reason=nr7_break_short"
     },
     {
-      "id": "0660a2b8605048e0a50f5de61bc1686a",
-      "emitted_at": "2026-05-15T02:22:51+00:00",
-      "expires_at": "2026-05-15T02:25:51+00:00",
+      "id": "9c9ba975a11e4e858086a665971e01e2",
+      "emitted_at": "2026-05-15T02:34:20+00:00",
+      "expires_at": "2026-05-15T02:37:20+00:00",
       "symbol": "MGC",
       "side": "long",
       "entry_price": 4622.3,
