@@ -20,6 +20,21 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
 
 ---
 
+## 🆕 Queued 2026-05-15 — PROPOSAL — Peak-capture efficiency metric
+
+- [P1] [effort: 45min] [risk: low] [status: proposed-by-autonomous-cycle 2026-05-15] [autonomous-eligible: yes]
+  **Track peak_pct_captured on every close + add to sentinel daily report** — Tonight's audit showed 84% MFE leakage (peak $626 → realized $98). We shipped 3 exit-rule improvements (percent-of-peak, reversal-exit, time-decay) explicitly aimed at this gap. **But we have no metric to measure whether they're working.** Without measurement, the user has to manually trade-by-trade compare peak vs realized to know if the night's work moved the needle.
+  Concrete change:
+  1. `tools/profit_protect.py:_record_close_decision()` — extend the `rationale` text to include `peak_pct_captured=X.XX` (= `realized / peak` for positive peaks; skip for zero/negative peaks).
+  2. New helper `tools/sentinel.py:check_peak_capture_weekly()` — over the last 7 days of `decisions` rows, compute avg peak_pct_captured. Compare to baseline (target: ≥0.50 = capture at least half of peak on average). If <0.30, warn. If trending DOWN week-over-week, info-level finding.
+  3. Daily sentinel report (`sentinel_YYYY-MM-DD.md`) appends a one-line summary: "peak capture today: N closes, avg X% of peak."
+  4. Test: synthetic decisions rows with known peak/realized → assert metric calculation correct.
+  Why: Pattern matches `feedback_close_the_gap.md` (measurement before optimization). The exit-rule changes are a hypothesis; the metric closes the variance trigger loop. After 1 week of data, can compare "before exit fixes" vs "after" and decide whether to keep / tune / revert.
+  Files: `tools/profit_protect.py` (append to rationale string), `tools/sentinel.py` (new check + report line), `tests/test_sentinel.py` (calculation test).
+  Acceptance: every profit_lock close in `decisions` table 2026-05-16+ includes `peak_pct_captured=X.XX`. Sentinel daily report shows aggregate. Weekly check fires WARN if avg <0.30.
+  Auto-merge: yes if tests pass — low risk, measurement-only, no behavior change.
+  Note: PROPOSAL-only per /improve-fund rule ("don't implement freshly-identified items in same cycle"). User can greenlight in morning.
+
 ## ⚡ STANDING REFRAME 2026-05-08
 
 User directive: **"close the gap between looks great and actually works
