@@ -20,6 +20,30 @@ This file is the work queue for the autonomous-improvement loop. Each entry has 
 
 ---
 
+## 🆕 Queued 2026-05-15 — WEEKEND PROJECT — RTH strategy coverage expansion
+
+- [P0] [effort: 1-2 days] [risk: medium] [status: open — needs user-present weekend] [autonomous-eligible: no — multi-day, multi-decision]
+  **RTH session has 2 cells; Asian has 14. Symptom not cause — sample-size graduation gap, not "strategies don't work in RTH."**
+  Diagnosis: most validated cells were calibrated against Asian-session bars because that's where the data lived. RTH cells need their own walk-forward against RTH bars (different volume profile, intra-bar range, event-driven moves at 8:30/10:00/2:00 ET, oil inventories Wed 10:30). User is increasingly active during RTH and is the natural in-the-loop reviewer for an RTH expansion.
+
+  **Phased plan** (NOT for the autonomous nightly loop — for a user-present weekend cycle):
+
+  1. **Walk-forward validation against RTH bars** for every strategy in `STRATEGY_REGISTRY` × every focus-universe symbol. Parameterize `scripts/walk_forward_*.py` for `session="RTH"`. Output writes to `state/strategy_validation.json:cells` with RTH session keys + OOS stats (n, hit, E, t).
+  2. **Per-RTH parameter calibration.** Asian's tight quiet tape ≠ RTH's higher-volume range-expansion. FVG/NRB/pivot strategies likely need different stop buffers and target distances. Run a parameter sweep per cell and pick winners by t-stat.
+  3. **RTH-specific gates**: news-blackout windows (infrastructure exists via `news_proximity_for`), 9:30 opening-volatility gate (first 15 min has wide bars + reversals), Fed-minutes/CPI-release blackouts. The macro_levels.json + treasury_auctions.json daily refresh already gives us the calendar — wire it.
+  4. **Staged deployment**: each new RTH cell starts `experimental: true` (shadow mode, no real fills). Graduate one at a time as 2-3 weeks of live OOS stats accumulate. Don't go from "2 cells" → "10 cells live" in one step.
+
+  Synergy with concurrent work:
+  - exit_reasoner (Haiku-based) gets its highest upside when user is in-the-loop during RTH. Currently shadow-mode; once we have RTH cells live, audit `agent_exit_vetoes` to see if its decisions align with what the user would have done. If yes, flip `report_only: false` for the RTH cells specifically.
+  - Tick-stream (cycle 12, 2026-05-15): RTH news-driven swings are where sub-second tick data matters most. Worth deploying before RTH cells go live.
+  - XFA-readiness plan dovetails — if the Combine pass happens with RTH cells contributing, the XFA transition has 30 days of live data per cell.
+
+  Files (planned): `scripts/walk_forward_rth.py` (new or parameterized), `state/strategy_validation.json` (cells dict + live_allowlist), `config/risk_limits.yaml` (news-blackout windows), `tools/regime_signal.py` (opening-volatility gate). Maybe `vault/_meta/rth_expansion_plan_2026-05-15.md` to capture the plan in vault before execution.
+
+  Acceptance: ≥6 RTH cells with `n≥25, t≥1.5, E>0` in live_allowlist after the weekend cycle. User has reviewed each cell's walk-forward report. Trader's RTH coverage matches Asian's ~14 cells within 2-3 weeks.
+
+  Owner: requires user-driven weekend cycle. Autonomous loop should NOT pick this up.
+
 ## 🆕 Queued 2026-05-15 — PROPOSAL — Peak-capture efficiency metric
 
 - [P1] [effort: 45min] [risk: low] [status: proposed-by-autonomous-cycle 2026-05-15] [autonomous-eligible: yes]

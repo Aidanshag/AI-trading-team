@@ -645,6 +645,46 @@ def main() -> int:
     _log(f"=== live_trader started: interval={args.interval}s, "
           f"dry_run={args.dry_run}, paper={args.paper} ===")
 
+    # Initialize the SignalR tick stream so profit_protect can read
+    # sub-second prices instead of polling 1-min bar closes. Failure
+    # to init is non-fatal — profit_protect falls back to bar polling.
+    if not args.dry_run and not args.paper:
+        try:
+            from tools.tick_stream import get_stream
+            _client = get_client()
+            _account_id = get_account_id()
+            stream = get_stream(jwt=_client._jwt)
+            stream.start()
+            # Subscribe to contracts for symbols in the live filter so
+            # the cache is warm by the time the first position opens.
+            try:
+                from tools.signal_queue import _live_strategies_filter as _filter
+            except Exception:
+                _filter = None
+            warm_symbols: set[str] = set()
+            try:
+                import json as _json
+                with open("state/strategy_validation.json", "r",
+                            encoding="utf-8") as _f:
+                    _data = _json.load(_f)
+                for cell in _data.get("live_allowlist", []):
+                    sym = cell.get("symbol")
+                    if sym:
+                        warm_symbols.add(sym)
+            except Exception:
+                pass
+            for sym in warm_symbols:
+                try:
+                    cid = _client.front_month_contract_id(sym)
+                    stream.subscribe(cid)
+                except Exception:
+                    pass
+            _log(f"tick_stream started; subscribed to "
+                 f"{len(stream.subscribed_contracts())} contracts")
+        except Exception as e:
+            _log(f"tick_stream init failed (non-fatal): "
+                 f"{type(e).__name__}: {e}")
+
     # Sub-minute position polling thread for the per-trade loss cap.
     import threading
     poll_stop = threading.Event()

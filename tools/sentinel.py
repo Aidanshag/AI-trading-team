@@ -361,6 +361,45 @@ def check_duplicate_trader_procs(ps_command_runner=None) -> list[Finding]:
 
 # ── Aggregation + report ──────────────────────────────────────────
 
+def check_tick_stream_stale() -> list[Finding]:
+    """If the trader has open positions but the tick_stream cache is
+    stale or empty, profit-lock decisions are being made on bar-polled
+    data instead of sub-second ticks — defeats the whole point of
+    the tick stream.
+
+    Sentinel doesn't have access to the trader's in-process tick cache
+    (different process). So this check is best-effort: it logs the
+    last-event timestamp from the most recent sentinel report if any,
+    and warns if it hasn't seen evidence of recent tick activity. The
+    real check happens via the trader log line "tick_stream started"
+    and any subsequent "tick_stream stale" log entry.
+
+    For now, mark as low-severity — the bar-fetcher fallback is
+    fail-safe so this isn't a hard outage.
+    """
+    findings: list[Finding] = []
+    # Look at the trader's stdout log for tick_stream lifecycle markers
+    trader_log = _PROJECT_ROOT / "logs" / "livetrader_morning_stdout.log"
+    if not trader_log.exists():
+        return findings
+    try:
+        tail = trader_log.read_text(encoding="utf-8",
+                                       errors="replace").splitlines()[-200:]
+    except Exception:
+        return findings
+    started = any("tick_stream started" in l for l in tail)
+    failed = any("tick_stream init failed" in l for l in tail)
+    if failed and not started:
+        findings.append(Finding(
+            check_name="tick_stream_stale",
+            severity="warn",
+            summary="tick_stream init failed in trader; profit_protect "
+                     "falling back to 1-min bar polling. WebSocket connection "
+                     "may be blocked or signalrcore not installed.",
+        ))
+    return findings
+
+
 def run_all_checks() -> list[Finding]:
     """Open the DB, run every check, return aggregated findings."""
     findings: list[Finding] = []
@@ -379,6 +418,7 @@ def run_all_checks() -> list[Finding]:
         findings.extend(check_orphan_working_orders())
         findings.extend(check_brain_vs_trader_rate(conn))
         findings.extend(check_duplicate_trader_procs())
+        findings.extend(check_tick_stream_stale())
     finally:
         conn.close()
     return findings

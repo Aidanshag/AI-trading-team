@@ -731,15 +731,41 @@ def check_and_close(client, account_id, log_fn: Callable[[str], None] | None = N
                     pass
                 continue
 
-            # Latest mark via 1-min bars (cheap; usually cached)
+            # Latest mark — prefer real-time tick stream, fall back to
+            # 1-min bar close. 2026-05-15: tick_stream provides sub-second
+            # price updates via SignalR; on stale-cache or connection drop,
+            # `.latest()` returns None and we fall back. STILL READ BARS
+            # too, since reversal-exit needs the 5-bar history for the
+            # 3-lower-closes pattern.
+            tick = None
+            try:
+                from tools.tick_stream import get_stream
+                stream = get_stream()
+                tick = stream.latest(contract_id)
+            except Exception:
+                pass
+
             if fetch_bars_fn is None:
                 from tools.bar_fetcher import fetch_bars as _fb
                 bars = _fb(client, symbol, 1, 5)
             else:
                 bars = fetch_bars_fn(client, symbol, 1, 5)
             if bars is None or len(bars) == 0:
-                continue
-            last_close = float(bars["Close"].iloc[-1])
+                if tick is None:
+                    continue
+                # We have a tick but no bars — use the tick price as
+                # last_close and synthesize a 1-bar DataFrame so the
+                # reversal-exit detector can still run (it will see only
+                # 1 bar and return False per its insufficient-bars guard).
+                import pandas as _pd
+                bars = _pd.DataFrame({"Close": [tick["price"]]})
+                last_close = tick["price"]
+            elif tick is not None:
+                # Both available: tick is fresher than bar close. Use tick
+                # for the mark; keep bars for the reversal pattern.
+                last_close = tick["price"]
+            else:
+                last_close = float(bars["Close"].iloc[-1])
 
             unrealized = _unrealized_usd(side, size, avg_price, last_close,
                                           tick_size, tick_value)
