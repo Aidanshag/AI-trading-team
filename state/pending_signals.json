@@ -1,9 +1,9 @@
 {
   "signals": [
     {
-      "id": "b6a6e5a6a65b4456a6704806e6a8e952",
-      "emitted_at": "2026-05-15T15:38:40+00:00",
-      "expires_at": "2026-05-15T15:41:40+00:00",
+      "id": "77fcd4adb26c42c3883dce3960c81bc3",
+      "emitted_at": "2026-05-15T15:39:41+00:00",
+      "expires_at": "2026-05-15T15:42:41+00:00",
       "symbol": "MNQ",
       "side": "long",
       "entry_price": 29318.5,
