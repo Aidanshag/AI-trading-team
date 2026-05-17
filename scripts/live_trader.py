@@ -556,6 +556,29 @@ def _position_polling_loop(stop_event, dry_run: bool, paper: bool,
         from tools.alert import send_alert as _alert
         tick_protect.configure(client=get_client(), log_fn=_log, alert_fn=_alert)
         _log("tick_protect configured (ms-latency on-tick exits enabled)")
+        # ── HEALTHCHECK: verify the callback → close path actually works ──
+        # Synthetic position + mock client + tick → measure close latency.
+        # If this fails, log critical alert but DO NOT abort startup —
+        # the 1-sec poll path is still active as backup safety net.
+        try:
+            from tools.tick_protect_healthcheck import run_healthcheck
+            hc = run_healthcheck(log_fn=lambda _m: None)
+            if hc.get("passed"):
+                _log(f"  tick_protect healthcheck PASSED ({hc['latency_ms']}ms)")
+            else:
+                _log(f"  tick_protect healthcheck FAILED: {hc.get('errors')}")
+                try:
+                    _alert(
+                        f"CRITICAL: tick_protect healthcheck FAILED on startup: "
+                        f"{hc.get('errors')}. Falling back to 1-sec poll only.",
+                        level="crit",
+                    )
+                except Exception:
+                    pass
+            # Re-configure after healthcheck wiped state with reset_for_test()
+            tick_protect.configure(client=get_client(), log_fn=_log, alert_fn=_alert)
+        except Exception as e:
+            _log(f"  tick_protect healthcheck skipped: {type(e).__name__}: {e}")
         _tick_protect_ready = True
     except Exception as e:
         _log(f"tick_protect init failed (poll-only fallback): "

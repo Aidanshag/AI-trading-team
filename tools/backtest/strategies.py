@@ -712,6 +712,7 @@ def volume_spike_reversal(
     bars: pd.DataFrame,
     volume_spike_mult: float = 3.0,
     rr_target: float = 2.0,
+    session: str | None = None,
 ) -> Iterator[Signal]:
     """Fade a wide-range bar with abnormal volume — institutional flow
     capitulation creates mean-reversion opportunity.
@@ -719,7 +720,20 @@ def volume_spike_reversal(
     Trigger: TR > 2× ATR AND volume > N× recent-avg-volume AND prior
     bar closed in the outer 25% of its range (climax).
     Long after wide DOWN bar; short after wide UP bar.
+
+    2026-05-17: `session` arg pulls a session-aware multiplier from
+    tools.session_thresholds (Asian=4×, RTH/London=3×, PostClose=3.5×).
+    If both `volume_spike_mult` and `session` are passed, explicit
+    `volume_spike_mult` wins. Closes Pattern B encoding gap.
     """
+    # Resolve session-aware multiplier if caller didn't override
+    if session is not None and volume_spike_mult == 3.0:
+        # 3.0 is the legacy default — promote to session-aware if available
+        try:
+            from tools.session_thresholds import volume_spike_mult_for_session
+            volume_spike_mult = volume_spike_mult_for_session(session)
+        except ImportError:
+            pass
     h, l, c, o = bars["High"], bars["Low"], bars["Close"], bars["Open"]
     if "Volume" not in bars.columns:
         return  # need volume

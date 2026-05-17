@@ -62,17 +62,45 @@ def _round_to_tick(price: float, tick: float) -> float:
     return round(round(price / tick) * tick, 8)
 
 
+# Topstep-specific contract roots map to CME canonical roots used by
+# config/symbols.yaml. Mirrors the alias dict in tools/profit_protect.py.
+# Without this, _tick_size("EU6") returns the default 0.01, which silently
+# corrupts stop-distance math (Pattern A failure shape — the 2026-05-14
+# EU6 short held 2h14m unprotected for exactly this reason).
+_SYMBOL_ALIAS_TO_CANONICAL: dict[str, str] = {
+    # FX
+    "EU6": "6E", "BP6": "6B", "JY6": "6J",
+    "DA6": "6A", "CA6": "6C", "MX6": "6S",
+    "EEU": "E7",
+    # Grains / livestock
+    "ZCE": "ZC", "GLE": "LE",
+    # Metals
+    "CPE": "HG",
+    # Energy / crypto
+    "NQG": "QG", "NQM": "QM",
+}
+
+
+def _canonicalize_symbol(symbol: str) -> str:
+    """Map Topstep-alias root → CME canonical root if known; else pass through."""
+    return _SYMBOL_ALIAS_TO_CANONICAL.get(symbol, symbol)
+
+
 def _tick_size(symbol: str) -> float:
-    """Look up tick size from config/symbols.yaml; default 0.01 if missing."""
+    """Look up tick size from config/symbols.yaml; default 0.01 if missing.
+    Auto-canonicalizes EU6/BP6/etc → 6E/6B/etc."""
+    canon = _canonicalize_symbol(symbol)
     syms = _load_yaml("config/symbols.yaml").get("symbols", {})
-    return float((syms.get(symbol) or {}).get("tick_size", 0.01))
+    return float((syms.get(canon) or {}).get("tick_size", 0.01))
 
 
 def _tick_value(symbol: str) -> float:
     """USD value of one tick. 0.0 if symbol or value is missing — callers
-    that need to gate on dollars must treat 0.0 as 'unknown, refuse to act'."""
+    that need to gate on dollars must treat 0.0 as 'unknown, refuse to act'.
+    Auto-canonicalizes EU6/BP6/etc → 6E/6B/etc."""
+    canon = _canonicalize_symbol(symbol)
     syms = _load_yaml("config/symbols.yaml").get("symbols", {})
-    val = (syms.get(symbol) or {}).get("tick_value")
+    val = (syms.get(canon) or {}).get("tick_value")
     return float(val) if val is not None else 0.0
 
 
