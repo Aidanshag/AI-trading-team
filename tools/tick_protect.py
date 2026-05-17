@@ -235,12 +235,16 @@ def _dispatch_close(meta: PositionMeta, unrealized: float, peak: float,
             _clear_software_target(meta.contract_id)
             reset_trailed_floor(meta.contract_id)
             unregister_position(meta.contract_id)
-            _record_close_decision(
-                symbol=meta.symbol, side=meta.side, size=meta.size,
-                contract_id=meta.contract_id, unrealized=unrealized,
-                peak=peak, reason=f"tick_protect:{reason_tag}",
-                kind="close",
-            )
+            # Skip DB write for synthetic healthcheck positions — avoids
+            # SQLite cross-thread errors when the healthcheck worker runs
+            # in a different thread than the connection's owner.
+            if "HEALTHCHECK" not in meta.contract_id:
+                _record_close_decision(
+                    symbol=meta.symbol, side=meta.side, size=meta.size,
+                    contract_id=meta.contract_id, unrealized=unrealized,
+                    peak=peak, reason=f"tick_protect:{reason_tag}",
+                    kind="close",
+                )
             if _alert:
                 try:
                     _alert(

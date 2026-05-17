@@ -586,9 +586,23 @@ def main(argv: list[str] | None = None) -> int:
     _load_dotenv()
     findings = run_all_checks()
 
+    # 2026-05-17 fix: force utf-8 stdout on Windows so Unicode in summaries
+    # (≥, ←, →, etc.) doesn't crash the sentinel before findings are reported.
+    try:
+        import sys as _sys
+        if hasattr(_sys.stdout, "reconfigure"):
+            _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     print(f"sentinel: {len(findings)} finding(s)")
     for f in findings:
-        print(f"  [{f.severity}] {f.check_name}: {f.summary}")
+        try:
+            print(f"  [{f.severity}] {f.check_name}: {f.summary}")
+        except UnicodeEncodeError:
+            # Fallback: ASCII-only render so we never silently drop findings
+            ascii_summary = f.summary.encode("ascii", "replace").decode("ascii")
+            print(f"  [{f.severity}] {f.check_name}: {ascii_summary}")
 
     if not args.dry:
         _post_to_discord(findings)
