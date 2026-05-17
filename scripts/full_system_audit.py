@@ -90,10 +90,12 @@ def check_trader_processes() -> list[AuditFinding]:
             "NO live_trader instance running — Combine path is dark",
         ))
         return findings
-    # Compute root instances (parent NOT another live_trader)
-    pids = {p["ProcessId"]: p for p in procs}
+    # Compute root instances (parent NOT another live_trader).
+    # Force int comparison to avoid PowerShell/JSON type drift where
+    # ParentProcessId can deserialize as a different type than the keys.
+    pids = {int(p["ProcessId"]): p for p in procs}
     roots = [p for p in procs
-             if p.get("ParentProcessId") not in pids]
+             if int(p.get("ParentProcessId", -1)) not in pids]
     if len(roots) > 1:
         findings.append(AuditFinding(
             "trader_process", "crit",
@@ -118,9 +120,9 @@ def check_brain_processes() -> list[AuditFinding]:
             "no brain_signaler running — no signals will be emitted",
         ))
         return findings
-    # Find root brains (parent not also a brain)
-    pids = {p["ProcessId"]: p for p in procs}
-    roots = [p for p in procs if p.get("ParentProcessId") not in pids]
+    # Find root brains (parent not also a brain) — force int comparison
+    pids = {int(p["ProcessId"]): p for p in procs}
+    roots = [p for p in procs if int(p.get("ParentProcessId", -1)) not in pids]
     if len(roots) > 1:
         findings.append(AuditFinding(
             "brain_process", "warn",
