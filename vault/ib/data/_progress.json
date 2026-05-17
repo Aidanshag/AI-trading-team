@@ -121,5 +121,15 @@
   "etfs_country|EWU|15 mins": 780,
   "etfs_country|FXI|1 day": 5025,
   "etfs_country|FXI|1 hour": 3489,
-  "etfs_country|FXI|15 mins": 780
+  "etfs_country|FXI|15 mins": 780,
+  "etfs_country|INDA|1 day": 3590,
+  "etfs_country|INDA|1 hour": 3489,
+  "etfs_country|INDA|15 mins": 780,
+  "etfs_country|EWZ|1 day": 5022,
+  "etfs_country|EWZ|1 hour": 3489,
+  "etfs_country|EWZ|15 mins": 780,
+  "etfs_country|EWC|1 day": 5026,
+  "etfs_country|EWC|1 hour": 3489,
+  "etfs_country|EWC|15 mins": 780,
+  "etfs_country|EWA|1 day": 5027
 }
