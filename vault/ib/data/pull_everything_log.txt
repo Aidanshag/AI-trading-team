@@ -706,3 +706,65 @@
 [2026-05-17T22:26:25.580076+00:00]   SBUX 15 mins: 780 bars -> 1 years
 [2026-05-17T22:26:27.581830+00:00] [352/564] equities_megacaps/HD 1 day (20 Y)
 [2026-05-17T22:26:34.987186+00:00]   HD 1 day: 5027 bars -> 21 years
+[2026-05-17T22:26:36.991052+00:00] [353/564] equities_megacaps/HD 1 hour (2 Y)
+[2026-05-17T22:27:11.221133+00:00]   HD 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:27:13.223537+00:00] [354/564] equities_megacaps/HD 15 mins (30 D)
+[2026-05-17T22:27:13.793718+00:00]   HD 15 mins: 780 bars -> 1 years
+[2026-05-17T22:27:15.795875+00:00] [355/564] equities_megacaps/LOW 1 day (20 Y)
+[2026-05-17T22:27:17.718596+00:00]   LOW 1 day: 5027 bars -> 21 years
+[2026-05-17T22:27:19.722960+00:00] [356/564] equities_megacaps/LOW 1 hour (2 Y)
+[2026-05-17T22:27:28.988582+00:00]   LOW 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:27:30.991640+00:00] [357/564] equities_megacaps/LOW 15 mins (30 D)
+[2026-05-17T22:27:31.298633+00:00]   LOW 15 mins: 780 bars -> 1 years
+[2026-05-17T22:27:33.300851+00:00] [358/564] equities_megacaps/XOM 1 day (20 Y)
+[2026-05-17T22:27:52.964639+00:00]   XOM 1 day: 5027 bars -> 21 years
+[2026-05-17T22:27:54.967292+00:00] [359/564] equities_megacaps/XOM 1 hour (2 Y)
+[2026-05-17T22:28:11.517544+00:00]   XOM 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:28:13.520302+00:00] [360/564] equities_megacaps/XOM 15 mins (30 D)
+[2026-05-17T22:28:13.771800+00:00]   XOM 15 mins: 780 bars -> 1 years
+[2026-05-17T22:28:15.773871+00:00] [361/564] equities_megacaps/CVX 1 day (20 Y)
+[2026-05-17T22:28:22.881514+00:00]   CVX 1 day: 5027 bars -> 21 years
+[2026-05-17T22:28:24.884181+00:00] [362/564] equities_megacaps/CVX 1 hour (2 Y)
+[2026-05-17T22:28:34.994602+00:00]   CVX 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:28:36.997774+00:00] [363/564] equities_megacaps/CVX 15 mins (30 D)
+[2026-05-17T22:28:40.781931+00:00]   CVX 15 mins: 780 bars -> 1 years
+[2026-05-17T22:28:42.784290+00:00] [364/564] equities_megacaps/COP 1 day (20 Y)
+[2026-05-17T22:29:11.009307+00:00]   COP 1 day: 5027 bars -> 21 years
+[2026-05-17T22:29:13.012485+00:00] [365/564] equities_megacaps/COP 1 hour (2 Y)
+[2026-05-17T22:29:17.134552+00:00]   COP 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:29:19.136859+00:00] [366/564] equities_megacaps/COP 15 mins (30 D)
+[2026-05-17T22:29:19.615208+00:00]   COP 15 mins: 780 bars -> 1 years
+[2026-05-17T22:29:21.617098+00:00] [367/564] equities_megacaps/SLB 1 day (20 Y)
+[2026-05-17T22:29:23.297860+00:00]   SLB 1 day: 5027 bars -> 21 years
+[2026-05-17T22:29:25.301112+00:00] [368/564] equities_megacaps/SLB 1 hour (2 Y)
+[2026-05-17T22:29:47.118356+00:00]   SLB 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:29:49.120830+00:00] [369/564] equities_megacaps/SLB 15 mins (30 D)
+[2026-05-17T22:29:58.771544+00:00]   SLB 15 mins: 780 bars -> 1 years
+[2026-05-17T22:30:00.773942+00:00] [370/564] equities_megacaps/EOG 1 day (20 Y)
+[2026-05-17T22:30:11.215658+00:00]   EOG 1 day: 5027 bars -> 21 years
+[2026-05-17T22:30:13.219253+00:00] [371/564] equities_megacaps/EOG 1 hour (2 Y)
+[2026-05-17T22:30:17.418459+00:00]   EOG 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:30:19.421505+00:00] [372/564] equities_megacaps/EOG 15 mins (30 D)
+[2026-05-17T22:30:22.858071+00:00]   EOG 15 mins: 780 bars -> 1 years
+[2026-05-17T22:30:24.860397+00:00] [373/564] equities_megacaps/BA 1 day (20 Y)
+[2026-05-17T22:30:29.009309+00:00]   BA 1 day: 5027 bars -> 21 years
+[2026-05-17T22:30:31.014433+00:00] [374/564] equities_megacaps/BA 1 hour (2 Y)
+[2026-05-17T22:31:10.944999+00:00]   BA 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:31:12.947405+00:00] [375/564] equities_megacaps/BA 15 mins (30 D)
+[2026-05-17T22:31:13.266309+00:00]   BA 15 mins: 780 bars -> 1 years
+[2026-05-17T22:31:15.268269+00:00] [376/564] equities_megacaps/CAT 1 day (20 Y)
+[2026-05-17T22:31:17.109107+00:00]   CAT 1 day: 5027 bars -> 21 years
+[2026-05-17T22:31:19.111797+00:00] [377/564] equities_megacaps/CAT 1 hour (2 Y)
+[2026-05-17T22:31:23.212886+00:00]   CAT 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:31:25.215132+00:00] [378/564] equities_megacaps/CAT 15 mins (30 D)
+[2026-05-17T22:31:28.765913+00:00]   CAT 15 mins: 780 bars -> 1 years
+[2026-05-17T22:31:30.768309+00:00] [379/564] equities_megacaps/GE 1 day (20 Y)
+[2026-05-17T22:31:47.027698+00:00]   GE 1 day: 5027 bars -> 21 years
+[2026-05-17T22:31:49.031140+00:00] [380/564] equities_megacaps/GE 1 hour (2 Y)
+[2026-05-17T22:32:11.508383+00:00]   GE 1 hour: 3489 bars -> 3 years
+[2026-05-17T22:32:13.511186+00:00] [381/564] equities_megacaps/GE 15 mins (30 D)
+[2026-05-17T22:32:13.897618+00:00]   GE 15 mins: 780 bars -> 1 years
+[2026-05-17T22:32:15.901015+00:00] [382/564] equities_megacaps/HON 1 day (20 Y)
+[2026-05-17T22:32:23.225603+00:00]   HON 1 day: 5027 bars -> 21 years
+[2026-05-17T22:32:25.231314+00:00] [383/564] equities_megacaps/HON 1 hour (2 Y)
+[2026-05-17T22:32:35.259143+00:00]   HON 1 hour: 3489 bars -> 3 years
