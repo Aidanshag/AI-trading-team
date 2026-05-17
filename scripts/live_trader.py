@@ -62,7 +62,17 @@ from state.db import get_db  # noqa: E402
 # Config
 # ────────────────────────────────────────────────────────────────
 
-SCAN_INTERVAL_SEC = 300          # 5-minute cadence
+SCAN_INTERVAL_SEC = 60           # 1-min cadence — matches brain.SCAN_INTERVAL_SEC.
+                                  # 2026-05-17: tightened from 300s after
+                                  # finding the mismatch: brain emits every
+                                  # 60s, signal TTL is 180s, trader was scanning
+                                  # at 300s — most signals expired in the queue
+                                  # before the trader picked them up. New
+                                  # cadence: avg signal staleness drops from
+                                  # ~2:30 min to ~30 sec. consume_pending_signals
+                                  # is cheap (queue read + place_bracket per
+                                  # signal); no per-symbol bar fetches (brain
+                                  # already did those).
 POSITION_POLL_SEC = 10            # baseline poll cadence when FLAT.
 POSITION_POLL_SEC_IN_TRADE = 1    # tightest reasonable REST cadence when
                                   # a position is OPEN. 2026-05-14: was 2,
