@@ -131,5 +131,10 @@
   "etfs_country|EWC|1 day": 5026,
   "etfs_country|EWC|1 hour": 3489,
   "etfs_country|EWC|15 mins": 780,
-  "etfs_country|EWA|1 day": 5027
+  "etfs_country|EWA|1 day": 5027,
+  "etfs_country|EWA|1 hour": 3489,
+  "etfs_country|EWA|15 mins": 780,
+  "etfs_country|MCHI|1 day": 2586,
+  "etfs_country|MCHI|1 hour": 3489,
+  "etfs_country|MCHI|15 mins": 780
 }
