@@ -607,7 +607,21 @@ def _position_polling_loop(stop_event, dry_run: bool, paper: bool,
     """
     if dry_run or paper:
         return
-    from tools.profit_protect import check_and_close
+    from tools.profit_protect import check_and_close, _resolve_tick_economics, _contract_to_symbol, _strip_exchange_suffix
+    # tick_protect: register open positions for millisecond-latency exits via
+    # the WebSocket on-tick callback (vs this 1-sec poll). Backup remains
+    # the existing check_and_close call below.
+    try:
+        from tools import tick_protect
+        from tools.tick_stream import get_stream as _get_stream
+        from tools.alert import send_alert as _alert
+        tick_protect.configure(client=get_client(), log_fn=_log, alert_fn=_alert)
+        _log("tick_protect configured (ms-latency on-tick exits enabled)")
+        _tick_protect_ready = True
+    except Exception as e:
+        _log(f"tick_protect init failed (poll-only fallback): "
+              f"{type(e).__name__}: {e}")
+        _tick_protect_ready = False
     while not stop_event.is_set():
         try:
             client = get_client()
@@ -621,7 +635,49 @@ def _position_polling_loop(stop_event, dry_run: bool, paper: bool,
                 positions = client.get_positions(account_id) or []
                 has_open = any(int(p.get("size") or 0) != 0 for p in positions)
             except Exception:
+                positions = []
                 has_open = False
+            # ── Sync tick_protect's position registry + on-tick callbacks ──
+            if _tick_protect_ready:
+                try:
+                    stream = _get_stream()
+                    open_cids: set[str] = set()
+                    for pos in positions:
+                        size_ = int(pos.get("size") or 0)
+                        if size_ == 0:
+                            continue
+                        cid = str(pos.get("contractId") or "")
+                        if not cid:
+                            continue
+                        open_cids.add(cid)
+                        raw_sym = _contract_to_symbol(cid) or ""
+                        sym = _strip_exchange_suffix(raw_sym)
+                        if not sym:
+                            continue
+                        tsz, tval = _resolve_tick_economics(sym)
+                        if tsz <= 0 or tval <= 0:
+                            continue
+                        type_code = int(pos.get("type") or 0)
+                        side_ = "long" if type_code == 1 else "short" if type_code == 2 else (
+                            "long" if size_ > 0 else "short")
+                        avg_px = float(pos.get("averagePrice") or 0)
+                        if avg_px <= 0:
+                            continue
+                        tick_protect.register_position(
+                            contract_id=cid, symbol=sym, side=side_,
+                            size=abs(size_), avg_price=avg_px,
+                            tick_size=tsz, tick_value=tval,
+                            account_id=account_id,
+                        )
+                        stream.register_on_tick(cid, tick_protect.on_tick)
+                    # Unregister anything no longer open
+                    for tracked in tick_protect.tracked_positions():
+                        if tracked not in open_cids:
+                            tick_protect.unregister_position(tracked)
+                            stream.unregister_on_tick(tracked)
+                except Exception as e:
+                    _log(f"  tick_protect sync error: "
+                          f"{type(e).__name__}: {e}")
         except Exception as e:
             _log(f"position-poll error: {type(e).__name__}: {e}")
             has_open = False

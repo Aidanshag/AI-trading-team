@@ -68,6 +68,14 @@ class TickStream:
         self._started = False
         self._start_lock = threading.Lock()
         self._last_event_ts: Optional[datetime] = None
+        # Per-contract on-tick callbacks. Invoked synchronously in the
+        # WebSocket bg thread when a new GatewayQuote arrives. Used by
+        # tick_protect to evaluate exit rules within milliseconds of a
+        # price move instead of waiting for the 1-sec position poll.
+        # Callback signature: fn(contract_id: str, tick_entry: dict) -> None.
+        # Exceptions in callbacks are caught and logged to avoid killing the
+        # bg thread or skipping cache updates.
+        self._callbacks: dict[str, Any] = {}  # contract_id -> callable
 
     # ── Public API ───────────────────────────────────────────────
 
@@ -139,6 +147,37 @@ class TickStream:
     def subscribed_contracts(self) -> list[str]:
         return list(self._subscribed)
 
+    def register_on_tick(self, contract_id: str, callback) -> None:
+        """Register a per-contract on-tick callback. Replaces any prior
+        callback for the same contract. Pass `None` to clear.
+
+        Callback runs in the WebSocket bg thread on EVERY GatewayQuote
+        for the registered contract. Must be FAST (synchronous tier-checks
+        only); long-running work (network calls, DB writes) must be
+        dispatched to a worker thread by the callback itself.
+
+        Auto-subscribes the contract if not already subscribed.
+        """
+        if not self._started:
+            self.start()
+        if contract_id not in self._subscribed:
+            self.subscribe(contract_id)
+        with self._lock:
+            if callback is None:
+                self._callbacks.pop(contract_id, None)
+            else:
+                self._callbacks[contract_id] = callback
+
+    def unregister_on_tick(self, contract_id: str) -> None:
+        """Remove the on-tick callback for `contract_id`. No-op if absent."""
+        with self._lock:
+            self._callbacks.pop(contract_id, None)
+
+    def registered_callbacks(self) -> list[str]:
+        """List contract_ids with registered on-tick callbacks. For testing."""
+        with self._lock:
+            return list(self._callbacks.keys())
+
     def cache_snapshot(self) -> dict[str, dict[str, Any]]:
         """Return a shallow copy of the cache. For sentinel inspection."""
         with self._lock:
@@ -209,6 +248,17 @@ class TickStream:
             with self._lock:
                 self._cache[contract_id] = entry
                 self._last_event_ts = entry["ts"]
+                cb = self._callbacks.get(contract_id)
+            # Invoke the callback OUTSIDE the lock so a slow callback
+            # (e.g. one that takes a short pause) can't block cache writes.
+            if cb is not None:
+                try:
+                    cb(contract_id, entry)
+                except Exception:
+                    # Per the contract: never let a bad callback kill the
+                    # bg thread. The next tick will re-invoke; if the bug
+                    # is persistent, sentinel checks will surface it.
+                    pass
         except Exception:
             # Never let the bg thread crash on a bad payload
             pass
