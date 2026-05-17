@@ -416,5 +416,15 @@
   "futures|MNQ|1 day": 793,
   "futures|MNQ|1 hour": 3978,
   "futures|MNQ|15 mins": 900,
-  "futures|M2K|1 day": 789
+  "futures|M2K|1 day": 789,
+  "futures|M2K|1 hour": 3978,
+  "futures|M2K|15 mins": 900,
+  "futures|YM|1 day": 729,
+  "futures|YM|1 hour": 3978,
+  "futures|YM|15 mins": 900,
+  "futures|MYM|1 day": 727,
+  "futures|MYM|1 hour": 3978,
+  "futures|MYM|15 mins": 900,
+  "futures|CL|1 day": 2607,
+  "futures|CL|1 hour": 0
 }
