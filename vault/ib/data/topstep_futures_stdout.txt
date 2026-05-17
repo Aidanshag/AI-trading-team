@@ -60,3 +60,215 @@
 [2026-05-17T21:14:12.901580+00:00] [29/184] MYM (CBOT) 1 day (20 Y)
 [2026-05-17T21:14:16.650487+00:00]   MYM 1 day: 727 bars -> 4 years
 [2026-05-17T21:14:18.651819+00:00] [30/184] MYM (CBOT) 1 hour (2 Y)
+[2026-05-17T21:15:16.673714+00:00]   MYM 1 hour: 3978 bars -> 3 years
+[2026-05-17T21:15:18.676448+00:00] [31/184] MYM (CBOT) 15 mins (60 D)
+[2026-05-17T21:15:22.720167+00:00]   MYM 15 mins: 1800 bars -> 1 years
+[2026-05-17T21:15:24.721170+00:00] [32/184] MYM (CBOT) 5 mins (30 D)
+[2026-05-17T21:16:10.778415+00:00]   MYM 5 mins: 2700 bars -> 1 years
+[2026-05-17T21:16:12.780065+00:00] [33/184] NKD (CME) 1 day (20 Y)
+[2026-05-17T21:16:16.628421+00:00]   NKD 1 day: 876 bars -> 5 years
+[2026-05-17T21:16:18.629781+00:00] [34/184] NKD (CME) 1 hour (2 Y)
+[2026-05-17T21:17:10.812666+00:00]   NKD 1 hour: 3978 bars -> 3 years
+[2026-05-17T21:17:12.815192+00:00] [35/184] NKD (CME) 15 mins (60 D)
+[2026-05-17T21:17:13.164747+00:00]   NKD 15 mins: 1782 bars -> 1 years
+[2026-05-17T21:17:15.166237+00:00] [36/184] NKD (CME) 5 mins (30 D)
+[2026-05-17T21:17:22.632597+00:00]   NKD 5 mins: 2700 bars -> 1 years
+[2026-05-17T21:17:24.633921+00:00] [37/184] CL (NYMEX) 1 day (20 Y)
+[2026-05-17T21:18:16.668409+00:00]   CL 1 day: 2607 bars -> 12 years
+[2026-05-17T21:18:18.670575+00:00] [38/184] CL (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=304037461, symbol='CL', lastTradeDateOrContractMonth='20260622', multiplier='1000', exchange='NYMEX', currency='USD', localSymbol='CLN6', tradingClass='CL')
+[2026-05-17T21:19:18.725141+00:00]   CL 1 hour: NO DATA
+[2026-05-17T21:19:20.726552+00:00] [39/184] CL (NYMEX) 15 mins (60 D)
+Error 162, reqId 78: Historical Market Data Service error message:API historical data query cancelled: 78, contract: ContFuture(conId=304037461, symbol='CL', lastTradeDateOrContractMonth='20260622', multiplier='1000', exchange='NYMEX', currency='USD', localSymbol='CLN6', tradingClass='CL')
+[2026-05-17T21:20:11.044594+00:00]   CL 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:20:13.046336+00:00] [40/184] CL (NYMEX) 5 mins (30 D)
+[2026-05-17T21:20:22.788323+00:00]   CL 5 mins: 1800 bars -> 1 years
+[2026-05-17T21:20:24.790200+00:00] [41/184] MCL (NYMEX) 1 day (20 Y)
+[2026-05-17T21:21:10.706824+00:00]   MCL 1 day: 751 bars -> 4 years
+[2026-05-17T21:21:12.708687+00:00] [42/184] MCL (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=661016559, symbol='MCL', lastTradeDateOrContractMonth='20260618', multiplier='100', exchange='NYMEX', currency='USD', localSymbol='MCLN6', tradingClass='MCL')
+[2026-05-17T21:22:12.832926+00:00]   MCL 1 hour: NO DATA
+[2026-05-17T21:22:14.835112+00:00] [43/184] MCL (NYMEX) 15 mins (60 D)
+Error 162, reqId 86: Historical Market Data Service error message:API historical data query cancelled: 86, contract: ContFuture(conId=661016559, symbol='MCL', lastTradeDateOrContractMonth='20260618', multiplier='100', exchange='NYMEX', currency='USD', localSymbol='MCLN6', tradingClass='MCL')
+[2026-05-17T21:22:35.180657+00:00]   MCL 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:22:37.182009+00:00] [44/184] MCL (NYMEX) 5 mins (30 D)
+[2026-05-17T21:23:11.355630+00:00]   MCL 5 mins: 1800 bars -> 1 years
+[2026-05-17T21:23:13.357935+00:00] [45/184] NG (NYMEX) 1 day (20 Y)
+[2026-05-17T21:24:10.644485+00:00]   NG 1 day: 2646 bars -> 13 years
+[2026-05-17T21:24:12.645859+00:00] [46/184] NG (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=269460069, symbol='NG', lastTradeDateOrContractMonth='20260527', multiplier='10000', exchange='NYMEX', currency='USD', localSymbol='NGM26', tradingClass='NG')
+[2026-05-17T21:25:12.697609+00:00]   NG 1 hour: NO DATA
+[2026-05-17T21:25:14.700009+00:00] [47/184] NG (NYMEX) 15 mins (60 D)
+Error 162, reqId 94: Historical Market Data Service error message:API historical data query cancelled: 94, contract: ContFuture(conId=269460069, symbol='NG', lastTradeDateOrContractMonth='20260527', multiplier='10000', exchange='NYMEX', currency='USD', localSymbol='NGM26', tradingClass='NG')
+[2026-05-17T21:25:29.001050+00:00]   NG 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:25:31.003126+00:00] [48/184] NG (NYMEX) 5 mins (30 D)
+[2026-05-17T21:25:58.641244+00:00]   NG 5 mins: 1800 bars -> 1 years
+[2026-05-17T21:26:00.643298+00:00] [49/184] MNG (NYMEX) 1 day (20 Y)
+Error 200, reqId 99: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 100: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+[2026-05-17T21:26:00.735609+00:00]   MNG 1 day: NO DATA
+[2026-05-17T21:26:02.737662+00:00] [50/184] MNG (NYMEX) 1 hour (2 Y)
+Error 200, reqId 101: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 102: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+[2026-05-17T21:26:02.818916+00:00]   MNG 1 hour: NO DATA
+[2026-05-17T21:26:04.820116+00:00] [51/184] MNG (NYMEX) 15 mins (60 D)
+Error 200, reqId 103: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 104: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+[2026-05-17T21:26:04.910103+00:00]   MNG 15 mins: NO DATA
+[2026-05-17T21:26:06.911891+00:00] [52/184] MNG (NYMEX) 5 mins (30 D)
+Error 200, reqId 105: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 106: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+[2026-05-17T21:26:07.042886+00:00]   MNG 5 mins: NO DATA
+[2026-05-17T21:26:09.044337+00:00] [53/184] QG (NYMEX) 1 day (20 Y)
+[2026-05-17T21:26:17.474210+00:00]   QG 1 day: 1848 bars -> 9 years
+[2026-05-17T21:26:19.475637+00:00] [54/184] QG (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=456802729, symbol='QG', lastTradeDateOrContractMonth='20260526', multiplier='2500', exchange='NYMEX', currency='USD', localSymbol='QGM6', tradingClass='QG')
+[2026-05-17T21:27:19.536608+00:00]   QG 1 hour: NO DATA
+[2026-05-17T21:27:21.537734+00:00] [55/184] QG (NYMEX) 15 mins (60 D)
+Error 162, reqId 110: Historical Market Data Service error message:API historical data query cancelled: 110, contract: ContFuture(conId=456802729, symbol='QG', lastTradeDateOrContractMonth='20260526', multiplier='2500', exchange='NYMEX', currency='USD', localSymbol='QGM6', tradingClass='QG')
+[2026-05-17T21:27:34.644831+00:00]   QG 15 mins: 1170 bars -> 1 years
+[2026-05-17T21:27:36.647038+00:00] [56/184] QG (NYMEX) 5 mins (30 D)
+[2026-05-17T21:28:10.753828+00:00]   QG 5 mins: 1710 bars -> 1 years
+[2026-05-17T21:28:12.755150+00:00] [57/184] RB (NYMEX) 1 day (20 Y)
+[2026-05-17T21:28:28.641072+00:00]   RB 1 day: 1358 bars -> 7 years
+[2026-05-17T21:28:30.643197+00:00] [58/184] RB (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=600696538, symbol='RB', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='RBN6', tradingClass='RB')
+[2026-05-17T21:29:30.697485+00:00]   RB 1 hour: NO DATA
+[2026-05-17T21:29:32.700153+00:00] [59/184] RB (NYMEX) 15 mins (60 D)
+Error 162, reqId 118: Historical Market Data Service error message:API historical data query cancelled: 118, contract: ContFuture(conId=600696538, symbol='RB', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='RBN6', tradingClass='RB')
+[2026-05-17T21:30:16.671355+00:00]   RB 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:30:18.673398+00:00] [60/184] RB (NYMEX) 5 mins (30 D)
+[2026-05-17T21:30:40.671267+00:00]   RB 5 mins: 1800 bars -> 1 years
+[2026-05-17T21:30:42.672843+00:00] [61/184] HO (NYMEX) 1 day (20 Y)
+[2026-05-17T21:31:10.801050+00:00]   HO 1 day: 1360 bars -> 7 years
+[2026-05-17T21:31:12.803387+00:00] [62/184] HO (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=600696502, symbol='HO', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='HON6', tradingClass='HO')
+[2026-05-17T21:32:12.868801+00:00]   HO 1 hour: NO DATA
+[2026-05-17T21:32:14.870628+00:00] [63/184] HO (NYMEX) 15 mins (60 D)
+Error 162, reqId 126: Historical Market Data Service error message:API historical data query cancelled: 126, contract: ContFuture(conId=600696502, symbol='HO', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='HON6', tradingClass='HO')
+[2026-05-17T21:32:28.767168+00:00]   HO 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:32:30.768330+00:00] [64/184] HO (NYMEX) 5 mins (30 D)
+[2026-05-17T21:33:16.651808+00:00]   HO 5 mins: 1800 bars -> 1 years
+[2026-05-17T21:33:18.653454+00:00] [65/184] QM (NYMEX) 1 day (20 Y)
+[2026-05-17T21:33:34.629289+00:00]   QM 1 day: 1857 bars -> 9 years
+[2026-05-17T21:33:36.632119+00:00] [66/184] QM (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=455805532, symbol='QM', lastTradeDateOrContractMonth='20260518', multiplier='500', exchange='NYMEX', currency='USD', localSymbol='QMM6', tradingClass='QM')
+[2026-05-17T21:34:36.786392+00:00]   QM 1 hour: NO DATA
+[2026-05-17T21:34:38.788576+00:00] [67/184] QM (NYMEX) 15 mins (60 D)
+Error 162, reqId 134: Historical Market Data Service error message:API historical data query cancelled: 134, contract: ContFuture(conId=455805532, symbol='QM', lastTradeDateOrContractMonth='20260518', multiplier='500', exchange='NYMEX', currency='USD', localSymbol='QMM6', tradingClass='QM')
+[2026-05-17T21:35:10.887093+00:00]   QM 15 mins: 1170 bars -> 1 years
+[2026-05-17T21:35:12.888579+00:00] [68/184] QM (NYMEX) 5 mins (30 D)
+[2026-05-17T21:35:22.763699+00:00]   QM 5 mins: 1710 bars -> 1 years
+[2026-05-17T21:35:24.764975+00:00] [69/184] GC (COMEX) 1 day (20 Y)
+[2026-05-17T21:36:10.890518+00:00]   GC 1 day: 1954 bars -> 9 years
+[2026-05-17T21:36:12.892692+00:00] [70/184] GC (COMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=430360630, symbol='GC', lastTradeDateOrContractMonth='20260626', multiplier='100', exchange='COMEX', currency='USD', localSymbol='GCM6', tradingClass='GC')
+[2026-05-17T21:37:12.955523+00:00]   GC 1 hour: NO DATA
+[2026-05-17T21:37:14.957679+00:00] [71/184] GC (COMEX) 15 mins (60 D)
+Error 162, reqId 142: Historical Market Data Service error message:API historical data query cancelled: 142, contract: ContFuture(conId=430360630, symbol='GC', lastTradeDateOrContractMonth='20260626', multiplier='100', exchange='COMEX', currency='USD', localSymbol='GCM6', tradingClass='GC')
+[2026-05-17T21:37:28.663881+00:00]   GC 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:37:30.665732+00:00] [72/184] GC (COMEX) 5 mins (30 D)
+[2026-05-17T21:38:10.734002+00:00]   GC 5 mins: 2700 bars -> 1 years
+[2026-05-17T21:38:12.736101+00:00] [73/184] MGC (COMEX) 1 day (20 Y)
+[2026-05-17T21:38:13.669081+00:00]   MGC 1 day: 975 bars -> 5 years
+[2026-05-17T21:38:15.670661+00:00] [74/184] MGC (COMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=712565978, symbol='MGC', lastTradeDateOrContractMonth='20260626', multiplier='10', exchange='COMEX', currency='USD', localSymbol='MGCM6', tradingClass='MGC')
+[2026-05-17T21:39:15.719781+00:00]   MGC 1 hour: NO DATA
+[2026-05-17T21:39:17.722156+00:00] [75/184] MGC (COMEX) 15 mins (60 D)
+Error 162, reqId 150: Historical Market Data Service error message:API historical data query cancelled: 150, contract: ContFuture(conId=712565978, symbol='MGC', lastTradeDateOrContractMonth='20260626', multiplier='10', exchange='COMEX', currency='USD', localSymbol='MGCM6', tradingClass='MGC')
+[2026-05-17T21:39:28.654584+00:00]   MGC 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:39:30.655862+00:00] [76/184] MGC (COMEX) 5 mins (30 D)
+[2026-05-17T21:40:10.896717+00:00]   MGC 5 mins: 2700 bars -> 1 years
+[2026-05-17T21:40:12.898489+00:00] [77/184] SI (COMEX) 1 day (20 Y)
+[2026-05-17T21:40:22.659720+00:00]   SI 1 day: 975 bars -> 5 years
+[2026-05-17T21:40:24.661398+00:00] [78/184] SI (COMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=505405746, symbol='SI', lastTradeDateOrContractMonth='20260729', multiplier='5000', exchange='COMEX', currency='USD', localSymbol='SIN6', tradingClass='SI')
+[2026-05-17T21:41:24.720375+00:00]   SI 1 hour: NO DATA
+[2026-05-17T21:41:26.721691+00:00] [79/184] SI (COMEX) 15 mins (60 D)
+Error 162, reqId 158: Historical Market Data Service error message:API historical data query cancelled: 158, contract: ContFuture(conId=505405746, symbol='SI', lastTradeDateOrContractMonth='20260729', multiplier='5000', exchange='COMEX', currency='USD', localSymbol='SIN6', tradingClass='SI')
+[2026-05-17T21:42:10.816550+00:00]   SI 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:42:12.817723+00:00] [80/184] SI (COMEX) 5 mins (30 D)
+[2026-05-17T21:42:22.676109+00:00]   SI 5 mins: 1800 bars -> 1 years
+[2026-05-17T21:42:24.677599+00:00] [81/184] SIL (COMEX) 1 day (20 Y)
+Error 200, reqId 163: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 164: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+[2026-05-17T21:42:24.789806+00:00]   SIL 1 day: NO DATA
+[2026-05-17T21:42:26.791136+00:00] [82/184] SIL (COMEX) 1 hour (2 Y)
+Error 200, reqId 165: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 166: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+[2026-05-17T21:42:26.877834+00:00]   SIL 1 hour: NO DATA
+[2026-05-17T21:42:28.879615+00:00] [83/184] SIL (COMEX) 15 mins (60 D)
+Error 200, reqId 167: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 168: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+[2026-05-17T21:42:28.971887+00:00]   SIL 15 mins: NO DATA
+[2026-05-17T21:42:30.973587+00:00] [84/184] SIL (COMEX) 5 mins (30 D)
+Error 200, reqId 169: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 170: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+[2026-05-17T21:42:31.087586+00:00]   SIL 5 mins: NO DATA
+[2026-05-17T21:42:33.088435+00:00] [85/184] HG (COMEX) 1 day (20 Y)
+[2026-05-17T21:43:12.129808+00:00]   HG 1 day: 1734 bars -> 8 years
+[2026-05-17T21:43:14.131535+00:00] [86/184] HG (COMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=484743956, symbol='HG', lastTradeDateOrContractMonth='20260729', multiplier='25000', exchange='COMEX', currency='USD', localSymbol='HGN6', tradingClass='HG')
+[2026-05-17T21:44:14.223871+00:00]   HG 1 hour: NO DATA
+[2026-05-17T21:44:16.245102+00:00] [87/184] HG (COMEX) 15 mins (60 D)
+Error 162, reqId 174: Historical Market Data Service error message:API historical data query cancelled: 174, contract: ContFuture(conId=484743956, symbol='HG', lastTradeDateOrContractMonth='20260729', multiplier='25000', exchange='COMEX', currency='USD', localSymbol='HGN6', tradingClass='HG')
+[2026-05-17T21:44:22.738099+00:00]   HG 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:44:24.739596+00:00] [88/184] HG (COMEX) 5 mins (30 D)
+reqHistoricalData: Timeout for ContFuture(conId=484743956, symbol='HG', lastTradeDateOrContractMonth='20260729', multiplier='25000', exchange='COMEX', currency='USD', localSymbol='HGN6', tradingClass='HG')
+[2026-05-17T21:45:24.811777+00:00]   HG 5 mins: NO DATA
+[2026-05-17T21:45:26.814256+00:00] [89/184] MHG (COMEX) 1 day (20 Y)
+Error 162, reqId 178: Historical Market Data Service error message:API historical data query cancelled: 178, contract: ContFuture(conId=484743956, symbol='HG', lastTradeDateOrContractMonth='20260729', multiplier='25000', exchange='COMEX', currency='USD', localSymbol='HGN6', tradingClass='HG')
+[2026-05-17T21:46:12.743695+00:00]   MHG 1 day: 862 bars -> 5 years
+[2026-05-17T21:46:14.745105+00:00] [90/184] MHG (COMEX) 1 hour (2 Y)
+[2026-05-17T21:47:11.022221+00:00]   MHG 1 hour: 3966 bars -> 3 years
+[2026-05-17T21:47:13.024450+00:00] [91/184] MHG (COMEX) 15 mins (60 D)
+[2026-05-17T21:47:22.679328+00:00]   MHG 15 mins: 1200 bars -> 1 years
+[2026-05-17T21:47:24.680552+00:00] [92/184] MHG (COMEX) 5 mins (30 D)
+[2026-05-17T21:48:10.947796+00:00]   MHG 5 mins: 1710 bars -> 1 years
+[2026-05-17T21:48:12.948958+00:00] [93/184] PL (NYMEX) 1 day (20 Y)
+[2026-05-17T21:48:16.705865+00:00]   PL 1 day: 768 bars -> 4 years
+[2026-05-17T21:48:18.707393+00:00] [94/184] PL (NYMEX) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=644855286, symbol='PL', lastTradeDateOrContractMonth='20260729', multiplier='50', exchange='NYMEX', currency='USD', localSymbol='PLN6', tradingClass='PL')
+[2026-05-17T21:49:18.759358+00:00]   PL 1 hour: NO DATA
+[2026-05-17T21:49:20.761498+00:00] [95/184] PL (NYMEX) 15 mins (60 D)
+Error 162, reqId 190: Historical Market Data Service error message:API historical data query cancelled: 190, contract: ContFuture(conId=644855286, symbol='PL', lastTradeDateOrContractMonth='20260729', multiplier='50', exchange='NYMEX', currency='USD', localSymbol='PLN6', tradingClass='PL')
+[2026-05-17T21:49:34.944702+00:00]   PL 15 mins: 1230 bars -> 1 years
+[2026-05-17T21:49:36.946328+00:00] [96/184] PL (NYMEX) 5 mins (30 D)
+[2026-05-17T21:49:58.745497+00:00]   PL 5 mins: 2700 bars -> 1 years
+[2026-05-17T21:50:00.747212+00:00] [97/184] ZT (CBOT) 1 day (20 Y)
+[2026-05-17T21:50:11.279041+00:00]   ZT 1 day: 658 bars -> 4 years
+[2026-05-17T21:50:13.280594+00:00] [98/184] ZT (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=818615229, symbol='ZT', lastTradeDateOrContractMonth='20260630', multiplier='2000', exchange='CBOT', currency='USD', localSymbol='ZTM6', tradingClass='ZT')
+[2026-05-17T21:51:13.345891+00:00]   ZT 1 hour: NO DATA
+[2026-05-17T21:51:15.353663+00:00] [99/184] ZT (CBOT) 15 mins (60 D)
+Error 162, reqId 198: Historical Market Data Service error message:API historical data query cancelled: 198, contract: ContFuture(conId=818615229, symbol='ZT', lastTradeDateOrContractMonth='20260630', multiplier='2000', exchange='CBOT', currency='USD', localSymbol='ZTM6', tradingClass='ZT')
+[2026-05-17T21:51:16.780157+00:00]   ZT 15 mins: 1800 bars -> 1 years
+[2026-05-17T21:51:18.782648+00:00] [100/184] ZT (CBOT) 5 mins (30 D)
+[2026-05-17T21:51:28.715203+00:00]   ZT 5 mins: 2700 bars -> 1 years
+[2026-05-17T21:51:30.717356+00:00] [101/184] ZF (CBOT) 1 day (20 Y)
+[2026-05-17T21:51:40.724678+00:00]   ZF 1 day: 658 bars -> 4 years
+[2026-05-17T21:51:42.726563+00:00] [102/184] ZF (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=818615223, symbol='ZF', lastTradeDateOrContractMonth='20260630', multiplier='1000', exchange='CBOT', currency='USD', localSymbol='ZFM6', tradingClass='ZF')
+[2026-05-17T21:52:42.779701+00:00]   ZF 1 hour: NO DATA
+[2026-05-17T21:52:44.781020+00:00] [103/184] ZF (CBOT) 15 mins (60 D)
+Error 162, reqId 206: Historical Market Data Service error message:API historical data query cancelled: 206, contract: ContFuture(conId=818615223, symbol='ZF', lastTradeDateOrContractMonth='20260630', multiplier='1000', exchange='CBOT', currency='USD', localSymbol='ZFM6', tradingClass='ZF')
+[2026-05-17T21:52:58.697266+00:00]   ZF 15 mins: 1800 bars -> 1 years
+[2026-05-17T21:53:00.698875+00:00] [104/184] ZF (CBOT) 5 mins (30 D)
+[2026-05-17T21:53:10.770355+00:00]   ZF 5 mins: 2700 bars -> 1 years
+[2026-05-17T21:53:12.773042+00:00] [105/184] ZN (CBOT) 1 day (20 Y)
+[2026-05-17T21:53:17.259617+00:00]   ZN 1 day: 661 bars -> 4 years
+[2026-05-17T21:53:19.260684+00:00] [106/184] ZN (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=815824229, symbol='ZN', lastTradeDateOrContractMonth='20260618', multiplier='1000', exchange='CBOT', currency='USD', localSymbol='ZNM6', tradingClass='ZN')
+[2026-05-17T21:54:19.329189+00:00]   ZN 1 hour: NO DATA
+[2026-05-17T21:54:21.330646+00:00] [107/184] ZN (CBOT) 15 mins (60 D)
+Error 162, reqId 214: Historical Market Data Service error message:API historical data query cancelled: 214, contract: ContFuture(conId=815824229, symbol='ZN', lastTradeDateOrContractMonth='20260618', multiplier='1000', exchange='CBOT', currency='USD', localSymbol='ZNM6', tradingClass='ZN')
+[2026-05-17T21:54:22.738448+00:00]   ZN 15 mins: 1800 bars -> 1 years
+[2026-05-17T21:54:24.739928+00:00] [108/184] ZN (CBOT) 5 mins (30 D)
