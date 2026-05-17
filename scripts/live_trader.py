@@ -492,6 +492,33 @@ def consume_pending_signals(*, dry_run: bool = False,
                                          qty=qty, dry_run=dry_run)
                 if result.get("status") in ("submitted", "dry_run"):
                     summary["placed"] += 1
+                    # ── SHADOW LOG: passive-entry A/B ──
+                    # Simulate what a post-only limit at signal_price would
+                    # have done over the next 5 minutes. Real entry still
+                    # used the marketable-limit path; this is purely
+                    # observational. Accumulates in
+                    # vault/research/passive_entry_shadow.jsonl.
+                    try:
+                        from tools.passive_entry_shadow import simulate_passive_entry
+                        from tools.bar_fetcher import fetch_bars as _fb
+                        from tools.trader_utils import _tick_size as _tsz
+                        bars_after = _fb(client, symbol, 1, 6)  # next 6 min
+                        ts = _tsz(symbol)
+                        if bars_after is not None and ts > 0:
+                            shadow = simulate_passive_entry(sig, bars_after, tick_size=ts)
+                            import json as _j
+                            from datetime import datetime as _dt, timezone as _tz
+                            log_path = Path("vault/research/passive_entry_shadow.jsonl")
+                            log_path.parent.mkdir(parents=True, exist_ok=True)
+                            with log_path.open("a", encoding="utf-8") as _f:
+                                _f.write(_j.dumps({
+                                    "ts": _dt.now(tz=_tz.utc).isoformat(),
+                                    "symbol": symbol, "strategy": strat_name,
+                                    "side": side, "signal_price": sig.get("price"),
+                                    **shadow,
+                                }) + "\n")
+                    except Exception:
+                        pass  # shadow logging is best-effort
                 else:
                     summary["errors"] += 1
         except Exception as e:

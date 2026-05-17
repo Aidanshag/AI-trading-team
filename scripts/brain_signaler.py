@@ -164,7 +164,10 @@ def scan_once(*, dry_run: bool = False) -> dict:
             session=cell.get("session", session),
             cell_key=cell_key,
             qty=1,
-            shadow_only=bool(cell.get("experimental")),
+            # shadow_only routes via the trader's shadow path. Either
+            # `experimental` (legacy) or explicit `shadow_only` (2026-05-17
+            # RTH expansion flag) marks a cell as shadow-only.
+            shadow_only=bool(cell.get("experimental") or cell.get("shadow_only")),
             notes=notes,
             ttl_sec=SIGNAL_TTL_SEC,
         )
