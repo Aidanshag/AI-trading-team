@@ -185,13 +185,39 @@ def current_regime(bars: pd.DataFrame,
             vol_regime = "high"
         else:
             vol_regime = "med"
-        rng = (bars["High"] - bars["Low"]).rolling(trend_lookback).mean()
+        # 2026-05-17: ADX-based trend regime (more robust than range-only).
+        # ADX > 25 traditionally indicates a trending market.
+        # We use a faster proxy: directional movement index over `trend_lookback`
+        # bars, plus the existing range-expansion check as confirmation.
+        h, l, c = bars["High"], bars["Low"], bars["Close"]
+        up_move = h.diff()
+        down_move = -l.diff()
+        plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+        minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+        tr = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()],
+                         axis=1).max(axis=1)
+        atr_for_di = tr.rolling(trend_lookback).mean().replace(0, pd.NA)
+        plus_di = 100 * (plus_dm.rolling(trend_lookback).mean() / atr_for_di)
+        minus_di = 100 * (minus_dm.rolling(trend_lookback).mean() / atr_for_di)
+        dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, pd.NA)
+        adx = dx.rolling(trend_lookback).mean()
+        last_adx = float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 0.0
+
+        # Range expansion check (existing proxy)
+        rng = (h - l).rolling(trend_lookback).mean()
         mean_rng = rng.rolling(trend_ref_window, min_periods=20).mean()
         last_rng = float(rng.iloc[-1])
-        last_mean = float(mean_rng.iloc[-1])
-        if pd.isna(last_rng) or pd.isna(last_mean) or last_mean == 0:
+        last_mean = float(mean_rng.iloc[-1]) if not pd.isna(mean_rng.iloc[-1]) else 0.0
+        range_expanding = last_mean > 0 and last_rng > 1.3 * last_mean
+
+        # Confirmation logic: ADX >= 25 = trending strongly.
+        # ADX 20-25 + range expansion = trending.
+        # Otherwise = ranging (or unclear).
+        if pd.isna(last_adx) or last_mean == 0:
             trend_regime = "ranging"
-        elif last_rng > 1.3 * last_mean:
+        elif last_adx >= 25:
+            trend_regime = "trending"
+        elif last_adx >= 20 and range_expanding:
             trend_regime = "trending"
         else:
             trend_regime = "ranging"
