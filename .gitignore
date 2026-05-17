@@ -52,3 +52,8 @@ vault/economic_calendar/2*.json
 *~
 state/bars/
 ibgateway/
+
+# IB historical data — regenerable by scripts/ib_historical_backfill.py
+vault/ib/data/*/
+vault/ib/data/backfill_log.txt
+vault/ib/data/backfill_stdout.txt

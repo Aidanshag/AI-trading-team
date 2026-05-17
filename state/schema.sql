@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS account_snapshots (
     realized_pl_day_usd  REAL NOT NULL,
     trailing_dd_usd      REAL NOT NULL,
     open_contracts_total INTEGER NOT NULL,
-    can_trade            INTEGER NOT NULL DEFAULT 1   -- broker canTrade flag (0=halted server-side)
+    can_trade            INTEGER NOT NULL DEFAULT 1,   -- broker canTrade flag (0=halted server-side)
+    broker               TEXT NOT NULL DEFAULT 'topstep'  -- workstream isolation: 'topstep' | 'ib'
 );
 CREATE INDEX IF NOT EXISTS idx_account_snap_ts ON account_snapshots(ts);
 
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS positions (
     target_price        REAL,
     thesis_note_path    TEXT,                         -- link to vault/theses/*.md
     structure_id        INTEGER REFERENCES structures(id),  -- if part of a multi-leg
+    broker              TEXT NOT NULL DEFAULT 'topstep',  -- workstream isolation: 'topstep' | 'ib'
     UNIQUE(symbol, contract_month, side)
 );
 CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol);
@@ -89,7 +91,8 @@ CREATE TABLE IF NOT EXISTS orders (
     risk_reason      TEXT,                            -- if blocked, why
     broker_order_id  TEXT,
     avg_fill_price   REAL,
-    structure_id     INTEGER REFERENCES structures(id)
+    structure_id     INTEGER REFERENCES structures(id),
+    broker           TEXT NOT NULL DEFAULT 'topstep'   -- workstream isolation: 'topstep' | 'ib'
 );
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_agent  ON orders(agent);
@@ -106,7 +109,8 @@ CREATE TABLE IF NOT EXISTS decisions (
     vault_path  TEXT,                                 -- if persisted to Obsidian
     model       TEXT,                                 -- which Claude model produced it
     tokens_in   INTEGER,
-    tokens_out  INTEGER
+    tokens_out  INTEGER,
+    broker      TEXT NOT NULL DEFAULT 'topstep'       -- workstream isolation: 'topstep' | 'ib'
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_ts ON decisions(ts);
 CREATE INDEX IF NOT EXISTS idx_decisions_agent ON decisions(agent);
@@ -119,7 +123,8 @@ CREATE TABLE IF NOT EXISTS risk_events (
     rule        TEXT NOT NULL,                        -- e.g. 'naked_short', 'daily_loss_limit'
     agent       TEXT,
     order_id    INTEGER REFERENCES orders(id),
-    detail      TEXT
+    detail      TEXT,
+    broker      TEXT NOT NULL DEFAULT 'topstep'       -- workstream isolation: 'topstep' | 'ib'
 );
 CREATE INDEX IF NOT EXISTS idx_risk_ts ON risk_events(ts);
 
@@ -206,7 +211,11 @@ CREATE TABLE IF NOT EXISTS shadow_trades (
     -- strategy-edge research.
     exec_mirror_pnl_r    REAL,
     exec_mirror_outcome  TEXT,                         -- stop_hit | profit_lock | hard_flatten | loss_cap | time_stopped | invalidated
-    exec_mirror_notes    TEXT
+    exec_mirror_notes    TEXT,
+    -- 2026-05-17: broker isolation field. 'topstep' default for back-compat.
+    -- When IB shadow discovery starts, those rows must write broker='ib'.
+    -- Enforced by tools/separation_audit.py.
+    broker               TEXT NOT NULL DEFAULT 'topstep'
 );
 CREATE INDEX IF NOT EXISTS idx_shadow_ts ON shadow_trades(ts_signal);
 CREATE INDEX IF NOT EXISTS idx_shadow_symbol ON shadow_trades(symbol);
@@ -221,7 +230,8 @@ CREATE TABLE IF NOT EXISTS daily_pl (
     realized_pl_usd      REAL NOT NULL,
     peak_realized_pl_usd REAL,                        -- intraday high-water from snapshots
     trade_count          INTEGER,
-    closed_at            TEXT NOT NULL                -- ISO-8601 UTC
+    closed_at            TEXT NOT NULL,               -- ISO-8601 UTC
+    broker               TEXT NOT NULL DEFAULT 'topstep'  -- workstream isolation: 'topstep' | 'ib'
 );
 
 -- ── News / events ingested (for audit of what agents saw) ───────

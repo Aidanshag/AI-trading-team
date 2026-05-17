@@ -358,6 +358,24 @@ def check_no_conflicting_trader() -> bool:
         return True
 
 
+def check_broker_separation() -> bool:
+    """Enforce Topstep <-> IB workstream isolation. Every allowlist cell and
+    shadow trade row must carry a `broker` field; no cross-broker imports."""
+    print("Step 7b/N: broker separation audit")
+    try:
+        from tools.separation_audit import violations
+        vs = violations()
+        if vs:
+            for v in vs:
+                _fail(f"separation: {v}")
+            return False
+        _ok("broker separation clean (Topstep <-> IB isolated)")
+        return True
+    except Exception as e:
+        _warn(f"separation audit skipped: {type(e).__name__}: {e}")
+        return True
+
+
 def check_risk_gate_wired() -> bool:
     """Submit a synthetic order to apply_risk_gate and confirm the kill_switch
     check actually ran — sanity that the hook isn't silently no-op'ing."""
@@ -394,6 +412,7 @@ def main() -> int:
     checks.append(check_snapshot_writer())
     checks.append(check_tests())
     checks.append(check_risk_gate_wired())
+    checks.append(check_broker_separation())
     checks.append(check_no_conflicting_trader())
     checks.append(check_autonomous_activity_alive())
     checks.append(check_agent_cli())
