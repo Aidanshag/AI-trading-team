@@ -137,7 +137,7 @@ def check_focus_universe() -> bool:
     if not path.exists():
         _warn("focus_universe.yaml missing (running unrestricted)")
         return True
-    cfg = yaml.safe_load(path.read_text()) or {}
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not cfg.get("focus_period_active"):
         _ok("focus universe inactive (any symbol allowed)")
         return True
