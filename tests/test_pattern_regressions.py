@@ -559,7 +559,11 @@ def test_pattern_a_dll_breached_uses_internal_target(monkeypatch, tmp_path):
         }
     }
     # Patch the YAML loader used inside dll_breached
-    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+    # 2026-05-17: dll_breached / projected_dll_breach moved to
+    # tools/signal_validators. Patch the new location so the lambda
+    # actually intercepts the YAML read.
+    from tools import signal_validators as _sv
+    monkeypatch.setattr(_sv, "_load_yaml", lambda _p: fake_yaml)
 
     snap = {"realized_pl_day_usd": -300.0}
     breached, reason = lt.dll_breached(snap)
@@ -595,13 +599,15 @@ def test_pattern_a_dll_breached_falls_through_to_topstep_when_internal_zero():
     snap_over = {"realized_pl_day_usd": -1100.0}
 
     import scripts.live_trader as lt_mod
-    original_loader = lt_mod._load_yaml
+    from tools import signal_validators as _sv
+    # 2026-05-17: dll_breached moved to signal_validators — patch there
+    original_loader = _sv._load_yaml
     try:
-        lt_mod._load_yaml = lambda _p: fake_yaml
+        _sv._load_yaml = lambda _p: fake_yaml
         breached_under, _ = lt_mod.dll_breached(snap_under)
         breached_over, reason_over = lt_mod.dll_breached(snap_over)
     finally:
-        lt_mod._load_yaml = original_loader
+        _sv._load_yaml = original_loader
 
     assert not breached_under, (
         "Fallback to Topstep failed: -$300 should NOT breach a "
@@ -641,7 +647,11 @@ def test_projected_dll_breach_blocks_when_worst_case_crosses_internal(monkeypatc
             "daily_loss_limit_usd": 1000,
         }
     }
-    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+    # 2026-05-17: dll_breached / projected_dll_breach moved to
+    # tools/signal_validators. Patch the new location so the lambda
+    # actually intercepts the YAML read.
+    from tools import signal_validators as _sv
+    monkeypatch.setattr(_sv, "_load_yaml", lambda _p: fake_yaml)
 
     snap = {"realized_pl_day_usd": -200.0, "unrealized_pl_usd": 0.0}
     breach, reason = lt.projected_dll_breach(snap, signal_risk_usd=150.0)
@@ -669,7 +679,11 @@ def test_projected_dll_breach_allows_safe_trade(monkeypatch):
             "daily_loss_limit_usd": 1000,
         }
     }
-    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+    # 2026-05-17: dll_breached / projected_dll_breach moved to
+    # tools/signal_validators. Patch the new location so the lambda
+    # actually intercepts the YAML read.
+    from tools import signal_validators as _sv
+    monkeypatch.setattr(_sv, "_load_yaml", lambda _p: fake_yaml)
 
     snap = {"realized_pl_day_usd": 0.0, "unrealized_pl_usd": 0.0}
     breach, reason = lt.projected_dll_breach(snap, signal_risk_usd=100.0)
@@ -695,7 +709,11 @@ def test_projected_dll_breach_uses_unrealized_in_day_pl(monkeypatch):
             "daily_loss_limit_usd": 1000,
         }
     }
-    monkeypatch.setattr(lt, "_load_yaml", lambda _p: fake_yaml)
+    # 2026-05-17: dll_breached / projected_dll_breach moved to
+    # tools/signal_validators. Patch the new location so the lambda
+    # actually intercepts the YAML read.
+    from tools import signal_validators as _sv
+    monkeypatch.setattr(_sv, "_load_yaml", lambda _p: fake_yaml)
 
     snap = {"realized_pl_day_usd": -100.0, "unrealized_pl_usd": -100.0}
     breach, reason = lt.projected_dll_breach(snap, signal_risk_usd=100.0)

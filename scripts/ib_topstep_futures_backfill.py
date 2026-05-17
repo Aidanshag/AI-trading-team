@@ -34,27 +34,49 @@ INDEX_PATH = DATA_DIR / "index.md"
 LOG_PATH = DATA_DIR / "backfill_log.txt"
 
 # Topstep-tradeable CME futures (continuous-future series via IB CONTFUT)
+# Source of truth: config/symbols.yaml (verified by Topstep 2026-04-28).
 # Exchange hints help IB qualify the contract.
 FUTURES_UNIVERSE = {
-    # Equity index
-    "ES": "CME", "NQ": "CME", "RTY": "CME",
-    "MES": "CME", "MNQ": "CME",
-    # Energy
-    "CL": "NYMEX", "NG": "NYMEX", "MCL": "NYMEX",
-    # Metals
-    "GC": "COMEX", "SI": "COMEX", "HG": "COMEX", "MGC": "COMEX",
-    # Treasuries
-    "ZN": "CBOT", "ZB": "CBOT", "ZF": "CBOT", "ZT": "CBOT",
-    # FX
-    "6E": "CME", "6B": "CME", "6J": "CME", "6C": "CME",
-    # Grains
+    # ── Equity index ──
+    "ES": "CME",   "MES": "CME",
+    "NQ": "CME",   "MNQ": "CME",
+    "RTY": "CME",  "M2K": "CME",
+    "YM": "CBOT",  "MYM": "CBOT",
+    "NKD": "CME",
+    # ── Energies ──
+    "CL": "NYMEX", "MCL": "NYMEX",
+    "NG": "NYMEX", "MNG": "NYMEX", "QG": "NYMEX",
+    "RB": "NYMEX", "HO": "NYMEX", "QM": "NYMEX",
+    # ── Metals ──
+    "GC": "COMEX", "MGC": "COMEX",
+    "SI": "COMEX", "SIL": "COMEX",
+    "HG": "COMEX", "MHG": "COMEX",
+    "PL": "NYMEX",
+    # ── Rates ──
+    "ZT": "CBOT", "ZF": "CBOT", "ZN": "CBOT",
+    "ZB": "CBOT", "UB": "CBOT",
+    # ── FX ──
+    "6E": "CME", "6B": "CME", "6J": "CME",
+    "6A": "CME", "6C": "CME", "6S": "CME",
+    "M6E": "CME", "M6B": "CME", "E7": "CME",
+    # ── Grains / Ag ──
     "ZC": "CBOT", "ZS": "CBOT", "ZW": "CBOT",
+    "ZL": "CBOT", "ZM": "CBOT",
+    # ── Livestock ──
+    "LE": "CME", "HE": "CME",
+    # ── Crypto ──
+    "METK": "CME",
 }
 
 PULL_PLAN = [
-    ("15 Y", "1 day",  "1d"),
+    # Daily bars: maximum history IB allows on most futures
+    ("20 Y", "1 day",  "1d"),
+    # 1-hour bars: 2 years (~5,000 bars)
     ("2 Y",  "1 hour", "1h"),
-    ("30 D", "15 mins", "15min"),
+    # 15-min bars: 60 days (recent intraday for hi-res testing)
+    ("60 D", "15 mins", "15min"),
+    # 5-min bars: 30 days (the cadence the trader actually fires on)
+    ("30 D", "5 mins", "5min"),
 ]
 
 MAX_RETRY_PER_PULL = 3
@@ -132,9 +154,9 @@ def main() -> int:
         log(f"ABORT: cannot import IBClient: {e}")
         return 2
 
-    # Use a different client ID so we don't collide with anything that
-    # might still be holding the default clientId=1 session.
-    client = IBClient(client_id=3)
+    # Use clientId=9 so we run in parallel with the comprehensive
+    # pull_everything (clientId=7) without collision.
+    client = IBClient(client_id=9)
     try:
         log(f"Connecting to IB Gateway {client.host}:{client.port} (clientId={client.client_id})")
         client.connect()
