@@ -401,6 +401,38 @@ def consume_pending_signals(*, dry_run: bool = False,
         if recent_thesis_for(symbol):
             _log(f"  {symbol} {strat_name} {side}: skipped (recent thesis)")
             summary["skipped_cooldown"] += 1
+            # ── SHADOW LOG: outcome-aware cooldown A/B ──
+            # Live still uses the flat 45-min (or override). Compare what
+            # the new policy_v1 cooldown would have decided. Findings
+            # accumulate in vault/research/cooldown_shadow_log.jsonl and
+            # we evaluate after N decisions whether to switch live.
+            try:
+                from tools.cooldown_policy import classify_outcome, cooldown_decision
+                from tools.trade_state import _last_trade_for_symbol  # may exist
+                last = _last_trade_for_symbol(symbol) if callable(_last_trade_for_symbol) else None
+                if last is not None:
+                    outcome = classify_outcome(
+                        last.get("realized_r"), last.get("exit_reason"))
+                    live_cd = SAME_SYMBOL_COOLDOWN_OVERRIDES.get(
+                        symbol, SAME_SYMBOL_COOLDOWN_MIN)
+                    minutes_since = float(last.get("minutes_since", 0) or 0)
+                    decision = cooldown_decision(
+                        symbol, live_cooldown_min=live_cd,
+                        last_outcome=outcome,
+                        minutes_since_last=minutes_since,
+                    )
+                    import json as _j
+                    from datetime import datetime as _dt, timezone as _tz
+                    log_path = Path("vault/research/cooldown_shadow_log.jsonl")
+                    log_path.parent.mkdir(parents=True, exist_ok=True)
+                    with log_path.open("a", encoding="utf-8") as _f:
+                        _f.write(_j.dumps({
+                            "ts": _dt.now(tz=_tz.utc).isoformat(),
+                            "symbol": symbol, "strategy": strat_name,
+                            **decision,
+                        }) + "\n")
+            except Exception:
+                pass  # shadow logging is best-effort, never blocks trader
             continue
 
         # Session-aware MIN_SIGNAL_R_TICKS: Asian sessions get a tighter
