@@ -144,6 +144,16 @@ def check_close_slippage_vs_floor(conn: sqlite3.Connection,
     # decisions table has the audit row: kind='close', reason includes
     # 'trailing_lock' / 'target_hit' / etc. Peak + realized comparison
     # comes from there.
+    #
+    # 2026-05-17 false-positive guard: cross-reference with orders.status
+    # = 'filled'. Counterfactual replays (scripts/replay_exits.py) and
+    # test harnesses write rows to `decisions` with agent='profit_lock'
+    # but DO NOT create corresponding broker fills. Without this guard
+    # the same 6 synthetic close decisions today produced 20+ false
+    # Discord alarms across 5/15 + 5/17. The fix: require at least one
+    # `orders` row with status='filled' for the same symbol within ±10
+    # minutes of the decision ts. Real closes always pair with a fill;
+    # replays don't.
     cutoff_iso = (datetime.now(tz=timezone.utc) - timedelta(hours=hours)).isoformat()
     try:
         rows = cur.execute(
@@ -159,6 +169,25 @@ def check_close_slippage_vs_floor(conn: sqlite3.Connection,
         ts, agent, kind, symbol, rationale = r
         if not rationale:
             continue
+        # ── False-positive guard: cross-reference with orders.status ──
+        try:
+            ts_dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            window_start = (ts_dt - timedelta(minutes=10)).isoformat()
+            window_end = (ts_dt + timedelta(minutes=10)).isoformat()
+            fill_count = cur.execute(
+                "SELECT COUNT(*) FROM orders "
+                "WHERE symbol = ? AND status = 'filled' "
+                "AND ts_filled >= ? AND ts_filled <= ?",
+                (symbol, window_start, window_end),
+            ).fetchone()
+            if not fill_count or fill_count[0] == 0:
+                # Synthetic / replay row — skip it. Real-money closes
+                # always have a matching filled order in the same window.
+                continue
+        except Exception:
+            # If we can't parse ts or look up fills, fail OPEN (alert) so
+            # we don't accidentally mask a real bug behind a parse error.
+            pass
         try:
             peak = realized = None
             for token in rationale.split():

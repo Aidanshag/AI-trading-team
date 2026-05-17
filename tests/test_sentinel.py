@@ -208,18 +208,55 @@ def test_check_slippage_clean_when_realized_at_floor(inmem_db):
 
 
 def test_check_slippage_flags_significant_drop_past_floor(inmem_db):
-    """Peak $100 (floor $70), realized $40 — $30 slippage past floor."""
+    """Peak $100 (floor $70), realized $40 — $30 slippage past floor.
+
+    2026-05-17: also seeds a matching orders.status='filled' row so the
+    false-positive guard treats the decision as real (not a replay).
+    Uses relative timestamps so the 24h check window includes the row.
+    """
+    from datetime import datetime, timezone, timedelta
+    decision_ts = (datetime.now(tz=timezone.utc) - timedelta(hours=1)).isoformat()
+    fill_ts = (datetime.now(tz=timezone.utc) - timedelta(hours=1)
+                ).isoformat()
+    proposed_ts = (datetime.now(tz=timezone.utc) - timedelta(hours=1,
+                                                              minutes=1)).isoformat()
     inmem_db.execute(
         "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
         "VALUES (?, 'profit_lock', 'close', 'MGC', "
         "'profit_lock close: peak=$100.00 realized=$40.00 reason=trailing_lock')",
-        ("2026-05-15T03:00:00+00:00",),
+        (decision_ts,),
+    )
+    inmem_db.execute(
+        "INSERT INTO orders (client_order_id, agent, ts_proposed, ts_filled, "
+        "symbol, side, order_type, qty, status, risk_verdict) "
+        "VALUES ('test-cid-1', 'live_trader', ?, ?, 'MGC', 'sell', 'market', "
+        "1, 'filled', 'allow')",
+        (proposed_ts, fill_ts),
     )
     inmem_db.commit()
     findings = sn.check_close_slippage_vs_floor(inmem_db)
-    assert len(findings) == 1
+    assert len(findings) == 1, f"Expected 1, got: {findings}"
     assert findings[0].severity == "warn"
     assert findings[0].detail["slippage_usd"] == 30.0
+
+
+def test_check_slippage_skips_replay_rows_without_matching_fills(inmem_db):
+    """Pattern A defense: a decision row with no matching orders.filled
+    in the ±10min window is a counterfactual replay or test harness write,
+    NOT a real trade. The check must silently skip it instead of spamming
+    Discord. Was the source of 20+ false alarms on 2026-05-15 + 5/17."""
+    from datetime import datetime, timezone, timedelta
+    decision_ts = (datetime.now(tz=timezone.utc) - timedelta(hours=1)).isoformat()
+    inmem_db.execute(
+        "INSERT INTO decisions (ts, agent, kind, symbol, rationale) "
+        "VALUES (?, 'profit_lock', 'close', 'GC', "
+        "'profit_lock close: peak=$4000.00 realized=$1000.00 reason=trailing_lock')",
+        (decision_ts,),
+    )
+    inmem_db.commit()
+    findings = sn.check_close_slippage_vs_floor(inmem_db)
+    assert findings == [], \
+        f"Replay row without matching fill must NOT trigger an alarm. Got: {findings}"
 
 
 # ── check_peak_capture_weekly (the measurement loop) ──────────────
