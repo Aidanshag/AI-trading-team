@@ -485,3 +485,27 @@
 [2026-05-17T21:54:18.691442+00:00] [241/564] equities_megacaps/AVGO 1 day (20 Y)
 [2026-05-17T21:54:28.817514+00:00]   AVGO 1 day: 2586 bars -> 11 years
 [2026-05-17T21:54:30.819606+00:00] [242/564] equities_megacaps/AVGO 1 hour (2 Y)
+[2026-05-17T21:55:11.051469+00:00]   AVGO 1 hour: 3489 bars -> 3 years
+[2026-05-17T21:55:13.054770+00:00] [243/564] equities_megacaps/AVGO 15 mins (30 D)
+[2026-05-17T21:55:13.403424+00:00]   AVGO 15 mins: 780 bars -> 1 years
+[2026-05-17T21:55:15.405764+00:00] [244/564] equities_megacaps/ORCL 1 day (20 Y)
+[2026-05-17T21:55:28.988061+00:00]   ORCL 1 day: 5028 bars -> 21 years
+[2026-05-17T21:55:30.991647+00:00] [245/564] equities_megacaps/ORCL 1 hour (2 Y)
+[2026-05-17T21:56:11.060380+00:00]   ORCL 1 hour: 3489 bars -> 3 years
+[2026-05-17T21:56:13.062362+00:00] [246/564] equities_megacaps/ORCL 15 mins (30 D)
+[2026-05-17T21:56:17.005791+00:00]   ORCL 15 mins: 780 bars -> 1 years
+[2026-05-17T21:56:19.007728+00:00] [247/564] equities_megacaps/ADBE 1 day (20 Y)
+[2026-05-17T21:56:34.866459+00:00]   ADBE 1 day: 5028 bars -> 21 years
+[2026-05-17T21:56:36.869140+00:00] [248/564] equities_megacaps/ADBE 1 hour (2 Y)
+[2026-05-17T21:57:16.965423+00:00]   ADBE 1 hour: 3489 bars -> 3 years
+[2026-05-17T21:57:18.967443+00:00] [249/564] equities_megacaps/ADBE 15 mins (30 D)
+[2026-05-17T21:57:22.679774+00:00]   ADBE 15 mins: 780 bars -> 1 years
+[2026-05-17T21:57:24.681126+00:00] [250/564] equities_megacaps/CRM 1 day (20 Y)
+[2026-05-17T21:57:46.761118+00:00]   CRM 1 day: 5027 bars -> 21 years
+[2026-05-17T21:57:48.763843+00:00] [251/564] equities_megacaps/CRM 1 hour (2 Y)
+[2026-05-17T21:58:11.302650+00:00]   CRM 1 hour: 3489 bars -> 3 years
+[2026-05-17T21:58:13.304910+00:00] [252/564] equities_megacaps/CRM 15 mins (30 D)
+[2026-05-17T21:58:16.754821+00:00]   CRM 15 mins: 780 bars -> 1 years
+[2026-05-17T21:58:18.756111+00:00] [253/564] equities_megacaps/AMD 1 day (20 Y)
+[2026-05-17T21:58:28.657367+00:00]   AMD 1 day: 2859 bars -> 12 years
+[2026-05-17T21:58:30.659650+00:00] [254/564] equities_megacaps/AMD 1 hour (2 Y)
