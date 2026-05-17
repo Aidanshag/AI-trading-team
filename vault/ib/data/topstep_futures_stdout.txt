@@ -313,3 +313,219 @@ Error 200, reqId 241: No security definition has been found for the request, con
 Unknown contract: ContFuture(symbol='6E', exchange='CME', currency='USD')
 Error 200, reqId 242: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='CME', currency='USD')
 [2026-05-17T21:58:31.226646+00:00]   6E 5 mins: NO DATA
+[2026-05-17T21:58:33.227877+00:00] [121/184] 6B (CME) 1 day (20 Y)
+Error 200, reqId 243: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Error 200, reqId 244: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+[2026-05-17T21:58:33.312335+00:00]   6B 1 day: NO DATA
+[2026-05-17T21:58:35.313583+00:00] [122/184] 6B (CME) 1 hour (2 Y)
+Error 200, reqId 245: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Error 200, reqId 246: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+[2026-05-17T21:58:35.393510+00:00]   6B 1 hour: NO DATA
+[2026-05-17T21:58:37.394904+00:00] [123/184] 6B (CME) 15 mins (60 D)
+Error 200, reqId 247: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Error 200, reqId 248: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+[2026-05-17T21:58:37.743843+00:00]   6B 15 mins: NO DATA
+[2026-05-17T21:58:39.744705+00:00] [124/184] 6B (CME) 5 mins (30 D)
+Error 200, reqId 249: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+Error 200, reqId 250: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='CME', currency='USD')
+[2026-05-17T21:58:39.828519+00:00]   6B 5 mins: NO DATA
+[2026-05-17T21:58:41.829820+00:00] [125/184] 6J (CME) 1 day (20 Y)
+Error 200, reqId 251: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Error 200, reqId 252: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+[2026-05-17T21:58:41.915270+00:00]   6J 1 day: NO DATA
+[2026-05-17T21:58:43.916514+00:00] [126/184] 6J (CME) 1 hour (2 Y)
+Error 200, reqId 253: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Error 200, reqId 254: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+[2026-05-17T21:58:44.018055+00:00]   6J 1 hour: NO DATA
+[2026-05-17T21:58:46.019067+00:00] [127/184] 6J (CME) 15 mins (60 D)
+Error 200, reqId 255: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Error 200, reqId 256: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+[2026-05-17T21:58:46.100897+00:00]   6J 15 mins: NO DATA
+[2026-05-17T21:58:48.102246+00:00] [128/184] 6J (CME) 5 mins (30 D)
+Error 200, reqId 257: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+Error 200, reqId 258: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='CME', currency='USD')
+[2026-05-17T21:58:48.192495+00:00]   6J 5 mins: NO DATA
+[2026-05-17T21:58:50.193288+00:00] [129/184] 6A (CME) 1 day (20 Y)
+Error 200, reqId 259: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Error 200, reqId 260: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+[2026-05-17T21:58:50.273566+00:00]   6A 1 day: NO DATA
+[2026-05-17T21:58:52.275084+00:00] [130/184] 6A (CME) 1 hour (2 Y)
+Error 200, reqId 261: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Error 200, reqId 262: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+[2026-05-17T21:58:52.356208+00:00]   6A 1 hour: NO DATA
+[2026-05-17T21:58:54.357467+00:00] [131/184] 6A (CME) 15 mins (60 D)
+Error 200, reqId 263: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Error 200, reqId 264: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+[2026-05-17T21:58:54.442621+00:00]   6A 15 mins: NO DATA
+[2026-05-17T21:58:56.444125+00:00] [132/184] 6A (CME) 5 mins (30 D)
+Error 200, reqId 265: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+Error 200, reqId 266: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='CME', currency='USD')
+[2026-05-17T21:58:56.539406+00:00]   6A 5 mins: NO DATA
+[2026-05-17T21:58:58.540696+00:00] [133/184] 6C (CME) 1 day (20 Y)
+Error 200, reqId 267: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Error 200, reqId 268: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+[2026-05-17T21:58:58.622294+00:00]   6C 1 day: NO DATA
+[2026-05-17T21:59:00.623752+00:00] [134/184] 6C (CME) 1 hour (2 Y)
+Error 200, reqId 269: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Error 200, reqId 270: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+[2026-05-17T21:59:00.712865+00:00]   6C 1 hour: NO DATA
+[2026-05-17T21:59:02.713865+00:00] [135/184] 6C (CME) 15 mins (60 D)
+Error 200, reqId 271: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Error 200, reqId 272: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+[2026-05-17T21:59:02.794578+00:00]   6C 15 mins: NO DATA
+[2026-05-17T21:59:04.795381+00:00] [136/184] 6C (CME) 5 mins (30 D)
+Error 200, reqId 273: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+Error 200, reqId 274: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='CME', currency='USD')
+[2026-05-17T21:59:04.890876+00:00]   6C 5 mins: NO DATA
+[2026-05-17T21:59:06.891770+00:00] [137/184] 6S (CME) 1 day (20 Y)
+Error 200, reqId 275: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Error 200, reqId 276: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+[2026-05-17T21:59:06.981279+00:00]   6S 1 day: NO DATA
+[2026-05-17T21:59:08.982671+00:00] [138/184] 6S (CME) 1 hour (2 Y)
+Error 200, reqId 277: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Error 200, reqId 278: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+[2026-05-17T21:59:09.067300+00:00]   6S 1 hour: NO DATA
+[2026-05-17T21:59:11.068695+00:00] [139/184] 6S (CME) 15 mins (60 D)
+Error 200, reqId 279: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Error 200, reqId 280: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+[2026-05-17T21:59:11.151250+00:00]   6S 15 mins: NO DATA
+[2026-05-17T21:59:13.152122+00:00] [140/184] 6S (CME) 5 mins (30 D)
+Error 200, reqId 281: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+Error 200, reqId 282: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='CME', currency='USD')
+[2026-05-17T21:59:13.240107+00:00]   6S 5 mins: NO DATA
+[2026-05-17T21:59:15.241202+00:00] [141/184] M6E (CME) 1 day (20 Y)
+[2026-05-17T21:59:16.702846+00:00]   M6E 1 day: 615 bars -> 4 years
+[2026-05-17T21:59:18.704264+00:00] [142/184] M6E (CME) 1 hour (2 Y)
+[2026-05-17T22:00:11.552502+00:00]   M6E 1 hour: 4036 bars -> 3 years
+[2026-05-17T22:00:13.555123+00:00] [143/184] M6E (CME) 15 mins (60 D)
+[2026-05-17T22:00:16.794230+00:00]   M6E 15 mins: 1800 bars -> 1 years
+[2026-05-17T22:00:18.796806+00:00] [144/184] M6E (CME) 5 mins (30 D)
+[2026-05-17T22:00:28.761579+00:00]   M6E 5 mins: 2700 bars -> 1 years
+[2026-05-17T22:00:30.764418+00:00] [145/184] M6B (CME) 1 day (20 Y)
+[2026-05-17T22:00:40.676996+00:00]   M6B 1 day: 615 bars -> 4 years
+[2026-05-17T22:00:42.678213+00:00] [146/184] M6B (CME) 1 hour (2 Y)
+[2026-05-17T22:01:11.920120+00:00]   M6B 1 hour: 4036 bars -> 3 years
+[2026-05-17T22:01:13.921669+00:00] [147/184] M6B (CME) 15 mins (60 D)
+[2026-05-17T22:01:22.764756+00:00]   M6B 15 mins: 1800 bars -> 1 years
+[2026-05-17T22:01:24.766848+00:00] [148/184] M6B (CME) 5 mins (30 D)
+[2026-05-17T22:01:40.794280+00:00]   M6B 5 mins: 2700 bars -> 1 years
+[2026-05-17T22:01:42.796904+00:00] [149/184] E7 (CME) 1 day (20 Y)
+[2026-05-17T22:01:52.705204+00:00]   E7 1 day: 615 bars -> 4 years
+[2026-05-17T22:01:54.706265+00:00] [150/184] E7 (CME) 1 hour (2 Y)
+[2026-05-17T22:02:34.804023+00:00]   E7 1 hour: 4036 bars -> 3 years
+[2026-05-17T22:02:36.806541+00:00] [151/184] E7 (CME) 15 mins (60 D)
+[2026-05-17T22:03:10.834666+00:00]   E7 15 mins: 1800 bars -> 1 years
+[2026-05-17T22:03:12.836446+00:00] [152/184] E7 (CME) 5 mins (30 D)
+[2026-05-17T22:03:22.833348+00:00]   E7 5 mins: 2700 bars -> 1 years
+[2026-05-17T22:03:24.835191+00:00] [153/184] ZC (CBOT) 1 day (20 Y)
+[2026-05-17T22:03:46.762777+00:00]   ZC 1 day: 1360 bars -> 7 years
+[2026-05-17T22:03:48.764142+00:00] [154/184] ZC (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=602619718, symbol='ZC', lastTradeDateOrContractMonth='20260714', multiplier='5000', exchange='CBOT', currency='USD', localSymbol='ZCN6', tradingClass='ZC')
+[2026-05-17T22:04:48.833516+00:00]   ZC 1 hour: NO DATA
+[2026-05-17T22:04:50.835744+00:00] [155/184] ZC (CBOT) 15 mins (60 D)
+Error 162, reqId 310: Historical Market Data Service error message:API historical data query cancelled: 310, contract: ContFuture(conId=602619718, symbol='ZC', lastTradeDateOrContractMonth='20260714', multiplier='5000', exchange='CBOT', currency='USD', localSymbol='ZCN6', tradingClass='ZC')
+[2026-05-17T22:05:11.052446+00:00]   ZC 15 mins: 820 bars -> 1 years
+[2026-05-17T22:05:13.054231+00:00] [156/184] ZC (CBOT) 5 mins (30 D)
+[2026-05-17T22:05:16.843747+00:00]   ZC 5 mins: 1740 bars -> 1 years
+[2026-05-17T22:05:18.845109+00:00] [157/184] ZS (CBOT) 1 day (20 Y)
+[2026-05-17T22:05:40.763204+00:00]   ZS 1 day: 1380 bars -> 7 years
+[2026-05-17T22:05:42.765540+00:00] [158/184] ZS (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=597391723, symbol='ZS', lastTradeDateOrContractMonth='20260714', multiplier='5000', exchange='CBOT', currency='USD', localSymbol='ZSN6', tradingClass='ZS')
+[2026-05-17T22:06:42.950284+00:00]   ZS 1 hour: NO DATA
+[2026-05-17T22:06:44.952047+00:00] [159/184] ZS (CBOT) 15 mins (60 D)
+Error 162, reqId 318: Historical Market Data Service error message:API historical data query cancelled: 318, contract: ContFuture(conId=597391723, symbol='ZS', lastTradeDateOrContractMonth='20260714', multiplier='5000', exchange='CBOT', currency='USD', localSymbol='ZSN6', tradingClass='ZS')
+[2026-05-17T22:07:10.765153+00:00]   ZS 15 mins: 820 bars -> 1 years
+[2026-05-17T22:07:12.767350+00:00] [160/184] ZS (CBOT) 5 mins (30 D)
+[2026-05-17T22:07:13.127861+00:00]   ZS 5 mins: 1740 bars -> 1 years
+[2026-05-17T22:07:15.129979+00:00] [161/184] ZW (CBOT) 1 day (20 Y)
+[2026-05-17T22:07:28.768730+00:00]   ZW 1 day: 1215 bars -> 6 years
+[2026-05-17T22:07:30.770274+00:00] [162/184] ZW (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=642254813, symbol='ZW', lastTradeDateOrContractMonth='20260714', multiplier='5000', exchange='CBOT', currency='USD', localSymbol='ZWN6', tradingClass='ZW')
+[2026-05-17T22:08:30.825590+00:00]   ZW 1 hour: NO DATA
+[2026-05-17T22:08:32.827069+00:00] [163/184] ZW (CBOT) 15 mins (60 D)
+Error 162, reqId 326: Historical Market Data Service error message:API historical data query cancelled: 326, contract: ContFuture(conId=642254813, symbol='ZW', lastTradeDateOrContractMonth='20260714', multiplier='5000', exchange='CBOT', currency='USD', localSymbol='ZWN6', tradingClass='ZW')
+[2026-05-17T22:08:52.784351+00:00]   ZW 15 mins: 820 bars -> 1 years
+[2026-05-17T22:08:54.786750+00:00] [164/184] ZW (CBOT) 5 mins (30 D)
+[2026-05-17T22:09:10.818476+00:00]   ZW 5 mins: 1740 bars -> 1 years
+[2026-05-17T22:09:12.820497+00:00] [165/184] ZL (CBOT) 1 day (20 Y)
+[2026-05-17T22:09:16.869184+00:00]   ZL 1 day: 1359 bars -> 7 years
+[2026-05-17T22:09:18.871779+00:00] [166/184] ZL (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=602619575, symbol='ZL', lastTradeDateOrContractMonth='20260714', multiplier='60000', exchange='CBOT', currency='USD', localSymbol='ZLN6', tradingClass='ZL')
+[2026-05-17T22:10:18.920099+00:00]   ZL 1 hour: NO DATA
+[2026-05-17T22:10:20.921730+00:00] [167/184] ZL (CBOT) 15 mins (60 D)
+Error 162, reqId 334: Historical Market Data Service error message:API historical data query cancelled: 334, contract: ContFuture(conId=602619575, symbol='ZL', lastTradeDateOrContractMonth='20260714', multiplier='60000', exchange='CBOT', currency='USD', localSymbol='ZLN6', tradingClass='ZL')
+[2026-05-17T22:10:28.807468+00:00]   ZL 15 mins: 820 bars -> 1 years
+[2026-05-17T22:10:30.809403+00:00] [168/184] ZL (CBOT) 5 mins (30 D)
+[2026-05-17T22:10:46.730434+00:00]   ZL 5 mins: 1740 bars -> 1 years
+[2026-05-17T22:10:48.732171+00:00] [169/184] ZM (CBOT) 1 day (20 Y)
+[2026-05-17T22:11:11.078808+00:00]   ZM 1 day: 1359 bars -> 7 years
+[2026-05-17T22:11:13.080464+00:00] [170/184] ZM (CBOT) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=602619871, symbol='ZM', lastTradeDateOrContractMonth='20260714', multiplier='100', exchange='CBOT', currency='USD', localSymbol='ZMN6', tradingClass='ZM')
+[2026-05-17T22:12:13.132184+00:00]   ZM 1 hour: NO DATA
+[2026-05-17T22:12:15.133972+00:00] [171/184] ZM (CBOT) 15 mins (60 D)
+Error 162, reqId 342: Historical Market Data Service error message:API historical data query cancelled: 342, contract: ContFuture(conId=602619871, symbol='ZM', lastTradeDateOrContractMonth='20260714', multiplier='100', exchange='CBOT', currency='USD', localSymbol='ZMN6', tradingClass='ZM')
+[2026-05-17T22:12:22.802319+00:00]   ZM 15 mins: 820 bars -> 1 years
+[2026-05-17T22:12:24.803552+00:00] [172/184] ZM (CBOT) 5 mins (30 D)
+[2026-05-17T22:12:34.748176+00:00]   ZM 5 mins: 1740 bars -> 1 years
+[2026-05-17T22:12:36.750109+00:00] [173/184] LE (CME) 1 day (20 Y)
+[2026-05-17T22:12:52.706657+00:00]   LE 1 day: 846 bars -> 4 years
+[2026-05-17T22:12:54.707900+00:00] [174/184] LE (CME) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=765497528, symbol='LE', lastTradeDateOrContractMonth='20260831', multiplier='40000', exchange='CME', currency='USD', localSymbol='LEQ6', tradingClass='LE')
+[2026-05-17T22:13:54.777599+00:00]   LE 1 hour: NO DATA
+[2026-05-17T22:13:56.779305+00:00] [175/184] LE (CME) 15 mins (60 D)
+Error 162, reqId 350: Historical Market Data Service error message:API historical data query cancelled: 350, contract: ContFuture(conId=765497528, symbol='LE', lastTradeDateOrContractMonth='20260831', multiplier='40000', exchange='CME', currency='USD', localSymbol='LEQ6', tradingClass='LE')
+[2026-05-17T22:14:10.987702+00:00]   LE 15 mins: 779 bars -> 1 years
+[2026-05-17T22:14:12.989878+00:00] [176/184] LE (CME) 5 mins (30 D)
+[2026-05-17T22:14:16.825327+00:00]   LE 5 mins: 1100 bars -> 1 years
+[2026-05-17T22:14:18.826804+00:00] [177/184] HE (CME) 1 day (20 Y)
+[2026-05-17T22:14:28.838311+00:00]   HE 1 day: 857 bars -> 5 years
+[2026-05-17T22:14:30.840467+00:00] [178/184] HE (CME) 1 hour (2 Y)
+reqHistoricalData: Timeout for ContFuture(conId=777074598, symbol='HE', lastTradeDateOrContractMonth='20260814', multiplier='40000', exchange='CME', currency='USD', localSymbol='HEQ6', tradingClass='HE')
+[2026-05-17T22:15:30.894305+00:00]   HE 1 hour: NO DATA
+[2026-05-17T22:15:32.895627+00:00] [179/184] HE (CME) 15 mins (60 D)
+Error 162, reqId 358: Historical Market Data Service error message:API historical data query cancelled: 358, contract: ContFuture(conId=777074598, symbol='HE', lastTradeDateOrContractMonth='20260814', multiplier='40000', exchange='CME', currency='USD', localSymbol='HEQ6', tradingClass='HE')
+[2026-05-17T22:15:52.732478+00:00]   HE 15 mins: 779 bars -> 1 years
+[2026-05-17T22:15:54.733544+00:00] [180/184] HE (CME) 5 mins (30 D)
+[2026-05-17T22:16:10.899482+00:00]   HE 5 mins: 1100 bars -> 1 years
+[2026-05-17T22:16:12.903144+00:00] [181/184] METK (CME) 1 day (20 Y)
+Error 200, reqId 363: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Error 200, reqId 364: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+[2026-05-17T22:16:13.020109+00:00]   METK 1 day: NO DATA
+[2026-05-17T22:16:15.021318+00:00] [182/184] METK (CME) 1 hour (2 Y)
+Error 200, reqId 365: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Error 200, reqId 366: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+[2026-05-17T22:16:15.101780+00:00]   METK 1 hour: NO DATA
+[2026-05-17T22:16:17.102980+00:00] [183/184] METK (CME) 15 mins (60 D)
+Error 200, reqId 367: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Error 200, reqId 368: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+[2026-05-17T22:16:17.318948+00:00]   METK 15 mins: NO DATA
+[2026-05-17T22:16:19.320261+00:00] [184/184] METK (CME) 5 mins (30 D)
+Error 200, reqId 369: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Unknown contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+Error 200, reqId 370: No security definition has been found for the request, contract: ContFuture(symbol='METK', exchange='CME', currency='USD')
+[2026-05-17T22:16:19.409007+00:00]   METK 5 mins: NO DATA
+[2026-05-17T22:16:21.443584+00:00] === IB Topstep-futures backfill — done ===
+[2026-05-17T22:16:21.465856+00:00] Manifest written: C:\Users\Owner\OneDrive\Personal AI\AI Trading\vault\ib\data\futures\index.md
