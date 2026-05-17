@@ -51,3 +51,4 @@ vault/economic_calendar/2*.json
 *.swp
 *~
 state/bars/
+ibgateway/

@@ -2164,6 +2164,343 @@ def usda_compression_break(
 STRATEGY_REGISTRY["usda_compression_break"] = usda_compression_break
 
 
+# =====================================================================
+# MEAN-REVERTING STRATEGIES (added 2026-05-17)
+# =====================================================================
+# Counterpart to the trend/breakout heavy library. These fire in
+# RANGING regimes (trend_regime: ['ranging']) — the brain's regime
+# filter handles routing. Each strategy:
+#   - Uses ATR-based stops with the engine's min_stop_ticks floor
+#     active (sub-tick stops dropped automatically)
+#   - Yields explicit target (mean / channel midpoint) so the
+#     software take-profit can fire on hit
+#   - Aims for higher hit rate (50-65%) with modest avg R per win
+#     to complement the low-hit-high-R trend strategies
+# =====================================================================
+
+
+def keltner_channel_revert(
+    bars: pd.DataFrame,
+    keltner_period: int = 20,
+    keltner_mult: float = 2.0,
+    stop_atr_mult: float = 1.0,
+    atr_period: int = 14,
+) -> Iterator[Signal]:
+    """Mean-revert variant of keltner_breakout.
+
+    Trigger:
+      - Price touches OUTER Keltner band (high >= upper OR low <= lower)
+      - Bar CLOSES back inside the channel (rejection)
+      - Long after lower-band rejection; short after upper-band rejection
+      - Target: middle band (EMA20)
+      - Stop: stop_atr_mult × ATR beyond the touched extreme
+
+    Works best in ranging regimes — outer band touches are exhaustion
+    points when price isn't trending. In trending regimes the band gets
+    "ridden" and this fails (which the trend_regime filter prevents).
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    ema = c.ewm(span=keltner_period, adjust=False).mean()
+    atr = _atr(bars, atr_period)
+    upper = ema + keltner_mult * atr
+    lower = ema - keltner_mult * atr
+
+    for i in range(keltner_period + atr_period, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a <= 0:
+            continue
+        bar_h, bar_l, bar_c = float(h.iloc[i]), float(l.iloc[i]), float(c.iloc[i])
+        u, m, lo = float(upper.iloc[i]), float(ema.iloc[i]), float(lower.iloc[i])
+
+        # Upper-band rejection: high pierced upper but close back below
+        if bar_h >= u and bar_c < u:
+            stop = bar_h + stop_atr_mult * float(a)
+            target = m
+            if stop > bar_c and target < bar_c:
+                yield Signal.entry(
+                    date=date, side="short", price=bar_c, stop=stop, target=target,
+                    reason=f"keltner_revert_short upper={u:.2f}",
+                )
+        # Lower-band rejection: low pierced lower but close back above
+        elif bar_l <= lo and bar_c > lo:
+            stop = bar_l - stop_atr_mult * float(a)
+            target = m
+            if stop < bar_c and target > bar_c:
+                yield Signal.entry(
+                    date=date, side="long", price=bar_c, stop=stop, target=target,
+                    reason=f"keltner_revert_long lower={lo:.2f}",
+                )
+
+
+STRATEGY_REGISTRY["keltner_channel_revert"] = keltner_channel_revert
+
+
+def ema_pullback_fade(
+    bars: pd.DataFrame,
+    ema_period: int = 50,
+    min_extension_atr: float = 2.0,
+    stop_atr_mult: float = 1.0,
+    target_atr_mult: float = 1.5,
+    atr_period: int = 14,
+) -> Iterator[Signal]:
+    """Fade an excessive extension from the 50 EMA.
+
+    Trigger:
+      - Price has extended >= min_extension_atr × ATR from the 50 EMA
+      - Bar closes back toward the EMA (sign of exhaustion)
+      - Long after a stretched-DOWN move; short after stretched-UP
+      - Target: 50 EMA (mean reversion)
+      - Stop: stop_atr_mult × ATR beyond extreme
+
+    Distinct from pullback_in_trend (which trades WITH the trend on
+    a small pullback). This fires when extension is excessive AND
+    the bar shows reversal behavior — a counter-trend mean-revert.
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    ema = c.ewm(span=ema_period, adjust=False).mean()
+    atr = _atr(bars, atr_period)
+
+    for i in range(ema_period + atr_period, len(bars) - 1):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a <= 0:
+            continue
+        bar_h, bar_l, bar_c, bar_o = (float(h.iloc[i]), float(l.iloc[i]),
+                                        float(c.iloc[i]), float(bars["Open"].iloc[i]))
+        m = float(ema.iloc[i])
+        extension = bar_c - m
+
+        # Stretched UP: extension > +N×ATR + bar closed below midpoint of its range
+        if extension > min_extension_atr * float(a):
+            bar_mid = (bar_h + bar_l) / 2.0
+            if bar_c < bar_mid:  # rejection wick
+                stop = bar_h + stop_atr_mult * float(a)
+                target = bar_c - target_atr_mult * float(a)
+                if stop > bar_c and target < bar_c:
+                    yield Signal.entry(
+                        date=date, side="short", price=bar_c, stop=stop, target=target,
+                        reason=f"ema_pullback_fade_short ext={extension/float(a):.1f}×ATR",
+                    )
+
+        # Stretched DOWN: extension < -N×ATR + bar closed above midpoint
+        elif extension < -min_extension_atr * float(a):
+            bar_mid = (bar_h + bar_l) / 2.0
+            if bar_c > bar_mid:  # rejection wick
+                stop = bar_l - stop_atr_mult * float(a)
+                target = bar_c + target_atr_mult * float(a)
+                if stop < bar_c and target > bar_c:
+                    yield Signal.entry(
+                        date=date, side="long", price=bar_c, stop=stop, target=target,
+                        reason=f"ema_pullback_fade_long ext={extension/float(a):.1f}×ATR",
+                    )
+
+
+STRATEGY_REGISTRY["ema_pullback_fade"] = ema_pullback_fade
+
+
+def bb_squeeze_fade(
+    bars: pd.DataFrame,
+    bb_period: int = 20,
+    bb_std: float = 2.0,
+    squeeze_pct: float = 0.5,  # bandwidth must be < 50% of its 100-bar median
+    bandwidth_ref: int = 100,
+    stop_atr_mult: float = 1.0,
+    atr_period: int = 14,
+) -> Iterator[Signal]:
+    """Fade an expansion bar immediately after a Bollinger squeeze.
+
+    Distinct from bollinger_squeeze_break (which trades the breakout
+    direction). bb_squeeze_fade trades the OPPOSITE direction —
+    expecting the initial expansion move to fail and revert in a
+    ranging regime.
+
+    Trigger:
+      - BB bandwidth (upper-lower)/middle < squeeze_pct × 100-bar median
+      - Next bar OPENS outside the band (gap-out of squeeze)
+      - Fade that direction — short the gap-up, long the gap-down
+      - Target: BB middle band (SMA20)
+      - Stop: stop_atr_mult × ATR beyond extreme of the gap bar
+    """
+    c, h, l = bars["Close"], bars["High"], bars["Low"]
+    o = bars["Open"]
+    sma = c.rolling(bb_period).mean()
+    std = c.rolling(bb_period).std()
+    upper = sma + bb_std * std
+    lower = sma - bb_std * std
+    bw = (upper - lower) / sma.replace(0, pd.NA)
+    bw_median = bw.rolling(bandwidth_ref, min_periods=20).median()
+    atr = _atr(bars, atr_period)
+
+    for i in range(bandwidth_ref + atr_period, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a <= 0:
+            continue
+        # Prior bar's bandwidth was a squeeze
+        prev_bw = bw.iloc[i - 1]
+        prev_bw_med = bw_median.iloc[i - 1]
+        if (pd.isna(prev_bw) or pd.isna(prev_bw_med) or prev_bw_med == 0
+            or prev_bw / prev_bw_med >= squeeze_pct):
+            continue
+        # Current bar opens outside the prior bar's band → fade
+        bar_o, bar_c, bar_h, bar_l = (float(o.iloc[i]), float(c.iloc[i]),
+                                        float(h.iloc[i]), float(l.iloc[i]))
+        u_prev, l_prev = float(upper.iloc[i - 1]), float(lower.iloc[i - 1])
+        m = float(sma.iloc[i])
+
+        if bar_o > u_prev:  # gap-up — fade short
+            stop = bar_h + stop_atr_mult * float(a)
+            target = m
+            if stop > bar_c and target < bar_c:
+                yield Signal.entry(
+                    date=date, side="short", price=bar_c, stop=stop, target=target,
+                    reason=f"bb_squeeze_fade_short bw={prev_bw/prev_bw_med:.2f}×med",
+                )
+        elif bar_o < l_prev:  # gap-down — fade long
+            stop = bar_l - stop_atr_mult * float(a)
+            target = m
+            if stop < bar_c and target > bar_c:
+                yield Signal.entry(
+                    date=date, side="long", price=bar_c, stop=stop, target=target,
+                    reason=f"bb_squeeze_fade_long bw={prev_bw/prev_bw_med:.2f}×med",
+                )
+
+
+STRATEGY_REGISTRY["bb_squeeze_fade"] = bb_squeeze_fade
+
+
+def rsi_divergence_reversal(
+    bars: pd.DataFrame,
+    rsi_period: int = 14,
+    rsi_overbought: float = 70.0,
+    rsi_oversold: float = 30.0,
+    divergence_lookback: int = 5,
+    stop_atr_mult: float = 1.0,
+    target_atr_mult: float = 1.5,
+    atr_period: int = 14,
+) -> Iterator[Signal]:
+    """RSI divergence at extreme levels — stronger than pure RSI extreme.
+
+    Trigger (bearish divergence → short):
+      - Price makes a new N-bar high
+      - RSI does NOT make a new high (RSI < its level at the prior high)
+      - RSI was overbought (>= rsi_overbought) at some point in the move
+
+    Trigger (bullish divergence → long): mirror.
+
+    Distinct from rsi2_extreme_reversion (which is pure RSI extreme).
+    Divergence is a STRUCTURAL signal — price says continuation,
+    momentum says exhaustion. Higher edge than RSI alone.
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    # Compute RSI
+    delta = c.diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.rolling(rsi_period).mean()
+    avg_loss = loss.rolling(rsi_period).mean()
+    rs = avg_gain / avg_loss.replace(0, pd.NA)
+    rsi = 100 - (100 / (1 + rs))
+    atr = _atr(bars, atr_period)
+
+    for i in range(rsi_period + divergence_lookback + atr_period, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        cur_rsi = rsi.iloc[i]
+        if pd.isna(a) or pd.isna(cur_rsi) or a <= 0:
+            continue
+        # Window for divergence check
+        prior_h = float(h.iloc[i - divergence_lookback:i].max())
+        prior_l = float(l.iloc[i - divergence_lookback:i].min())
+        prior_rsi_at_high = float(rsi.iloc[i - divergence_lookback:i].max())
+        prior_rsi_at_low = float(rsi.iloc[i - divergence_lookback:i].min())
+
+        bar_h, bar_l, bar_c = float(h.iloc[i]), float(l.iloc[i]), float(c.iloc[i])
+
+        # Bearish divergence: new price high + RSI lower + was overbought
+        if (bar_h > prior_h
+            and cur_rsi < prior_rsi_at_high
+            and prior_rsi_at_high >= rsi_overbought):
+            stop = bar_h + stop_atr_mult * float(a)
+            target = bar_c - target_atr_mult * float(a)
+            if stop > bar_c and target < bar_c:
+                yield Signal.entry(
+                    date=date, side="short", price=bar_c, stop=stop, target=target,
+                    reason=f"rsi_bear_div rsi={cur_rsi:.0f}<prev={prior_rsi_at_high:.0f}",
+                )
+        # Bullish divergence: new price low + RSI higher + was oversold
+        elif (bar_l < prior_l
+              and cur_rsi > prior_rsi_at_low
+              and prior_rsi_at_low <= rsi_oversold):
+            stop = bar_l - stop_atr_mult * float(a)
+            target = bar_c + target_atr_mult * float(a)
+            if stop < bar_c and target > bar_c:
+                yield Signal.entry(
+                    date=date, side="long", price=bar_c, stop=stop, target=target,
+                    reason=f"rsi_bull_div rsi={cur_rsi:.0f}>prev={prior_rsi_at_low:.0f}",
+                )
+
+
+STRATEGY_REGISTRY["rsi_divergence_reversal"] = rsi_divergence_reversal
+
+
+def donchian_revert(
+    bars: pd.DataFrame,
+    lookback: int = 20,
+    stop_atr_mult: float = 1.0,
+    atr_period: int = 14,
+) -> Iterator[Signal]:
+    """Mean-revert variant of donchian_breakout.
+
+    Donchian breakout: close > N-bar high → long (trend).
+    Donchian revert: high pierces N-bar high but bar CLOSES BACK inside
+    → short (failed breakout / mean reversion).
+
+    Target: Donchian midpoint (mid of N-bar high/low channel).
+    Stop: stop_atr_mult × ATR beyond the pierce extreme.
+
+    Works best in ranging regimes where Donchian breakouts are false.
+    """
+    h, l, c = bars["High"], bars["Low"], bars["Close"]
+    prior_high = h.rolling(lookback).max().shift(1)
+    prior_low = l.rolling(lookback).min().shift(1)
+    atr = _atr(bars, atr_period)
+
+    for i in range(lookback + atr_period, len(bars)):
+        date = bars.index[i]
+        a = atr.iloc[i]
+        if pd.isna(a) or a <= 0:
+            continue
+        ph, pl = prior_high.iloc[i], prior_low.iloc[i]
+        if pd.isna(ph) or pd.isna(pl):
+            continue
+        bar_h, bar_l, bar_c = float(h.iloc[i]), float(l.iloc[i]), float(c.iloc[i])
+        mid = (float(ph) + float(pl)) / 2.0
+
+        # Failed upper breakout: high > prior_high BUT close back below
+        if bar_h > float(ph) and bar_c < float(ph):
+            stop = bar_h + stop_atr_mult * float(a)
+            target = mid
+            if stop > bar_c and target < bar_c:
+                yield Signal.entry(
+                    date=date, side="short", price=bar_c, stop=stop, target=target,
+                    reason=f"donchian_failed_break_short ph={float(ph):.2f}",
+                )
+        # Failed lower breakout: low < prior_low BUT close back above
+        elif bar_l < float(pl) and bar_c > float(pl):
+            stop = bar_l - stop_atr_mult * float(a)
+            target = mid
+            if stop < bar_c and target > bar_c:
+                yield Signal.entry(
+                    date=date, side="long", price=bar_c, stop=stop, target=target,
+                    reason=f"donchian_failed_break_long pl={float(pl):.2f}",
+                )
+
+
+STRATEGY_REGISTRY["donchian_revert"] = donchian_revert
+
+
 def get_strategy(name: str):
     if name not in STRATEGY_REGISTRY:
         raise ValueError(

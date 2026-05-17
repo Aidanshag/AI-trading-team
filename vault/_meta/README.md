@@ -31,6 +31,10 @@ Stable reference material read by every agent on wake.
 - `daily_summaries/` — auto-generated daily P&L + activity summaries (rolling).
 - `archive/` — auto-archived sentinel + macro_brief files older than the rolling window (vault-archive script handles this).
 
+**Sibling workstreams** (parallel broker paths):
+- `vault/futures/` — Topstep workstream (futures, Combine path, current priority).
+- `vault/ib/` — Interactive Brokers workstream (personal capital, data-collection phase). Read `vault/ib/README.md` for the architectural distinction. The two share strategy library + research but NOT the trader.
+
 **Auto-generated files** (NEVER hand-edit; they get overwritten):
 - `sentinel_YYYY-MM-DD.md` — daily sentinel report (rotated by vault_archive after 7 days).
 - `macro_brief_YYYY-MM-DD.md` — daily macro brief (rotated by vault_archive after 14 days).
