@@ -26,14 +26,34 @@ if (-not (Test-Path $Python)) {
 
 # Check whether live_trader is already running. Scan python.exe process
 # command lines for the `scripts.live_trader` module string.
+#
+# 2026-05-17 fix: live_trader spawns a child python.exe (for SignalR
+# tick_stream or signalrcore worker). The naive scan counted parent +
+# child as TWO instances and the prior dup-check returned the child PID
+# arbitrarily, sometimes missing the parent. Worse: when two restart
+# scripts ran within seconds of each other (Sun 17:00 kickstart + watchdog
+# revival), each saw "nothing running" because the other's parent had
+# already exited, then both launched, producing real duplicate parent
+# processes. The fix: only count ROOT instances — python.exe processes
+# running scripts.live_trader whose parent is NOT itself another live_trader
+# python.exe. This gives a deterministic count even with the spawn pattern.
 $alreadyRunning = $false
 $runningPid = $null
 try {
     $procs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue
+    $traderPids = @{}
     foreach ($p in $procs) {
         if ($p.CommandLine -and $p.CommandLine -match "scripts\.live_trader") {
+            $traderPids[$p.ProcessId] = $p
+        }
+    }
+    # Filter to ROOT instances only: ParentProcessId is NOT in our trader set.
+    foreach ($pid in $traderPids.Keys) {
+        $proc = $traderPids[$pid]
+        $parent_is_trader = $traderPids.ContainsKey([int]$proc.ParentProcessId)
+        if (-not $parent_is_trader) {
             $alreadyRunning = $true
-            $runningPid = $p.ProcessId
+            $runningPid = $pid
             break
         }
     }

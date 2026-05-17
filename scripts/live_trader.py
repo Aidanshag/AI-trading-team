@@ -403,7 +403,12 @@ def consume_pending_signals(*, dry_run: bool = False,
             summary["skipped_cooldown"] += 1
             continue
 
-        ok, reason = signal_passes_min_r_gate(sig, symbol)
+        # Session-aware MIN_SIGNAL_R_TICKS: Asian sessions get a tighter
+        # 4-tick floor since true ranges are 30-50% smaller. brain_signaler
+        # emits `session` on every queued signal; default falls back to 6t.
+        ok, reason = signal_passes_min_r_gate(
+            sig, symbol, session=sig_obj.get("session"),
+        )
         if not ok:
             _log(f"  {symbol} {strat_name} {side} blocked: {reason}")
             summary["blocked"] += 1

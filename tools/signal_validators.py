@@ -12,6 +12,14 @@ Defaults match scripts/live_trader.py's module-level constants so
 the trader's behaviour doesn't change when callers don't override.
 Future config-driven tweaks can be done by passing through explicit
 arguments rather than mutating module-level globals.
+
+2026-05-17 enhancement (session-aware MIN_STOP_TICKS): closes the
+"open encoding gap" flagged in CLAUDE.md Pattern B section. Volume
+thresholds and stop distances are NOT yet session-aware everywhere;
+this module's MIN_SIGNAL_R_TICKS_BY_SESSION dict starts that work.
+Asian session gets a tighter floor (4 ticks vs the 6-tick RTH/London
+default) because Asian-session bars typically have 30-50% smaller true
+range — applying the RTH calibration to Asian rejects valid signals.
 """
 from __future__ import annotations
 
@@ -22,6 +30,24 @@ from tools.trader_utils import _load_yaml, _tick_size, _tick_value
 # behaviour is byte-for-byte equivalent unless callers override.
 DEFAULT_MAX_SIGNAL_RISK_USD: float = 150.0
 DEFAULT_MIN_SIGNAL_R_TICKS: int = 6
+
+# Session-aware MIN_SIGNAL_R_TICKS overrides. Asian session has tighter
+# true ranges, so the RTH 6-tick floor over-rejects valid signals.
+# Default for any session NOT listed: DEFAULT_MIN_SIGNAL_R_TICKS (6).
+MIN_SIGNAL_R_TICKS_BY_SESSION: dict[str, int] = {
+    "Asian": 4,      # ~30-50% tighter ranges → 4-tick floor (Pattern B fix)
+    "London": 6,     # RTH-equivalent volatility
+    "RTH": 6,        # baseline
+    "PostClose": 5,  # between Asian and RTH; some events linger
+}
+
+
+def min_r_ticks_for_session(session: str | None) -> int:
+    """Return the session-aware MIN_SIGNAL_R_TICKS for a given session label.
+    Defaults to DEFAULT_MIN_SIGNAL_R_TICKS when session is missing or unknown."""
+    if not session:
+        return DEFAULT_MIN_SIGNAL_R_TICKS
+    return MIN_SIGNAL_R_TICKS_BY_SESSION.get(session, DEFAULT_MIN_SIGNAL_R_TICKS)
 
 
 # ────────────────────────────────────────────────────────────────
@@ -142,7 +168,8 @@ def signal_passes_max_risk_gate(sig: dict, symbol: str, qty: int = 1,
 
 
 def signal_passes_min_r_gate(sig: dict, symbol: str,
-                              min_r_ticks: int = DEFAULT_MIN_SIGNAL_R_TICKS,
+                              min_r_ticks: int | None = None,
+                              session: str | None = None,
                               ) -> tuple[bool, str]:
     """Reject signals whose stop-distance OR target-distance is below
     min_r_ticks. Returns (passes, reason). On reject, reason is a
@@ -156,7 +183,14 @@ def signal_passes_min_r_gate(sig: dict, symbol: str,
     adverse movement can fire the stop leg alone (entry limit never
     fills), opening an unintended reversed position via the orphan-leg
     pathway. Block both before placement.
+
+    2026-05-17: `session` arg picks the right floor from
+    MIN_SIGNAL_R_TICKS_BY_SESSION (Asian=4, others=6). If both `session`
+    and `min_r_ticks` are passed, `min_r_ticks` wins (explicit override).
+    If neither is passed, defaults to DEFAULT_MIN_SIGNAL_R_TICKS.
     """
+    if min_r_ticks is None:
+        min_r_ticks = min_r_ticks_for_session(session)
     if sig.get("price") is None or sig.get("stop") is None:
         return False, "missing price or stop"
     tick = _tick_size(symbol)
