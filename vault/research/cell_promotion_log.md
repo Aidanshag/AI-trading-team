@@ -24,3 +24,24 @@ Source: `2026-05-10_live_r_comparison.json`. Promoted 0, demoted 0.
 | cell | action | live_n | live_e | oos_e | reason |
 |---|---|---:|---:|---:|---|
 | _(no actions taken — all cells held)_ |  |  |  |  |  |
+
+## 2026-05-17T20:36:26+00:00  (applied)
+Source: `2026-05-10_live_r_comparison.json`. Promoted 0, demoted 0.
+
+| cell | action | live_n | live_e | oos_e | reason |
+|---|---|---:|---:|---:|---|
+| _(no actions taken — all cells held)_ |  |  |  |  |  |
+
+## 2026-05-17T20:47:38+00:00  (applied)
+Source: `2026-05-10_live_r_comparison.json`. Promoted 0, demoted 0.
+
+| cell | action | live_n | live_e | oos_e | reason |
+|---|---|---:|---:|---:|---|
+| _(no actions taken — all cells held)_ |  |  |  |  |  |
+
+## 2026-05-17T20:51:06+00:00  (applied)
+Source: `2026-05-10_live_r_comparison.json`. Promoted 0, demoted 0.
+
+| cell | action | live_n | live_e | oos_e | reason |
+|---|---|---:|---:|---:|---|
+| _(no actions taken — all cells held)_ |  |  |  |  |  |

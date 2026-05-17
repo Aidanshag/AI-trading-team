@@ -1,11 +1,11 @@
 # Memory backup manifest
 
-Last sync: **2026-05-10T21:02:10+00:00**
+Last sync: **2026-05-17T20:51:11+00:00**
 
 Source: `C:\Users\Owner\.claude\projects\C--Users-Owner-OneDrive-Personal-AI-AI-Trading\memory`
 Backup: `vault\_meta\memory_backup`
 
-Files: **35** (excluding this manifest)
+Files: **45** (excluding this manifest)
 
 | File | Size | Modified |
 |---|---:|---|
@@ -13,12 +13,16 @@ Files: **35** (excluding this manifest)
 | `feedback_api_conservation.md` | 1131 | 2026-04-23T19:12:05+00:00 |
 | `feedback_auto_repair_dead_agents.md` | 2380 | 2026-05-04T20:31:10+00:00 |
 | `feedback_autonomous_overnight_fixes.md` | 4668 | 2026-05-07T20:04:08+00:00 |
+| `feedback_brain_owns_decisions.md` | 2615 | 2026-05-14T00:10:32+00:00 |
 | `feedback_cio_performance_mgmt.md` | 1500 | 2026-04-23T20:14:51+00:00 |
 | `feedback_close_the_gap.md` | 4393 | 2026-05-08T23:42:18+00:00 |
+| `feedback_combine_vs_xfa_strategy.md` | 3370 | 2026-05-14T01:00:53+00:00 |
 | `feedback_continuous_trader_trim.md` | 2349 | 2026-05-08T22:08:46+00:00 |
 | `feedback_cost_urgency.md` | 1606 | 2026-05-01T18:14:43+00:00 |
 | `feedback_cowork_coordination.md` | 3874 | 2026-05-07T00:39:22+00:00 |
 | `feedback_daily_data_refresh_policy.md` | 3451 | 2026-05-06T22:40:24+00:00 |
+| `feedback_do_dont_backlog.md` | 2197 | 2026-05-15T03:13:51+00:00 |
+| `feedback_follow_through_on_schedule.md` | 2538 | 2026-05-14T04:32:22+00:00 |
 | `feedback_idle_work_mode.md` | 1599 | 2026-04-23T20:06:19+00:00 |
 | `feedback_multi_account_scaling.md` | 3795 | 2026-05-09T17:50:53+00:00 |
 | `feedback_news_subscriptions.md` | 2338 | 2026-04-23T20:06:10+00:00 |
@@ -33,14 +37,20 @@ Files: **35** (excluding this manifest)
 | `feedback_session_open_recap.md` | 3324 | 2026-05-07T00:08:14+00:00 |
 | `feedback_silent_default_means_off.md` | 2377 | 2026-05-06T00:01:37+00:00 |
 | `feedback_single_session.md` | 1496 | 2026-04-29T06:57:13+00:00 |
+| `feedback_topstep_vs_ib_separate_workstreams.md` | 4440 | 2026-05-17T20:00:55+00:00 |
+| `feedback_trader_shutdown_for_deploys.md` | 1779 | 2026-05-15T04:10:09+00:00 |
 | `feedback_trading_workflow.md` | 1909 | 2026-04-23T20:09:56+00:00 |
 | `feedback_two_layer_architecture.md` | 10857 | 2026-05-07T20:23:46+00:00 |
-| `MEMORY.md` | 7594 | 2026-05-09T17:51:06+00:00 |
+| `MEMORY.md` | 10391 | 2026-05-15T21:11:25+00:00 |
 | `project_2026_05_05_profit_lock_incident.md` | 2413 | 2026-05-05T21:49:20+00:00 |
 | `project_after_hours_reopening.md` | 1942 | 2026-05-04T20:40:12+00:00 |
+| `project_alerting_infrastructure.md` | 3099 | 2026-05-10T21:58:23+00:00 |
 | `project_bracket_oco_bug.md` | 2509 | 2026-05-04T23:06:16+00:00 |
+| `project_broker_order_semantics.md` | 4999 | 2026-05-14T05:00:22+00:00 |
 | `project_hedge_fund.md` | 5007 | 2026-04-23T20:06:46+00:00 |
 | `project_strategy_focus_fvg.md` | 2344 | 2026-05-04T20:58:49+00:00 |
 | `project_validated_edge_gap_fill.md` | 2849 | 2026-05-04T21:43:27+00:00 |
+| `project_weekly_audit_routine.md` | 1584 | 2026-05-14T01:44:34+00:00 |
 | `reference_claude_cli_install.md` | 974 | 2026-04-23T20:14:58+00:00 |
+| `reference_topstep_rules.md` | 1408 | 2026-05-12T01:19:55+00:00 |
 | `user_profile.md` | 2120 | 2026-04-23T19:37:45+00:00 |
