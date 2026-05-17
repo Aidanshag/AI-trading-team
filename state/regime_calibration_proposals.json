@@ -1,0 +1,601 @@
+{
+  "generated_at": "2026-05-17T21:37:40.053056+00:00",
+  "total_cells": 35,
+  "proposals": [
+    {
+      "cell_id": "MNQ/fair_value_gap_tuned/Asian/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17836
+      }
+    },
+    {
+      "cell_id": "GC/narrow_range_break/Asian/long",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16085
+      }
+    },
+    {
+      "cell_id": "GC/fair_value_gap_tuned/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16085
+      }
+    },
+    {
+      "cell_id": "6E/pivot_reversal/London/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17527
+      }
+    },
+    {
+      "cell_id": "GC/narrow_range_break/Asian/short",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16085
+      }
+    },
+    {
+      "cell_id": "MNQ/pivot_reversal/RTH/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17836
+      }
+    },
+    {
+      "cell_id": "GC/inside_bar_break/PostClose/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16085
+      }
+    },
+    {
+      "cell_id": "ZF/vol_spike_fade/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 15884
+      }
+    },
+    {
+      "cell_id": "ZB/cross_asset_divergence_zn/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 14843
+      }
+    },
+    {
+      "cell_id": "6E/fair_value_gap/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17527
+      }
+    },
+    {
+      "cell_id": "6C/vol_spike_fade/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 5189
+      }
+    },
+    {
+      "cell_id": "6E/keltner_breakout/Asian/long",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17527
+      }
+    },
+    {
+      "cell_id": "MCL/keltner_breakout/Asian/long",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 1970
+      }
+    },
+    {
+      "cell_id": "6E/keltner_breakout/Asian/short",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17527
+      }
+    },
+    {
+      "cell_id": "NG/fair_value_gap/RTH/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 13032
+      }
+    },
+    {
+      "cell_id": "6C/narrow_range_break/PostClose/long",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 5189
+      }
+    },
+    {
+      "cell_id": "MNQ/rsi2_extreme_reversion/PostClose/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17836
+      }
+    },
+    {
+      "cell_id": "MGC/narrow_range_break/Asian/long",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16115
+      }
+    },
+    {
+      "cell_id": "MGC/fair_value_gap_tuned/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16115
+      }
+    },
+    {
+      "cell_id": "MGC/narrow_range_break/Asian/short",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16115
+      }
+    },
+    {
+      "cell_id": "MGC/inside_bar_break/PostClose/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16115
+      }
+    },
+    {
+      "cell_id": "MES/fair_value_gap/RTH/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17836
+      }
+    },
+    {
+      "cell_id": "ZN/support_resistance_bounce/Asian/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16447
+      }
+    },
+    {
+      "cell_id": "ZN/vol_spike_fade/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 16447
+      }
+    },
+    {
+      "cell_id": "ZW/limit_day_next_fade/London/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3583
+      }
+    },
+    {
+      "cell_id": "ZM/limit_day_next_fade/Asian/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3250
+      }
+    },
+    {
+      "cell_id": "MNQ/order_block_d1/Asian/long",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 17836
+      }
+    },
+    {
+      "cell_id": "ZW/volume_spike_reversal/Asian/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3583
+      }
+    },
+    {
+      "cell_id": "ZC/support_resistance_bounce/Asian/short",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3276
+      }
+    },
+    {
+      "cell_id": "ZC/support_resistance_bounce/Asian/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3276
+      }
+    },
+    {
+      "cell_id": "ZW/vol_spike_fade/Asian/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3583
+      }
+    },
+    {
+      "cell_id": "ZS/vol_spike_fade/London/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3635
+      }
+    },
+    {
+      "cell_id": "ZL/order_block/RTH/long",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3743
+      }
+    },
+    {
+      "cell_id": "ZC/vol_spike_fade/Asian/long",
+      "current": [
+        "ranging"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3276
+      }
+    },
+    {
+      "cell_id": "ZL/order_block_d1/Asian/short",
+      "current": [
+        "trending"
+      ],
+      "recommend": {
+        "trend_regime": [
+          "ranging"
+        ]
+      },
+      "reason": "over_restrictive",
+      "observed": {
+        "trending_pct": 0.0,
+        "ranging_pct": 0.0,
+        "total_windows": 3743
+      }
+    }
+  ]
+}
