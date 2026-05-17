@@ -426,5 +426,13 @@
   "futures|MYM|1 hour": 3978,
   "futures|MYM|15 mins": 900,
   "futures|CL|1 day": 2607,
-  "futures|CL|1 hour": 0
+  "futures|CL|1 hour": 0,
+  "futures|CL|15 mins": 600,
+  "futures|NG|1 day": 2646,
+  "futures|NG|1 hour": 0,
+  "futures|NG|15 mins": 600,
+  "futures|RB|1 day": 1358,
+  "futures|RB|1 hour": 0,
+  "futures|RB|15 mins": 600,
+  "futures|HO|1 day": 1360
 }
