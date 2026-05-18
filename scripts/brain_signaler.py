@@ -81,6 +81,10 @@ def scan_once(*, dry_run: bool = False) -> dict:
     summary = {
         "cells": 0, "session_skipped": 0, "regime_skipped": 0,
         "scanned": 0, "signals_emitted": 0, "errors": 0,
+        # 2026-05-17: count cells skipped due to insufficient bars
+        # (was silent before — masked the "scanned=0" mystery during
+        # Sunday Globex reopens when broker has < MIN_BARS_FOR_SCAN)
+        "bars_insufficient": 0,
     }
     cells = load_live_cells()
     if not cells:
@@ -111,7 +115,13 @@ def scan_once(*, dry_run: bool = False) -> dict:
         if symbol not in bar_cache:
             try:
                 bars = _fetch_bars(client, symbol, minutes=5, lookback=200)
-                if bars is not None and len(bars) >= 30:
+                # 2026-05-17: lowered min from 30 → 20. Sunday Globex
+                # reopens (Sun 17:00 ET) leave us with < 30 bars for
+                # the first ~2.5 hours, silently locking out ALL signals.
+                # 20 is the minimum needed for most indicators (ATR-14,
+                # RSI-14, etc.). Strategies that need more bars will
+                # silently skip internally — no harm.
+                if bars is not None and len(bars) >= 20:
                     bar_cache[symbol] = bars
                 else:
                     bar_cache[symbol] = None
@@ -122,6 +132,7 @@ def scan_once(*, dry_run: bool = False) -> dict:
                 bar_cache[symbol] = None
         bars = bar_cache.get(symbol)
         if bars is None:
+            summary["bars_insufficient"] += 1
             continue
 
         if symbol not in regime_cache:
