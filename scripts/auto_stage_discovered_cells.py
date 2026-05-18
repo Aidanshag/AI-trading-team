@@ -37,7 +37,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 ALLOWLIST_PATH = ROOT / "state" / "strategy_validation.json"
-UNIVERSAL_PATH = ROOT / "state" / "strategy_validation_universal.json"
+# 2026-05-17 fix: universal_walk_forward.py writes to
+# state/universal_walkforward_results.json, NOT
+# strategy_validation_universal.json. Filename mismatch caused the
+# chain to silently abort on first auto-stage run.
+UNIVERSAL_PATH = ROOT / "state" / "universal_walkforward_results.json"
 REPORT_DIR = ROOT / "vault" / "research" / "analysis"
 
 
@@ -63,7 +67,18 @@ def main() -> int:
     with UNIVERSAL_PATH.open() as f:
         univ = json.load(f)
     all_cells = univ.get("cells_all", [])
-    eligible = [c for c in all_cells if c.get("graduation_eligible")]
+    # 2026-05-17 Pattern A defense: graduation_eligible can serialize as
+    # str("True"/"False") OR native bool from the upstream sweep (default=str
+    # in json.dump on numpy.bool_). String "False" is TRUTHY in Python and
+    # silently staged 1622 false-positive cells. Coerce explicitly.
+    def _is_eligible(c):
+        v = c.get("graduation_eligible")
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() == "true"
+        return bool(v)
+    eligible = [c for c in all_cells if _is_eligible(c)]
 
     today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
     backup = ALLOWLIST_PATH.with_suffix(f".json.bak_autostage_{today}")
