@@ -7,7 +7,7 @@ strategies: 35
 sessions: 4
 cells_total: 6792
 graduation_eligible: 6
-runtime_seconds: 5598
+runtime_seconds: 11048
 ---
 
 # Universal walk-forward — full library × full Topstep universe
