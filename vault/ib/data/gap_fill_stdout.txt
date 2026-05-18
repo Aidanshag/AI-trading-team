@@ -50,3 +50,214 @@ Error 200, reqId 26: No security definition has been found for the request, cont
 Error 200, reqId 27: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
 Unknown contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
 Error 200, reqId 28: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Error 200, reqId 29: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Error 200, reqId 30: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Error 200, reqId 31: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Error 200, reqId 32: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Error 200, reqId 33: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Error 200, reqId 34: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:01:22.260089+00:00] 
+Retrying 6J (alt specs: [('JPY', 'GLOBEX'), ('6J', 'GLOBEX')])
+[2026-05-18T00:01:22.261111+00:00]   Trying (JPY, GLOBEX)...
+Error 200, reqId 35: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Error 200, reqId 36: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Error 200, reqId 37: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Error 200, reqId 38: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Error 200, reqId 39: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Error 200, reqId 40: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Error 200, reqId 41: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+Error 200, reqId 42: No security definition has been found for the request, contract: ContFuture(symbol='JPY', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:01:30.690121+00:00]   Trying (6J, GLOBEX)...
+Error 200, reqId 43: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Error 200, reqId 44: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Error 200, reqId 45: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Error 200, reqId 46: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Error 200, reqId 47: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Error 200, reqId 48: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Error 200, reqId 49: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+Error 200, reqId 50: No security definition has been found for the request, contract: ContFuture(symbol='6J', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:01:39.103853+00:00] 
+Retrying 6A (alt specs: [('AUD', 'GLOBEX'), ('6A', 'GLOBEX')])
+[2026-05-18T00:01:39.105033+00:00]   Trying (AUD, GLOBEX)...
+Error 200, reqId 51: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 52: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 53: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 54: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 55: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 56: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 57: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 58: No security definition has been found for the request, contract: ContFuture(symbol='AUD', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:01:47.593179+00:00]   Trying (6A, GLOBEX)...
+Error 200, reqId 59: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Error 200, reqId 60: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Error 200, reqId 61: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Error 200, reqId 62: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Error 200, reqId 63: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Error 200, reqId 64: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Error 200, reqId 65: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+Error 200, reqId 66: No security definition has been found for the request, contract: ContFuture(symbol='6A', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:01:56.251418+00:00] 
+Retrying 6C (alt specs: [('CAD', 'GLOBEX'), ('6C', 'GLOBEX')])
+[2026-05-18T00:01:56.252526+00:00]   Trying (CAD, GLOBEX)...
+Error 200, reqId 67: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 68: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 69: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 70: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 71: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 72: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 73: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+Error 200, reqId 74: No security definition has been found for the request, contract: ContFuture(symbol='CAD', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:02:04.667429+00:00]   Trying (6C, GLOBEX)...
+Error 200, reqId 75: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Error 200, reqId 76: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Error 200, reqId 77: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Error 200, reqId 78: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Error 200, reqId 79: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Error 200, reqId 80: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Error 200, reqId 81: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+Error 200, reqId 82: No security definition has been found for the request, contract: ContFuture(symbol='6C', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:02:13.350868+00:00] 
+Retrying 6S (alt specs: [('CHF', 'GLOBEX'), ('6S', 'GLOBEX')])
+[2026-05-18T00:02:13.352029+00:00]   Trying (CHF, GLOBEX)...
+Error 200, reqId 83: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Error 200, reqId 84: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Error 200, reqId 85: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Error 200, reqId 86: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Error 200, reqId 87: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Error 200, reqId 88: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Error 200, reqId 89: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+Error 200, reqId 90: No security definition has been found for the request, contract: ContFuture(symbol='CHF', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:02:22.060936+00:00]   Trying (6S, GLOBEX)...
+Error 200, reqId 91: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Error 200, reqId 92: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Error 200, reqId 93: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Error 200, reqId 94: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Error 200, reqId 95: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Error 200, reqId 96: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Error 200, reqId 97: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+Error 200, reqId 98: No security definition has been found for the request, contract: ContFuture(symbol='6S', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:02:30.480158+00:00] 
+Retrying METK (alt specs: [('MET', 'CME'), ('MET', 'CMECRYPTO')])
+[2026-05-18T00:02:30.481234+00:00]   Trying (MET, CME)...
+[2026-05-18T00:02:32.838297+00:00]     SUCCESS MET@CME 1 day: 631 bars
+[2026-05-18T00:03:31.621072+00:00]     SUCCESS MET@CME 1 hour: 4040 bars
+[2026-05-18T00:03:34.085947+00:00]     SUCCESS MET@CME 15 mins: 1200 bars
+[2026-05-18T00:03:37.415608+00:00]     SUCCESS MET@CME 5 mins: 1800 bars
+[2026-05-18T00:03:39.416893+00:00]   METK resolved via (MET, CME) — stopping further attempts
+[2026-05-18T00:03:39.417889+00:00] 
+Retrying MNG (alt specs: [('MNG', 'NYMEX'), ('MNG', 'GLOBEX')])
+[2026-05-18T00:03:39.418420+00:00]   Trying (MNG, NYMEX)...
+Error 200, reqId 107: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 108: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 109: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 110: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 111: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 112: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 113: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+Error 200, reqId 114: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='NYMEX', currency='USD')
+[2026-05-18T00:03:47.787070+00:00]   Trying (MNG, GLOBEX)...
+Error 200, reqId 115: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Error 200, reqId 116: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Error 200, reqId 117: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Error 200, reqId 118: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Error 200, reqId 119: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Error 200, reqId 120: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Error 200, reqId 121: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+Error 200, reqId 122: No security definition has been found for the request, contract: ContFuture(symbol='MNG', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:03:56.150945+00:00] 
+Retrying SIL (alt specs: [('SIL', 'COMEX'), ('MGC', 'COMEX')])
+[2026-05-18T00:03:56.152187+00:00]   Trying (SIL, COMEX)...
+Error 200, reqId 123: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 124: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 125: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 126: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 127: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 128: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 129: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Unknown contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+Error 200, reqId 130: No security definition has been found for the request, contract: ContFuture(symbol='SIL', exchange='COMEX', currency='USD')
+[2026-05-18T00:04:04.484145+00:00]   Trying (MGC, COMEX)...
+[2026-05-18T00:04:05.345131+00:00]     SUCCESS MGC@COMEX 1 day: 975 bars
+[2026-05-18T00:04:31.805633+00:00]     SUCCESS MGC@COMEX 1 hour: 3998 bars
+[2026-05-18T00:04:37.455519+00:00]     SUCCESS MGC@COMEX 15 mins: 1230 bars
+[2026-05-18T00:04:43.458965+00:00]     SUCCESS MGC@COMEX 5 mins: 2700 bars
+[2026-05-18T00:04:45.460454+00:00]   SIL resolved via (MGC, COMEX) — stopping further attempts
+[2026-05-18T00:04:45.461606+00:00] 
+--- Phase B: 1h gap-fill retries ---
+[2026-05-18T00:04:45.462304+00:00]   CL 1h retry on NYMEX...
+reqHistoricalData: Timeout for ContFuture(conId=304037461, symbol='CL', lastTradeDateOrContractMonth='20260622', multiplier='1000', exchange='NYMEX', currency='USD', localSymbol='CLN6', tradingClass='CL')
+[2026-05-18T00:05:45.636657+00:00]     still 0 bars on CL 1h
+[2026-05-18T00:05:47.647212+00:00]   GC 1h retry on COMEX...
+Error 162, reqId 140: Historical Market Data Service error message:API historical data query cancelled: 140, contract: ContFuture(conId=304037461, symbol='CL', lastTradeDateOrContractMonth='20260622', multiplier='1000', exchange='NYMEX', currency='USD', localSymbol='CLN6', tradingClass='CL')
+[2026-05-18T00:06:39.991406+00:00]     SUCCESS GC 1h: 3998 bars
+[2026-05-18T00:06:41.996448+00:00]   HE 1h retry on CME...
+[2026-05-18T00:07:32.382019+00:00]     SUCCESS HE 1h: 2991 bars
+[2026-05-18T00:07:34.502051+00:00]   HG 1h retry on COMEX...
+[2026-05-18T00:08:32.501811+00:00]     SUCCESS HG 1h: 3998 bars
+[2026-05-18T00:08:34.514406+00:00]   HO 1h retry on NYMEX...
+reqHistoricalData: Timeout for ContFuture(conId=600696502, symbol='HO', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='HON6', tradingClass='HO')
+[2026-05-18T00:09:34.858219+00:00]     still 0 bars on HO 1h
+[2026-05-18T00:09:36.860004+00:00]   LE 1h retry on CME...
+Error 162, reqId 148: Historical Market Data Service error message:API historical data query cancelled: 148, contract: ContFuture(conId=600696502, symbol='HO', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='HON6', tradingClass='HO')
+[2026-05-18T00:10:31.701154+00:00]     SUCCESS LE 1h: 2991 bars
+[2026-05-18T00:10:33.703627+00:00]   MCL 1h retry on NYMEX...
+reqHistoricalData: Timeout for ContFuture(conId=661016559, symbol='MCL', lastTradeDateOrContractMonth='20260618', multiplier='100', exchange='NYMEX', currency='USD', localSymbol='MCLN6', tradingClass='MCL')
+[2026-05-18T00:11:33.786705+00:00]     still 0 bars on MCL 1h
+[2026-05-18T00:11:35.798662+00:00]   MGC 1h retry on COMEX...
+Error 162, reqId 152: Historical Market Data Service error message:API historical data query cancelled: 152, contract: ContFuture(conId=661016559, symbol='MCL', lastTradeDateOrContractMonth='20260618', multiplier='100', exchange='NYMEX', currency='USD', localSymbol='MCLN6', tradingClass='MCL')
+[2026-05-18T00:12:31.588369+00:00]     SUCCESS MGC 1h: 3998 bars
+[2026-05-18T00:12:33.589728+00:00]   NG 1h retry on NYMEX...
+[2026-05-18T00:13:32.069159+00:00]     SUCCESS NG 1h: 3978 bars
+[2026-05-18T00:13:34.071089+00:00]   PL 1h retry on NYMEX...
+[2026-05-18T00:14:31.860562+00:00]     SUCCESS PL 1h: 3978 bars
+[2026-05-18T00:14:33.862199+00:00]   QG 1h retry on NYMEX...
+reqHistoricalData: Timeout for ContFuture(conId=456802729, symbol='QG', lastTradeDateOrContractMonth='20260526', multiplier='2500', exchange='NYMEX', currency='USD', localSymbol='QGM6', tradingClass='QG')
+[2026-05-18T00:15:33.941875+00:00]     still 0 bars on QG 1h
+[2026-05-18T00:15:35.943334+00:00]   QM 1h retry on NYMEX...
+Error 162, reqId 160: Historical Market Data Service error message:API historical data query cancelled: 160, contract: ContFuture(conId=456802729, symbol='QG', lastTradeDateOrContractMonth='20260526', multiplier='2500', exchange='NYMEX', currency='USD', localSymbol='QGM6', tradingClass='QG')
