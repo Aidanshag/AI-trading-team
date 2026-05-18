@@ -261,3 +261,17 @@ reqHistoricalData: Timeout for ContFuture(conId=456802729, symbol='QG', lastTrad
 [2026-05-18T00:15:33.941875+00:00]     still 0 bars on QG 1h
 [2026-05-18T00:15:35.943334+00:00]   QM 1h retry on NYMEX...
 Error 162, reqId 160: Historical Market Data Service error message:API historical data query cancelled: 160, contract: ContFuture(conId=456802729, symbol='QG', lastTradeDateOrContractMonth='20260526', multiplier='2500', exchange='NYMEX', currency='USD', localSymbol='QGM6', tradingClass='QG')
+reqHistoricalData: Timeout for ContFuture(conId=455805532, symbol='QM', lastTradeDateOrContractMonth='20260518', multiplier='500', exchange='NYMEX', currency='USD', localSymbol='QMM6', tradingClass='QM')
+[2026-05-18T00:16:36.046803+00:00]     still 0 bars on QM 1h
+[2026-05-18T00:16:38.048789+00:00]   RB 1h retry on NYMEX...
+Error 162, reqId 162: Historical Market Data Service error message:API historical data query cancelled: 162, contract: ContFuture(conId=455805532, symbol='QM', lastTradeDateOrContractMonth='20260518', multiplier='500', exchange='NYMEX', currency='USD', localSymbol='QMM6', tradingClass='QM')
+reqHistoricalData: Timeout for ContFuture(conId=600696538, symbol='RB', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='RBN6', tradingClass='RB')
+[2026-05-18T00:17:38.122708+00:00]     still 0 bars on RB 1h
+[2026-05-18T00:17:40.124301+00:00]   SI 1h retry on COMEX...
+Error 162, reqId 164: Historical Market Data Service error message:API historical data query cancelled: 164, contract: ContFuture(conId=600696538, symbol='RB', lastTradeDateOrContractMonth='20260630', multiplier='42000', exchange='NYMEX', currency='USD', localSymbol='RBN6', tradingClass='RB')
+reqHistoricalData: Timeout for ContFuture(conId=505405746, symbol='SI', lastTradeDateOrContractMonth='20260729', multiplier='5000', exchange='COMEX', currency='USD', localSymbol='SIN6', tradingClass='SI')
+[2026-05-18T00:18:40.476421+00:00]     still 0 bars on SI 1h
+[2026-05-18T00:18:42.478177+00:00]   UB 1h retry on CBOT...
+Error 162, reqId 166: Historical Market Data Service error message:API historical data query cancelled: 166, contract: ContFuture(conId=505405746, symbol='SI', lastTradeDateOrContractMonth='20260729', multiplier='5000', exchange='COMEX', currency='USD', localSymbol='SIN6', tradingClass='SI')
+[2026-05-18T00:19:31.957834+00:00]     SUCCESS UB 1h: 3976 bars
+[2026-05-18T00:19:33.959784+00:00]   ZB 1h retry on CBOT...
