@@ -1,0 +1,52 @@
+[2026-05-18T00:00:46.531659+00:00] === Topstep gap-fill — start ===
+[2026-05-18T00:00:47.189381+00:00] Connecting to IB Gateway (clientId=11)
+[2026-05-18T00:00:47.901662+00:00] Connected. Account(s): ['U25471643']
+[2026-05-18T00:00:47.902595+00:00] 
+--- Phase A: zero-bar retries ---
+[2026-05-18T00:00:47.903050+00:00] 
+Retrying 6E (alt specs: [('EUR', 'GLOBEX'), ('6E', 'GLOBEX')])
+[2026-05-18T00:00:47.903530+00:00]   Trying (EUR, GLOBEX)...
+Error 200, reqId 3: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Error 200, reqId 4: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Error 200, reqId 5: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Error 200, reqId 6: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Error 200, reqId 7: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Error 200, reqId 8: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Error 200, reqId 9: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+Error 200, reqId 10: No security definition has been found for the request, contract: ContFuture(symbol='EUR', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:00:56.536506+00:00]   Trying (6E, GLOBEX)...
+Error 200, reqId 11: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Error 200, reqId 12: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Error 200, reqId 13: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Error 200, reqId 14: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Error 200, reqId 15: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Error 200, reqId 16: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Error 200, reqId 17: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+Error 200, reqId 18: No security definition has been found for the request, contract: ContFuture(symbol='6E', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:01:05.049515+00:00] 
+Retrying 6B (alt specs: [('GBP', 'GLOBEX'), ('6B', 'GLOBEX')])
+[2026-05-18T00:01:05.183208+00:00]   Trying (GBP, GLOBEX)...
+Error 200, reqId 19: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Error 200, reqId 20: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Error 200, reqId 21: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Error 200, reqId 22: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Error 200, reqId 23: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Error 200, reqId 24: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Error 200, reqId 25: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+Error 200, reqId 26: No security definition has been found for the request, contract: ContFuture(symbol='GBP', exchange='GLOBEX', currency='USD')
+[2026-05-18T00:01:13.713430+00:00]   Trying (6B, GLOBEX)...
+Error 200, reqId 27: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Unknown contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
+Error 200, reqId 28: No security definition has been found for the request, contract: ContFuture(symbol='6B', exchange='GLOBEX', currency='USD')
